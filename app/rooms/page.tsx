@@ -116,15 +116,15 @@ function RoomsPageContent() {
     const dates = []
     const today = new Date()
     
-    for (let i = -3; i <= 7; i++) {
+    // 어제, 오늘, 내일만 표시
+    for (let i = -1; i <= 1; i++) {
       const date = new Date()
       date.setDate(today.getDate() + i)
       dates.push({
         value: format(date, 'yyyy-MM-dd'),
         label: i === 0 ? '오늘' : 
                i === 1 ? '내일' : 
-               i === -1 ? '어제' :
-               format(date, 'M월 d일 (E)', { locale: ko })
+               '어제'
       })
     }
     

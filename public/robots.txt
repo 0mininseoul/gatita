@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://gatita-rosy.vercel.app/sitemap.xml

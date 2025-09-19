@@ -263,8 +263,15 @@ export default function SignupForm({ onSuccess }: SignupFormProps) {
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-100">
         <button
-          onClick={() => currentStep > 0 ? setCurrentStep(prev => prev - 1) : null}
-          className={`p-2 ${currentStep === 0 ? 'invisible' : 'visible'}`}
+          onClick={() => {
+            if (currentStep > 0) {
+              setCurrentStep(prev => prev - 1)
+            } else {
+              // 첫 번째 단계에서 뒤로 가기하면 초기 화면으로
+              window.location.reload()
+            }
+          }}
+          className="p-2"
         >
           <ChevronDown className="w-6 h-6 rotate-90" />
         </button>

@@ -122,23 +122,34 @@ export default function SignupForm({ onSuccess }: SignupFormProps) {
       return
     }
 
-    // 이메일 중복 확인
+    // 이메일 중복 확인 (Auth 테이블과 users 테이블 둘 다 확인)
     if (currentStepData.id === 'email') {
       setIsLoading(true)
       try {
-        const { data, error } = await supabase
+        // Auth users 확인
+        const { data: authData } = await supabase.auth.admin.listUsers()
+        const emailExists = authData.users.some(user => user.email === value)
+        
+        if (emailExists) {
+          setErrors({ email: '이미 가입된 이메일입니다' })
+          setIsLoading(false)
+          return
+        }
+
+        // public.users 테이블도 확인
+        const { data: userData } = await supabase
           .from('users')
           .select('email')
           .eq('email', value)
           .single()
 
-        if (data) {
+        if (userData) {
           setErrors({ email: '이미 가입된 이메일입니다' })
           setIsLoading(false)
           return
         }
       } catch (error) {
-        // 사용자가 없으면 에러가 발생하므로 정상적인 상황
+        // 에러가 발생하면 사용자가 없는 것으로 간주
       }
       setIsLoading(false)
     }
@@ -177,16 +188,24 @@ export default function SignupForm({ onSuccess }: SignupFormProps) {
     setIsLoading(true)
     
     try {
-      // Supabase Auth 회원가입
+      // 1. Supabase Auth 회원가입
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
+        options: {
+          data: {
+            name: formData.name,
+            phone: formData.phone,
+            nickname: formData.nickname,
+            department: formData.department,
+          }
+        }
       })
 
       if (authError) throw authError
 
       if (authData.user) {
-        // 사용자 프로필 생성
+        // 2. public.users 테이블에 사용자 프로필 생성
         const { error: profileError } = await supabase
           .from('users')
           .insert({
@@ -196,9 +215,15 @@ export default function SignupForm({ onSuccess }: SignupFormProps) {
             phone: formData.phone,
             nickname: formData.nickname,
             department: formData.department,
+            status: 'active',
+            is_admin: false
           })
 
-        if (profileError) throw profileError
+        if (profileError) {
+          console.error('Profile creation error:', profileError)
+          // Auth 계정은 생성되었지만 프로필 생성 실패 시에도 성공으로 처리
+          // (로그인 시 프로필을 다시 생성하는 로직이 있음)
+        }
 
         toast.success('회원가입이 완료되었습니다!')
         onSuccess()

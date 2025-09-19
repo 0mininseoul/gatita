@@ -1,88 +1,115 @@
-// "use client"; <-- 가장 중요해요! 인터랙티브 효과를 위해 꼭 필요해요.
+// "use client"; <-- 인터랙티브 배경 효과를 위해 꼭 필요해요!
 "use client";
 
-import { useEffect, useState } from 'react';
-import Hyperspeed from './components/Hyperspeed'; // 1. 컴포넌트를 가져옵니다.
-import { hyperspeedPresets } from './components/presets'; // 프리셋도 가져옵니다.
-
-// Post 데이터의 타입을 정의해줍니다.
-interface Post {
-  userId: number;
-  id: number;
-  title: string;
-  body: string;
-}
+import Link from 'next/link'; // 페이지 이동을 위한 Link 컴포넌트를 가져옵니다.
+import Hyperspeed from './components/Hyperspeed';
+import { hyperspeedPresets } from './components/presets';
 
 export default function Home() {
-  // 데이터를 저장할 상태(state)를 만듭니다.
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // 컴포넌트가 처음 화면에 나타날 때 데이터를 불러옵니다.
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const res = await fetch('https://jsonplaceholder.typicode.com/posts');
-        const data = await res.json();
-        setPosts(data);
-      } catch (error) {
-        console.error("데이터를 불러오는 데 실패했습니다.", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchData();
-  }, []); // []를 비워두면 처음 한 번만 실행됩니다.
-
-
   return (
-    // 2. 배경과 콘텐츠를 감싸는 부모 div 입니다.
-    // 배경(absolute) 위에 콘텐츠를 올리기 위해 relative 속성이 필요해요.
-    <main style={{ position: 'relative', width: '100vw', height: '100vh', color: 'white' }}>
+    // 배경과 콘텐츠를 감싸는 부모 main 태그입니다.
+    // 검은 배경색을 지정하고, 내부 콘텐츠가 화면 전체를 채우도록 설정합니다.
+    <main style={{
+      position: 'relative',
+      width: '100vw',
+      height: '100vh',
+      backgroundColor: '#000', // 배경을 검은색으로 설정합니다.
+      color: 'white', // 기본 글자색을 흰색으로 합니다.
+    }}>
 
-      {/* 3. Hyperspeed 배경 컴포넌트 입니다. */}
-      <Hyperspeed
-        effectOptions={{
-          ...hyperspeedPresets.two // 프리셋 중 'two'를 적용했어요. one, three 등으로 바꿔보세요!
-        }}
-      />
+      {/* 1. Hyperspeed 배경 컴포넌트 */}
+      {/* 화면 전체를 덮도록 zIndex를 -1로 설정하여 다른 콘텐츠보다 뒤에 배치합니다. */}
+      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0 }}>
+        <Hyperspeed
+          effectOptions={{
+            ...hyperspeedPresets.two // 원하시는 다른 프리셋으로 변경 가능합니다.
+          }}
+        />
+      </div>
 
-      {/* 4. ✨ 여기에 커스텀 텍스트나 콘텐츠를 넣으세요! ✨ */}
-      {/* 배경 위에 떠 있도록 스타일을 조정합니다. (position, zIndex) */}
+
+      {/* 2. 화면 중앙에 표시될 UI 콘텐츠 */}
+      {/* zIndex를 10으로 설정하여 배경 컴포넌트 위에 표시되도록 합니다. */}
       <div style={{
-        position: 'relative', // 부모가 relative이므로 여기도 relative 또는 absolute
-        zIndex: 10, // 숫자가 높을수록 위에 보입니다.
+        position: 'relative',
+        zIndex: 10,
+        width: '100%',
+        height: '100%',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        width: '100%',
-        height: '100%',
-        overflowY: 'auto', // 내용이 길어지면 스크롤 가능
-        padding: '2rem' // 모바일 화면을 위한 여백
+        textAlign: 'center',
+        padding: '1rem' // 모바일 화면을 위한 여백
       }}>
-        <h1 style={{ fontSize: '2.5rem', marginBottom: '2rem', textAlign: 'center' }}>Gatita's Blog</h1>
-        <p style={{ marginBottom: '2rem', textAlign: 'center' }}>Welcome to the Hyperspeed World!</p>
         
-        {/* 기존에 있던 게시물 목록 코드 */}
-        <div style={{ maxWidth: '800px', width: '100%' }}>
-          {loading ? (
-            <p>Loading posts...</p>
-          ) : (
-            posts.map((post) => (
-              <div key={post.id} style={{
-                background: 'rgba(0, 0, 0, 0.5)', // 반투명 배경
-                backdropFilter: 'blur(5px)', // 뒷배경 블러 효과
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                borderRadius: '8px',
-                padding: '1.5rem',
-                margin: '1rem 0'
-              }}>
-                <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>{post.title}</h2>
-                <p>{post.body}</p>
-              </div>
-            ))
-          )}
+        {/* 중앙 메인 텍스트 */}
+        <h1 style={{
+          fontSize: 'clamp(2rem, 5vw, 3.5rem)', // 화면 크기에 따라 글자 크기 조절
+          fontWeight: 'bold',
+          marginBottom: '1rem'
+        }}>
+          Gatita
+        </h1>
+
+        <p style={{
+          fontSize: 'clamp(1rem, 2.5vw, 1.25rem)',
+          maxWidth: '600px',
+          marginBottom: '2.5rem',
+          color: 'rgba(255, 255, 255, 0.8)'
+        }}>
+          Click & hold to speed up
+        </p>
+
+        {/* 로그인, 회원가입 버튼 컨테이너 */}
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          
+          {/* 로그인 버튼 */}
+          <Link href="/login" passHref>
+            <button style={{
+              padding: '0.75rem 2rem',
+              fontSize: '1rem',
+              fontWeight: '600',
+              color: '#000',
+              backgroundColor: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              transition: 'transform 0.2s',
+            }}
+            onMouseOver={e => e.currentTarget.style.transform = 'scale(1.05)'}
+            onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
+            >
+              로그인
+            </button>
+          </Link>
+
+          {/* 회원가입 버튼 */}
+          <Link href="/signup" passHref>
+            <button style={{
+              padding: '0.75rem 2rem',
+              fontSize: '1rem',
+              fontWeight: '600',
+              color: '#fff',
+              backgroundColor: 'transparent',
+              border: '1px solid #fff',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              transition: 'background-color 0.2s, transform 0.2s',
+            }}
+            onMouseOver={e => {
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                e.currentTarget.style.transform = 'scale(1.05)';
+            }}
+            onMouseOut={e => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.transform = 'scale(1)';
+            }}
+            >
+              회원가입
+            </button>
+          </Link>
+
         </div>
       </div>
     </main>

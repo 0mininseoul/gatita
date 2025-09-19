@@ -100,7 +100,7 @@ export default function HomePage() {
         overflow: 'hidden', // 모바일 스크롤 문제 해결
       }}>
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0 }}>
-          <Hyperspeed effectOptions={{ ...hyperspeedPresets.one }} />
+          <Hyperspeed effectOptions={{ ...hyperspeedPresets.six }} />
         </div>
         <div style={{
           position: 'relative', zIndex: 10, width: '100%', height: '100%',

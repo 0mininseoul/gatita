@@ -37,7 +37,7 @@ const SIGNUP_STEPS: SignupStep[] = [
     id: 'phone',
     label: '전화번호를 입력해주세요',
     placeholder: '010-1234-5678',
-    type: 'tel',
+    type: 'text',
     required: true,
     description: '동행자에게 공개되지 않습니다'
   },

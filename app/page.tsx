@@ -1,332 +1,90 @@
-'use client'
+// "use client"; <-- 가장 중요해요! 인터랙티브 효과를 위해 꼭 필요해요.
+"use client";
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
-import { User, LocationType, LOCATIONS, Favorite } from '@/lib/supabase'
-import { MapPin, ArrowRight, Star, Settings, LogOut, Plus } from 'lucide-react'
-import SignupForm from '@/components/auth/SignupForm'
-import LoginForm from '@/components/auth/LoginForm'
-import toast from 'react-hot-toast'
+import { useEffect, useState } from 'react';
+import Hyperspeed from './components/Hyperspeed'; // 1. 컴포넌트를 가져옵니다.
+import { hyperspeedPresets } from './components/presets'; // 프리셋도 가져옵니다.
 
-type AuthMode = 'login' | 'signup' | null
+// Post 데이터의 타입을 정의해줍니다.
+interface Post {
+  userId: number;
+  id: number;
+  title: string;
+  body: string;
+}
 
-export default function HomePage() {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [authMode, setAuthMode] = useState<AuthMode>(null)
-  const [fromLocation, setFromLocation] = useState<LocationType | ''>('')
-  const [toLocation, setToLocation] = useState<LocationType | ''>('')
-  const [favorites, setFavorites] = useState<Favorite[]>([])
-  const router = useRouter()
-  const supabase = createClient()
+export default function Home() {
+  // 데이터를 저장할 상태(state)를 만듭니다.
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(true);
 
+  // 컴포넌트가 처음 화면에 나타날 때 데이터를 불러옵니다.
   useEffect(() => {
-    checkAuth()
-    
-    // Auth state 변경 리스너
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        await checkAuth()
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null)
-        setFavorites([])
+    async function fetchData() {
+      try {
+        const res = await fetch('https://jsonplaceholder.typicode.com/posts');
+        const data = await res.json();
+        setPosts(data);
+      } catch (error) {
+        console.error("데이터를 불러오는 데 실패했습니다.", error);
+      } finally {
+        setLoading(false);
       }
-    })
-
-    return () => subscription.unsubscribe()
-  }, [])
-
-  const checkAuth = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      if (session?.user) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single()
-        
-        if (userData) {
-          setUser(userData)
-          loadFavorites(userData.id)
-        } else {
-          // 사용자 데이터가 없으면 로그아웃
-          await supabase.auth.signOut()
-        }
-      }
-    } catch (error) {
-      console.error('Auth check error:', error)
-    } finally {
-      setLoading(false)
     }
-  }
+    fetchData();
+  }, []); // []를 비워두면 처음 한 번만 실행됩니다.
 
-  const loadFavorites = async (userId: string) => {
-    try {
-      const { data } = await supabase
-        .from('favorites')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-      
-      if (data) setFavorites(data)
-    } catch (error) {
-      console.error('Load favorites error:', error)
-    }
-  }
 
-  const handleSearch = () => {
-    if (!fromLocation || !toLocation) {
-      toast.error('출발지와 도착지를 모두 선택해주세요')
-      return
-    }
-    
-    if (fromLocation === toLocation) {
-      toast.error('출발지와 도착지가 같을 수 없습니다')
-      return
-    }
-
-    router.push(`/rooms?from=${fromLocation}&to=${toLocation}`)
-  }
-
-  const handleFavoriteClick = (favorite: Favorite) => {
-    router.push(`/rooms?from=${favorite.from_location}&to=${favorite.to_location}`)
-  }
-
-  const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut()
-      setUser(null)
-      setFavorites([])
-      toast.success('로그아웃되었습니다')
-    } catch (error) {
-      toast.error('로그아웃 중 오류가 발생했습니다')
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="loading-spinner" />
-      </div>
-    )
-  }
-
-  // 인증이 필요한 경우
-  if (!user) {
-    if (authMode === 'signup') {
-      return <SignupForm onSuccess={() => { setAuthMode(null); }} />
-    }
-    
-    if (authMode === 'login') {
-      return <LoginForm onSuccess={() => { setAuthMode(null); }} onBackToLanding={() => setAuthMode(null)} />
-    }
-
-    // 초기 랜딩 화면
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-primary-50 to-white">
-        <div className="container mx-auto px-4 py-16">
-          {/* 로고 및 제목 */}
-          <div className="text-center mb-12">
-            <div className="w-20 h-20 bg-primary-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <MapPin className="w-10 h-10 text-white" />
-            </div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">같이타</h1>
-            <p className="text-gray-600 text-lg">
-              가천대 학생들을 위한<br />
-              통학길 동행 플랫폼
-            </p>
-          </div>
-
-          {/* 기능 소개 */}
-          <div className="space-y-6 mb-12">
-            <div className="card p-6">
-              <div className="flex items-center mb-4">
-                <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center mr-4">
-                  <MapPin className="w-6 h-6 text-primary-600" />
-                </div>
-                <h3 className="text-lg font-semibold">같은 경로 동행자 찾기</h3>
-              </div>
-              <p className="text-gray-600">
-                가천대역, 정문, 교육대학원, AI공학관 간<br />
-                같은 경로로 이동하는 동행자를 찾아보세요
-              </p>
-            </div>
-
-            <div className="card p-6">
-              <div className="flex items-center mb-4">
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mr-4">
-                  <Star className="w-6 h-6 text-green-600" />
-                </div>
-                <h3 className="text-lg font-semibold">안전한 커뮤니티</h3>
-              </div>
-              <p className="text-gray-600">
-                가천대 이메일 인증을 통한<br />
-                안전하고 신뢰할 수 있는 서비스
-              </p>
-            </div>
-          </div>
-
-          {/* 버튼 */}
-          <div className="space-y-3">
-            <button
-              onClick={() => setAuthMode('signup')}
-              className="btn-primary w-full"
-            >
-              회원가입하고 시작하기
-            </button>
-            <button
-              onClick={() => setAuthMode('login')}
-              className="btn-secondary w-full"
-            >
-              이미 계정이 있나요? 로그인하기
-            </button>
-          </div>
-
-          {/* 관리자 문의 */}
-          <div className="mt-12 text-center">
-            <div className="card p-6">
-              <p className="text-sm text-gray-600 mb-2">문의사항이 있으신가요?</p>
-              <p className="text-sm font-medium text-primary-600">
-                인스타그램 @0_min._.00 으로 DM 주십쇼
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // 로그인된 사용자의 메인 화면
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-100 px-4 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">같이타</h1>
-            <p className="text-sm text-gray-600">{user.nickname}님, 안녕하세요!</p>
-          </div>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => router.push('/settings')}
-              className="p-2 hover:bg-gray-100 rounded-lg"
-            >
-              <Settings className="w-5 h-5 text-gray-600" />
-            </button>
-            {user.is_admin && (
-              <button
-                onClick={() => router.push('/admin')}
-                className="p-2 hover:bg-gray-100 rounded-lg bg-red-50"
-                title="관리자 페이지"
-              >
-                <Star className="w-5 h-5 text-red-600" />
-              </button>
-            )}
-            <button
-              onClick={handleLogout}
-              className="p-2 hover:bg-gray-100 rounded-lg"
-            >
-              <LogOut className="w-5 h-5 text-gray-600" />
-            </button>
-          </div>
-        </div>
-      </header>
+    // 2. 배경과 콘텐츠를 감싸는 부모 div 입니다.
+    // 배경(absolute) 위에 콘텐츠를 올리기 위해 relative 속성이 필요해요.
+    <main style={{ position: 'relative', width: '100vw', height: '100vh', color: 'white' }}>
 
-      <div className="container mx-auto px-4 py-6 space-y-6">
-        {/* 경로 선택 */}
-        <div className="card p-6">
-          <h2 className="text-lg font-semibold mb-4">어느 경로로 통학하세요?</h2>
-          
-          <div className="space-y-4">
-            {/* 출발지 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                출발지
-              </label>
-              <select
-                value={fromLocation}
-                onChange={(e) => setFromLocation(e.target.value as LocationType)}
-                className="input-field"
-              >
-                <option value="">출발지 선택</option>
-                {Object.entries(LOCATIONS).map(([key, value]) => (
-                  <option key={key} value={key}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            </div>
+      {/* 3. Hyperspeed 배경 컴포넌트 입니다. */}
+      <Hyperspeed
+        effectOptions={{
+          ...hyperspeedPresets.two // 프리셋 중 'two'를 적용했어요. one, three 등으로 바꿔보세요!
+        }}
+      />
 
-            {/* 도착지 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                도착지
-              </label>
-              <select
-                value={toLocation}
-                onChange={(e) => setToLocation(e.target.value as LocationType)}
-                className="input-field"
-              >
-                <option value="">도착지 선택</option>
-                {Object.entries(LOCATIONS).map(([key, value]) => (
-                  <option key={key} value={key}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* 검색 버튼 */}
-            <button
-              onClick={handleSearch}
-              disabled={!fromLocation || !toLocation}
-              className="btn-primary w-full flex items-center justify-center"
-            >
-              동행자 찾기
-              <ArrowRight className="w-5 h-5 ml-2" />
-            </button>
-          </div>
-        </div>
-
-        {/* 즐겨찾기 경로 */}
-        {favorites.length > 0 && (
-          <div className="card p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">즐겨찾기 경로</h3>
-              <Star className="w-5 h-5 text-yellow-500" />
-            </div>
-            
-            <div className="space-y-3">
-              {favorites.map((favorite) => (
-                <button
-                  key={favorite.id}
-                  onClick={() => handleFavoriteClick(favorite)}
-                  className="w-full p-4 bg-gray-50 hover:bg-gray-100 rounded-lg flex items-center justify-between transition-colors"
-                >
-                  <div className="flex items-center">
-                    <MapPin className="w-4 h-4 text-gray-500 mr-2" />
-                    <span className="text-sm font-medium">
-                      {LOCATIONS[favorite.from_location]} → {LOCATIONS[favorite.to_location]}
-                    </span>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-gray-400" />
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* 관리자 문의 */}
-        <div className="card p-6 text-center">
-          <p className="text-sm text-gray-600 mb-2">문의사항이 있으신가요?</p>
-          <p className="text-sm font-medium text-primary-600">
-            인스타그램 @0_min._.00 으로 DM 주세요
-          </p>
+      {/* 4. ✨ 여기에 커스텀 텍스트나 콘텐츠를 넣으세요! ✨ */}
+      {/* 배경 위에 떠 있도록 스타일을 조정합니다. (position, zIndex) */}
+      <div style={{
+        position: 'relative', // 부모가 relative이므로 여기도 relative 또는 absolute
+        zIndex: 10, // 숫자가 높을수록 위에 보입니다.
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+        height: '100%',
+        overflowY: 'auto', // 내용이 길어지면 스크롤 가능
+        padding: '2rem' // 모바일 화면을 위한 여백
+      }}>
+        <h1 style={{ fontSize: '2.5rem', marginBottom: '2rem', textAlign: 'center' }}>Gatita's Blog</h1>
+        <p style={{ marginBottom: '2rem', textAlign: 'center' }}>Welcome to the Hyperspeed World!</p>
+        
+        {/* 기존에 있던 게시물 목록 코드 */}
+        <div style={{ maxWidth: '800px', width: '100%' }}>
+          {loading ? (
+            <p>Loading posts...</p>
+          ) : (
+            posts.map((post) => (
+              <div key={post.id} style={{
+                background: 'rgba(0, 0, 0, 0.5)', // 반투명 배경
+                backdropFilter: 'blur(5px)', // 뒷배경 블러 효과
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                borderRadius: '8px',
+                padding: '1.5rem',
+                margin: '1rem 0'
+              }}>
+                <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>{post.title}</h2>
+                <p>{post.body}</p>
+              </div>
+            ))
+          )}
         </div>
       </div>
-    </div>
-  )
+    </main>
+  );
 }

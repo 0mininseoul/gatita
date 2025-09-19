@@ -49,11 +49,15 @@ const NavigationBar: React.FC<NavigationBarProps> = ({ onFindClick }) => {
           priority // 이미지를 우선적으로 로드
         />
         <TextType
-          text="AI 공학관 같이 갈 사람?"
+          text={[
+            "AI 공학관 같이 갈 사람?",
+            "교육대학원 같이 갈 사람?"
+          ]}
           as="span"
           typingSpeed={70}
-          pauseDuration={10000} // 길게 멈춤
-          loop={false} // 한번만 실행
+          deletingSpeed={40} // 지워지는 속도 추가
+          pauseDuration={2000} // 멈춤 시간 조정
+          loop={true} // 무한 반복 활성화
           showCursor={true}
           cursorCharacter="_"
           style={{
@@ -61,6 +65,7 @@ const NavigationBar: React.FC<NavigationBarProps> = ({ onFindClick }) => {
             fontWeight: 500,
             color: '#9CA3AF', // 회색 (placeholder 느낌)
             fontSize: '1rem',
+            minWidth: '220px', // 텍스트 길이에 따른 레이아웃 깨짐 방지
           }}
         />
       </div>

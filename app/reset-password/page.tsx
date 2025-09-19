@@ -19,22 +19,23 @@ export default function ResetPasswordPage() {
   const supabase = createClient()
 
   useEffect(() => {
-    // URL에서 토큰 확인
+    // URL에서 토큰 확인 (Supabase 이메일 템플릿에서 오는 형태)
     const accessToken = searchParams.get('access_token')
-    const refreshToken = searchParams.get('refresh_token')
+    const type = searchParams.get('type')
     
-    if (accessToken && refreshToken) {
-      // 토큰으로 세션 설정
-      supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken
+    if (accessToken && type === 'recovery') {
+      // 복구 세션 검증
+      supabase.auth.verifyOtp({
+        token_hash: accessToken,
+        type: 'recovery'
       }).then(({ error }) => {
         if (error) {
-          console.error('Session error:', error)
-          toast.error('잘못된 링크입니다')
+          console.error('Token verification error:', error)
+          toast.error('만료되었거나 잘못된 링크입니다')
           router.push('/')
         } else {
           setIsValidSession(true)
+          toast.success('인증되었습니다. 새 비밀번호를 설정해주세요.')
         }
       })
     } else {

@@ -56,7 +56,10 @@ export default function ChatRoomPage() {
           filter: `room_id=eq.${roomId}`,
         },
         (payload) => {
-          loadMessages()
+          // 본인이 보낸 메시지가 아닐 때만 새로고침
+          if (payload.new.user_id !== user?.id) {
+            loadMessages()
+          }
         }
       )
       .subscribe()
@@ -82,7 +85,7 @@ export default function ChatRoomPage() {
       supabase.removeChannel(messagesChannel)
       supabase.removeChannel(participantsChannel)
     }
-  }, [room])
+  }, [room, user?.id])
 
   const checkAuthAndLoadData = async () => {
     try {
@@ -195,19 +198,39 @@ export default function ChatRoomPage() {
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !user) return
 
+    const tempMessage = {
+      id: `temp-${Date.now()}`,
+      content: newMessage.trim(),
+      user_id: user.id,
+      room_id: roomId,
+      created_at: new Date().toISOString(),
+      user: {
+        nickname: user.nickname,
+        department: user.department
+      }
+    }
+
+    // 즉시 UI에 메시지 추가 (낙관적 업데이트)
+    setMessages(prev => [...prev, tempMessage as any])
+    setNewMessage('')
+
     try {
       const { error } = await supabase
         .from('messages')
         .insert({
           room_id: roomId,
           user_id: user.id,
-          content: newMessage.trim()
+          content: tempMessage.content
         })
 
       if (error) throw error
 
-      setNewMessage('')
+      // 서버에서 실제 메시지 다시 로드
+      await loadMessages()
     } catch (error) {
+      // 오류 시 임시 메시지 제거하고 입력창에 다시 표시
+      setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id))
+      setNewMessage(tempMessage.content)
       console.error('Send message error:', error)
       toast.error('메시지 전송 중 오류가 발생했습니다')
     }
@@ -239,15 +262,48 @@ export default function ChatRoomPage() {
     if (!confirm('정말로 채팅방을 나가시겠습니까?')) return
 
     try {
-      const { error } = await supabase
+      // 현재 참여자 수 확인
+      const { data: currentParticipants } = await supabase
+        .from('room_participants')
+        .select('id')
+        .eq('room_id', roomId)
+
+      const participantCount = currentParticipants?.length || 0
+
+      // 참여자에서 제거
+      const { error: leaveError } = await supabase
         .from('room_participants')
         .delete()
         .eq('room_id', roomId)
         .eq('user_id', user.id)
 
-      if (error) throw error
+      if (leaveError) throw leaveError
 
-      toast.success('채팅방을 나갔습니다')
+      // 마지막 참여자였다면 채팅방과 관련 데이터 삭제
+      if (participantCount <= 1) {
+        // 메시지 먼저 삭제
+        await supabase
+          .from('messages')
+          .delete()
+          .eq('room_id', roomId)
+
+        // 신고 내역 삭제
+        await supabase
+          .from('reports')
+          .delete()
+          .eq('room_id', roomId)
+
+        // 채팅방 삭제
+        await supabase
+          .from('chat_rooms')
+          .delete()
+          .eq('id', roomId)
+
+        toast.success('채팅방을 나갔습니다. 빈 채팅방이 삭제되었습니다.')
+      } else {
+        toast.success('채팅방을 나갔습니다')
+      }
+
       router.back()
     } catch (error) {
       console.error('Leave room error:', error)

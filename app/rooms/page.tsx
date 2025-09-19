@@ -439,7 +439,6 @@ interface CreateRoomModalProps {
 
 function CreateRoomModal({ fromLocation, toLocation, selectedDate, user, onClose, onSuccess }: CreateRoomModalProps) {
   const [departureTime, setDepartureTime] = useState('')
-  const [maxParticipants, setMaxParticipants] = useState(4)
   const [isLoading, setIsLoading] = useState(false)
   const supabase = createClient()
 
@@ -459,7 +458,7 @@ function CreateRoomModal({ fromLocation, toLocation, selectedDate, user, onClose
           to_location: toLocation,
           departure_date: selectedDate,
           departure_time: departureTime,
-          max_participants: maxParticipants,
+          max_participants: 4, // 고정값
           created_by: user.id
         })
         .select()
@@ -507,19 +506,13 @@ function CreateRoomModal({ fromLocation, toLocation, selectedDate, user, onClose
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                최대 인원
-              </label>
-              <select
-                value={maxParticipants}
-                onChange={(e) => setMaxParticipants(Number(e.target.value))}
-                className="input-field"
-              >
-                <option value={2}>2명</option>
-                <option value={3}>3명</option>
-                <option value={4}>4명</option>
-              </select>
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <p className="text-sm text-gray-600">
+                <strong>최대 인원:</strong> 4명 (고정)
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                방장 포함 최대 4명까지 참여 가능합니다
+              </p>
             </div>
           </div>
 

@@ -121,7 +121,7 @@ export default function HomePage() {
     }
     
     if (authMode === 'login') {
-      return <LoginForm onSuccess={() => { setAuthMode(null); }} />
+      return <LoginForm onSuccess={() => { setAuthMode(null); }} onBackToLanding={() => setAuthMode(null)} />
     }
 
     // 초기 랜딩 화면

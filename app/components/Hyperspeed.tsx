@@ -25,7 +25,7 @@ interface Colors {
   sticks: number;
 }
 
-interface HyperspeedOptions {
+export interface HyperspeedOptions {
   onSpeedUp?: (ev: MouseEvent | TouchEvent) => void;
   onSlowDown?: (ev: MouseEvent | TouchEvent) => void;
   distortion?: string | Distortion;

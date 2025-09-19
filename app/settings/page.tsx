@@ -359,7 +359,7 @@ export default function SettingsPage() {
         {/* 하단 정보 */}
         <div className="text-center text-sm text-gray-500 mt-8">
           <p>같이타 v1.0.0</p>
-          <p className="mt-2">가천대 통학 동행 커뮤니티</p>
+          <p className="mt-2">가천대 통학 동행 플랫폼</p>
         </div>
       </div>
     </div>

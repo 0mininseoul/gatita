@@ -7,7 +7,7 @@ import toast from 'react-hot-toast'
 
 interface LoginFormProps {
   onSuccess: () => void
-  onBackToLanding?: () => void
+  onBackToLanding: () => void  // 필수로 변경
 }
 
 export default function LoginForm({ onSuccess, onBackToLanding }: LoginFormProps) {
@@ -16,6 +16,7 @@ export default function LoginForm({ onSuccess, onBackToLanding }: LoginFormProps
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [showForgotPassword, setShowForgotPassword] = useState(false)
   const supabase = createClient()
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -80,6 +81,36 @@ export default function LoginForm({ onSuccess, onBackToLanding }: LoginFormProps
     } catch (error: any) {
       console.error('Login error:', error)
       toast.error('로그인 중 오류가 발생했습니다')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      toast.error('먼저 이메일을 입력해주세요')
+      return
+    }
+
+    if (!email.endsWith('@gachon.ac.kr')) {
+      toast.error('가천대학교 이메일을 입력해주세요')
+      return
+    }
+
+    setIsLoading(true)
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      })
+
+      if (error) throw error
+
+      toast.success('비밀번호 재설정 이메일을 보냈습니다!')
+      setShowForgotPassword(false)
+    } catch (error: any) {
+      console.error('Password reset error:', error)
+      toast.error('비밀번호 재설정 이메일 전송 중 오류가 발생했습니다')
     } finally {
       setIsLoading(false)
     }
@@ -183,6 +214,17 @@ export default function LoginForm({ onSuccess, onBackToLanding }: LoginFormProps
               )}
             </div>
 
+            {/* 비밀번호 찾기 */}
+            <div className="text-right">
+              <button
+                type="button"
+                onClick={() => setShowForgotPassword(true)}
+                className="text-sm text-primary-600 hover:text-primary-700"
+              >
+                비밀번호를 잊으셨나요?
+              </button>
+            </div>
+
             {/* 로그인 버튼 */}
             <button
               type="submit"
@@ -214,6 +256,47 @@ export default function LoginForm({ onSuccess, onBackToLanding }: LoginFormProps
           </button>
         </div>
       </div>
+
+      {/* 비밀번호 찾기 모달 */}
+      {showForgotPassword && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-md">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold mb-4">비밀번호 재설정</h3>
+              
+              <p className="text-sm text-gray-600 mb-4">
+                가입한 이메일 주소를 입력하면 비밀번호 재설정 링크를 보내드립니다.
+              </p>
+
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="example@gachon.ac.kr"
+                className="input-field mb-4"
+                disabled={isLoading}
+              />
+
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowForgotPassword(false)}
+                  className="btn-secondary flex-1"
+                  disabled={isLoading}
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleForgotPassword}
+                  disabled={isLoading || !email}
+                  className="btn-primary flex-1"
+                >
+                  {isLoading ? '전송 중...' : '이메일 전송'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

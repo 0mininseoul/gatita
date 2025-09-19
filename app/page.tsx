@@ -136,7 +136,7 @@ export default function HomePage() {
             <h1 className="text-4xl font-bold text-gray-900 mb-4">같이타</h1>
             <p className="text-gray-600 text-lg">
               가천대 학생들을 위한<br />
-              통학 경로 동행 커뮤니티
+              통학길 동행 플랫폼
             </p>
           </div>
 
@@ -181,7 +181,7 @@ export default function HomePage() {
               onClick={() => setAuthMode('login')}
               className="btn-secondary w-full"
             >
-              이미 계정이 있나요? 로그인
+              이미 계정이 있나요? 로그인하기
             </button>
           </div>
 
@@ -190,7 +190,7 @@ export default function HomePage() {
             <div className="card p-6">
               <p className="text-sm text-gray-600 mb-2">문의사항이 있으신가요?</p>
               <p className="text-sm font-medium text-primary-600">
-                인스타그램 @0_min._.00 으로 DM 주세요
+                인스타그램 @0_min._.00 으로 DM 주십쇼
               </p>
             </div>
           </div>

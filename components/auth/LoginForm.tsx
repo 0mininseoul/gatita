@@ -49,6 +49,7 @@ export default function LoginForm({ onSuccess, onBackToLanding }: LoginFormProps
       })
 
       if (error) {
+        console.error('Login error:', error)
         if (error.message.includes('Invalid login credentials')) {
           setErrors({ 
             password: '이메일 또는 비밀번호가 올바르지 않습니다' 
@@ -60,6 +61,19 @@ export default function LoginForm({ onSuccess, onBackToLanding }: LoginFormProps
       }
 
       if (data.user) {
+        // 사용자 프로필 확인
+        const { data: userData } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', data.user.id)
+          .single()
+
+        if (!userData) {
+          toast.error('사용자 정보를 찾을 수 없습니다')
+          await supabase.auth.signOut()
+          return
+        }
+
         toast.success('로그인되었습니다!')
         onSuccess()
       }
@@ -193,7 +207,7 @@ export default function LoginForm({ onSuccess, onBackToLanding }: LoginFormProps
             아직 계정이 없으신가요?
           </p>
           <button
-            onClick={() => window.location.reload()} // 회원가입으로 돌아가기
+            onClick={onBackToLanding}
             className="text-primary-600 font-medium text-sm"
           >
             회원가입하기

@@ -12,7 +12,7 @@ import LoginForm from '@/components/auth/LoginForm'
 import Hyperspeed from '@/components/Hyperspeed'
 import { hyperspeedPresets } from '@/components/presets'
 import SplitText from '@/components/SplitText'
-import NavigationBar from '@/components/NavigationBar' // 내비게이션 바 임포트
+import NavigationBar from '@/components/NavigationBar'
 
 type AuthMode = 'login' | 'signup' | null
 
@@ -41,8 +41,6 @@ export default function HomePage() {
 
     return () => subscription.unsubscribe()
   }, [])
-
-  // --- 여기부터 누락되었던 함수들입니다 ---
 
   const checkAuth = async () => {
     try {
@@ -116,8 +114,6 @@ export default function HomePage() {
     toast.error('먼저 로그인하셔야 합니다.');
   };
 
-  // --- 여기까지 누락되었던 함수들입니다 ---
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-black">
@@ -149,11 +145,10 @@ export default function HomePage() {
           <NavigationBar onFindClick={handleFindClick} />
 
           <div style={{
-            flexGrow: 1,
+            marginTop: '20vh',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            justifyContent: 'center',
             textAlign: 'center',
           }}>
             <SplitText
@@ -190,7 +185,6 @@ export default function HomePage() {
     )
   }
 
-  // --- 여기부터 누락되었던 '로그인 후 화면' 코드입니다 ---
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-100 px-4 py-4">

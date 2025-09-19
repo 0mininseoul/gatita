@@ -23,22 +23,37 @@ export default function HomePage() {
 
   useEffect(() => {
     checkAuth()
+    
+    // Auth state 변경 리스너
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        await checkAuth()
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null)
+        setFavorites([])
+      }
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
   const checkAuth = async () => {
     try {
-      const { data: { user: authUser } } = await supabase.auth.getUser()
+      const { data: { session } } = await supabase.auth.getSession()
       
-      if (authUser) {
+      if (session?.user) {
         const { data: userData } = await supabase
           .from('users')
           .select('*')
-          .eq('id', authUser.id)
+          .eq('id', session.user.id)
           .single()
         
         if (userData) {
           setUser(userData)
           loadFavorites(userData.id)
+        } else {
+          // 사용자 데이터가 없으면 로그아웃
+          await supabase.auth.signOut()
         }
       }
     } catch (error) {
@@ -73,7 +88,6 @@ export default function HomePage() {
       return
     }
 
-    // URL에 경로 정보를 포함하여 검색 결과 페이지로 이동
     router.push(`/rooms?from=${fromLocation}&to=${toLocation}`)
   }
 
@@ -103,11 +117,11 @@ export default function HomePage() {
   // 인증이 필요한 경우
   if (!user) {
     if (authMode === 'signup') {
-      return <SignupForm onSuccess={() => { setAuthMode(null); checkAuth(); }} />
+      return <SignupForm onSuccess={() => { setAuthMode(null); }} />
     }
     
     if (authMode === 'login') {
-      return <LoginForm onSuccess={() => { setAuthMode(null); checkAuth(); }} />
+      return <LoginForm onSuccess={() => { setAuthMode(null); }} />
     }
 
     // 초기 랜딩 화면
@@ -202,6 +216,15 @@ export default function HomePage() {
             >
               <Settings className="w-5 h-5 text-gray-600" />
             </button>
+            {user.is_admin && (
+              <button
+                onClick={() => router.push('/admin')}
+                className="p-2 hover:bg-gray-100 rounded-lg bg-red-50"
+                title="관리자 페이지"
+              >
+                <Star className="w-5 h-5 text-red-600" />
+              </button>
+            )}
             <button
               onClick={handleLogout}
               className="p-2 hover:bg-gray-100 rounded-lg"

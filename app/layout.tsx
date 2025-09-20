@@ -38,7 +38,7 @@ export const metadata: Metadata = {
     description: '가천대학교 학생들을 위한 통학 경로 동행자 매칭 서비스입니다. 가천대역에서 AI공학관까지 안전하고 편리하게 함께 이동하세요.',
     images: [
       {
-        url: 'https://gatita-rosy.vercel.app/og-image.png',
+        url: 'https://https://gatita-0minseouls-projects.vercel.app/og-image.png',
         width: 1200,
         height: 630,
         alt: '같이타 - 가천대 통학 동행 플랫폼',

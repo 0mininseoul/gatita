@@ -32,7 +32,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'ko_KR',
-    url: 'https://gatita-rosy.vercel.app',
+    url: 'https://gatita-0minseouls-projects.vercel.app',
     siteName: '같이타',
     title: '같이타 - 가천대 통학 동행 플랫폼',
     description: '가천대학교 학생들을 위한 통학 경로 동행자 매칭 서비스입니다. 가천대역에서 AI공학관까지 안전하고 편리하게 함께 이동하세요.',

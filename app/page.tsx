@@ -240,7 +240,7 @@ export default function HomePage() {
             />
 
             <p style={{
-              fontFamily: "'Pretendard', sans-serif",
+              fontFamily: 'var(--font-paperlogy), sans-serif',
               fontWeight: 500,
               fontSize: '1.125rem', maxWidth: '600px',
               marginBottom: '2.5rem', color: 'rgba(255, 255, 255, 0.8)'

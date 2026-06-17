@@ -28,6 +28,7 @@ Last updated: 2026-06-17
 - Next.js 14 App Router
 - TypeScript
 - Tailwind CSS
+- Paperlogy local font via `next/font/local`
 - Supabase Auth, Postgres, Realtime
 - Vercel
 - PWA manifest/service worker는 존재하지만 현재 제품 기능으로 완성된 상태는 아니다.

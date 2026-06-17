@@ -35,14 +35,12 @@ module.exports = {
       },
       fontFamily: {
         sans: [
+          'var(--font-paperlogy)',
           '-apple-system',
           'BlinkMacSystemFont',
-          'Apple SD Gothic Neo',
-          'Pretendard Variable',
-          'Pretendard',
+          'Segoe UI',
           'Roboto',
           'Noto Sans KR',
-          'Segoe UI',
           'Malgun Gothic',
           'sans-serif'
         ],

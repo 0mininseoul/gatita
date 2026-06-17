@@ -18,7 +18,7 @@ const NavigationBar: React.FC<NavigationBarProps> = ({ onFindClick }) => {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    fontFamily: "'Pretendard', sans-serif",
+    fontFamily: 'var(--font-paperlogy), sans-serif',
     backdropFilter: 'blur(10px)',
     color: 'white',
     gap: '0.75rem',
@@ -63,7 +63,7 @@ const NavigationBar: React.FC<NavigationBarProps> = ({ onFindClick }) => {
           showCursor={true}
           cursorCharacter="_"
           style={{
-            fontFamily: "'Pretendard', sans-serif",
+            fontFamily: 'var(--font-paperlogy), sans-serif',
             fontWeight: 500,
             color: '#9CA3AF',
             fontSize: '0.9375rem',

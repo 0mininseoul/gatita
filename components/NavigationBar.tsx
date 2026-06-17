@@ -41,7 +41,7 @@ const NavigationBar: React.FC<NavigationBarProps> = ({ onFindClick }) => {
     <nav style={navStyle}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: 1 }}>
         <Image
-          src="/icons/icon-512x512.png"
+          src="/brand/gatita-logo.png"
           alt="같이타 로고"
           width={32}
           height={32}

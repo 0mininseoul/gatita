@@ -29,7 +29,8 @@ export const metadata: Metadata = {
   authors: [{ name: '박영민' }],
   creator: '같이타',
   icons: {
-    icon: '/favicon.ico',
+    icon: '/favicon.png',
+    shortcut: '/favicon.ico',
     apple: '/apple-touch-icon.png',
   },
   manifest: '/manifest.json',
@@ -44,7 +45,7 @@ export const metadata: Metadata = {
       {
         url: '/og-image.png',
         width: 1200,
-        height: 630,
+        height: 1200,
         alt: '같이타 로고',
       },
     ],

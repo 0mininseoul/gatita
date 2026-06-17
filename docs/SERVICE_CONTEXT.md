@@ -20,6 +20,7 @@ Last updated: 2026-06-17
 - Auth provider: Google OAuth
 - Allowed email domain in app logic: `@gachon.ac.kr`
 - Local Google OAuth credential file: `.secrets/google-oauth-client-secret.json`
+- Brand logo source: `public/brand/gatita-logo.png`
 
 비밀값은 레포에 커밋하지 않는다. `.env.local`, `.vercel/`, `.secrets/`, `supabase/.temp/`는 로컬/운영 연결용으로만 사용한다.
 

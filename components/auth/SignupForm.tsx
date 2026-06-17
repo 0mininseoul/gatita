@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { DEPARTMENTS } from '@/lib/supabase'
 import { ChevronDown, Check, AlertCircle } from 'lucide-react'
@@ -331,6 +332,18 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
 
             <p className="text-sm text-gray-500 text-center">
               * 가천대학교 이메일(@gachon.ac.kr)만 사용 가능합니다
+            </p>
+
+            <p className="text-xs leading-5 text-gray-500 text-center">
+              계속하면 같이타의{' '}
+              <Link href="/terms" className="font-medium text-primary-600 underline">
+                서비스약관
+              </Link>
+              과{' '}
+              <Link href="/privacy" className="font-medium text-primary-600 underline">
+                개인정보처리방침
+              </Link>
+              을 확인한 것으로 간주됩니다.
             </p>
           </div>
         </div>

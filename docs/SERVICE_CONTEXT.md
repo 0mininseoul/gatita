@@ -21,6 +21,8 @@ Last updated: 2026-06-17
 - Allowed email domain in app logic: `@gachon.ac.kr`
 - Local Google OAuth credential file: `.secrets/google-oauth-client-secret.json`
 - Brand logo source: `public/brand/gatita-logo.png`
+- Public policy URLs: `/privacy`, `/terms`
+- Google Search Console verification file: `public/googlecbd9b79f0d2eedb4.html`
 
 비밀값은 레포에 커밋하지 않는다. `.env.local`, `.vercel/`, `.secrets/`, `supabase/.temp/`는 로컬/운영 연결용으로만 사용한다.
 
@@ -41,6 +43,8 @@ Last updated: 2026-06-17
 - `/rooms/[id]`: 실시간 채팅방
 - `/settings`: 사용자 프로필 설정
 - `/admin`: 관리자 대시보드
+- `/privacy`: 개인정보처리방침
+- `/terms`: 서비스약관
 
 운영 노출 방지를 위해 `/debug`와 Google OAuth 정책에 맞지 않는 `/reset-password`는 제거했다.
 
@@ -55,7 +59,7 @@ Last updated: 2026-06-17
 - `reports`: 신고 내역
 - `favorites`: 자주 쓰는 경로
 
-고정 지점은 현재 네 가지다.
+고정 지점은 현재 여섯 가지다.
 
 - `가천대역_1번출구`
 - `가천대학교_정문`

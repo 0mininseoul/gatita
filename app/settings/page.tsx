@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { User } from '@/lib/supabase'
@@ -343,7 +344,7 @@ export default function SettingsPage() {
           <div className="text-center">
             <p className="text-sm text-gray-600 mb-2">문의사항이 있으신가요?</p>
             <p className="text-sm font-medium text-primary-600">
-              인스타그램 @0_min._.00 으로 DM 주세요
+              ym5373@gachon.ac.kr 로 메일 주세요
             </p>
           </div>
         </div>
@@ -362,6 +363,14 @@ export default function SettingsPage() {
         <div className="text-center text-sm text-gray-500 mt-8">
           <p>같이타 v1.0.0</p>
           <p className="mt-2">가천대 통학 동행 플랫폼</p>
+          <div className="mt-4 flex items-center justify-center gap-4 text-xs">
+            <Link href="/privacy" className="underline hover:text-gray-700">
+              개인정보처리방침
+            </Link>
+            <Link href="/terms" className="underline hover:text-gray-700">
+              서비스약관
+            </Link>
+          </div>
         </div>
       </div>
     </div>

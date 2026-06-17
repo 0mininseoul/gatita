@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { User, LocationType, LOCATIONS, Favorite } from '@/lib/supabase'
@@ -256,6 +257,22 @@ export default function HomePage() {
                 회원가입
               </button>
             </div>
+          </div>
+
+          <div style={{
+            position: 'absolute',
+            bottom: '1.5rem',
+            display: 'flex',
+            gap: '1rem',
+            fontSize: '0.75rem',
+            color: 'rgba(255, 255, 255, 0.68)'
+          }}>
+            <Link href="/privacy" style={{ color: 'inherit', textDecoration: 'underline' }}>
+              개인정보처리방침
+            </Link>
+            <Link href="/terms" style={{ color: 'inherit', textDecoration: 'underline' }}>
+              서비스약관
+            </Link>
           </div>
         </div>
       </main>

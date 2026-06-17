@@ -293,22 +293,22 @@ export default function HomePage() {
               가천대 학생들을 위한 통학길 동행 플랫폼
             </p>
 
-            <p style={{
-              fontFamily: 'var(--font-paperlogy), sans-serif',
-              fontWeight: 400,
-              fontSize: '0.95rem',
-              lineHeight: 1.6,
+            <div style={{
+              display: 'flex',
+              position: 'relative',
+              width: '100%',
               maxWidth: '320px',
-              marginBottom: '2rem',
-              color: 'rgba(255, 255, 255, 0.68)'
+              marginTop: user ? '1rem' : '2.75rem',
             }}>
-              같은 경로의 학생과 출발 시간을 맞추고 채팅방에서 바로 동행을 정해요.
-            </p>
-
-            <div style={{ display: 'flex', width: '100%', maxWidth: '320px' }}>
+              {!user && (
+                <span id="gachon-account-hint" className="cta-bubble">
+                  가천대학교 계정만 로그인 가능
+                </span>
+              )}
               <button
                 onClick={user ? handleEnterApp : handleGoogleStart}
                 disabled={!user && isStartingGoogle}
+                aria-describedby={!user ? 'gachon-account-hint' : undefined}
                 style={{
                   width: '100%',
                   minHeight: '3.25rem',

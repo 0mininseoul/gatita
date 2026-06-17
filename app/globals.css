@@ -26,6 +26,43 @@
 }
 
 @layer components {
+  .cta-bubble {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 0.75rem);
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: max-content;
+    max-width: min(86vw, 320px);
+    padding: 0.5rem 0.75rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.94);
+    color: #111827;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+    transform: translateX(-50%);
+    animation: cta-bubble-float 1.8s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  .cta-bubble::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    transform: translateX(-50%);
+    border-left: 0.38rem solid transparent;
+    border-right: 0.38rem solid transparent;
+    border-top: 0.45rem solid rgba(255, 255, 255, 0.94);
+  }
+
   .btn-primary {
     @apply bg-primary-600 hover:bg-primary-700 text-white font-medium py-3 px-6 rounded-xl transition-colors duration-200 disabled:bg-gray-300 disabled:cursor-not-allowed;
   }
@@ -69,6 +106,31 @@
 
   .step-active {
     @apply translate-y-0 opacity-100;
+  }
+}
+
+@keyframes cta-bubble-float {
+  0%, 100% {
+    opacity: 0.92;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-6px);
+  }
+}
+
+@media (max-width: 360px) {
+  .cta-bubble {
+    padding: 0.45rem 0.65rem;
+    font-size: 0.72rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cta-bubble {
+    animation: none;
   }
 }
 

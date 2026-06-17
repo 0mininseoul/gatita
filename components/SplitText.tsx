@@ -43,13 +43,23 @@ const SplitText: React.FC<SplitTextProps> = ({
   const [fontsLoaded, setFontsLoaded] = useState<boolean>(false);
 
   useEffect(() => {
-    if (document.fonts.status === 'loaded') {
-      setFontsLoaded(true);
-    } else {
-      document.fonts.ready.then(() => {
+    // 폰트 로딩 상태를 더 안전하게 체크
+    const checkFonts = () => {
+      if (document.fonts && document.fonts.status === 'loaded') {
         setFontsLoaded(true);
-      });
-    }
+      } else if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(() => {
+          setFontsLoaded(true);
+        });
+      } else {
+        // 폰트 API가 없는 경우 약간의 지연 후 실행
+        setTimeout(() => {
+          setFontsLoaded(true);
+        }, 100);
+      }
+    };
+
+    checkFonts();
   }, []);
 
   useGSAP(

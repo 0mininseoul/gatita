@@ -8,11 +8,10 @@ interface NavigationBarProps {
 }
 
 const NavigationBar: React.FC<NavigationBarProps> = ({ onFindClick }) => {
-  // 내비게이션 바 전체 스타일
   const navStyle: React.CSSProperties = {
-    width: 'calc(100% - 4rem)',
+    width: '100%',
     maxWidth: '1200px',
-    padding: '0.75rem 1.5rem', // 패딩 조정
+    padding: '0.75rem 1rem',
     backgroundColor: 'rgba(28, 28, 30, 0.7)',
     borderRadius: '1.5rem',
     border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -22,9 +21,9 @@ const NavigationBar: React.FC<NavigationBarProps> = ({ onFindClick }) => {
     fontFamily: "'Pretendard', sans-serif",
     backdropFilter: 'blur(10px)',
     color: 'white',
+    gap: '0.75rem',
   };
 
-  // "찾기" 버튼 스타일
   const findButtonStyle: React.CSSProperties = {
     cursor: 'pointer',
     background: 'none',
@@ -35,42 +34,47 @@ const NavigationBar: React.FC<NavigationBarProps> = ({ onFindClick }) => {
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: '50%',
+    flex: '0 0 auto',
   };
 
   return (
     <nav style={navStyle}>
-      {/* 왼쪽: 로고 + 타이핑 텍스트 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: 1 }}>
         <Image
           src="/icons/icon-512x512.png"
           alt="같이타 로고"
           width={32}
           height={32}
-          priority // 이미지를 우선적으로 로드
+          priority
+          style={{ flex: '0 0 auto' }}
         />
         <TextType
           text={[
             "AI 공학관 같이 갈 사람?",
-            "교육대학원 같이 갈 사람?"
+            "교육대학원 같이 갈 사람?",
+            "제3기숙사 같이 갈 사람?",
+            "제2기숙사 같이 갈 사람?"
           ]}
           as="span"
           typingSpeed={70}
-          deletingSpeed={40} // 지워지는 속도 추가
-          pauseDuration={2000} // 멈춤 시간 조정
-          loop={true} // 무한 반복 활성화
+          deletingSpeed={40}
+          pauseDuration={2000}
+          loop={true}
           showCursor={true}
           cursorCharacter="_"
           style={{
             fontFamily: "'Pretendard', sans-serif",
             fontWeight: 500,
-            color: '#9CA3AF', // 회색 (placeholder 느낌)
-            fontSize: '1rem',
-            minWidth: '220px', // 텍스트 길이에 따른 레이아웃 깨짐 방지
+            color: '#9CA3AF',
+            fontSize: '0.9375rem',
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
           }}
         />
       </div>
 
-      {/* 오른쪽: 돋보기 아이콘 버튼 */}
       <button 
         onClick={onFindClick} 
         style={findButtonStyle}

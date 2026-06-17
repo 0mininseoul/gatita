@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { ChatRoom, User, Message, RoomParticipant, LOCATIONS } from '@/lib/supabase'
@@ -13,7 +13,7 @@ export default function ChatRoomPage() {
   const router = useRouter()
   const params = useParams()
   const roomId = params.id as string
-  
+
   const [user, setUser] = useState<User | null>(null)
   const [room, setRoom] = useState<ChatRoom | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -24,27 +24,141 @@ export default function ChatRoomPage() {
   const [showReportModal, setShowReportModal] = useState(false)
   const [reportReason, setReportReason] = useState('')
   const [reportTarget, setReportTarget] = useState<string>('')
-  
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
+
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [])
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages, scrollToBottom])
+
+  const loadRoom = useCallback(async () => {
+    try {
+      const { data } = await supabase
+        .from('chat_rooms')
+        .select(`
+          *,
+          creator:created_by(nickname, department)
+        `)
+        .eq('id', roomId)
+        .single()
+
+      if (data) {
+        setRoom(data as any)
+      } else {
+        router.push('/')
+      }
+    } catch (error) {
+      console.error('Load room error:', error)
+      router.push('/')
+    }
+  }, [roomId, router, supabase])
+
+  const loadMessages = useCallback(async () => {
+    try {
+      const { data } = await supabase
+        .from('messages')
+        .select(`
+          *,
+          user:users(nickname, department)
+        `)
+        .eq('room_id', roomId)
+        .order('created_at', { ascending: true })
+
+      if (data) {
+        setMessages(data as any)
+      }
+    } catch (error) {
+      console.error('Load messages error:', error)
+    }
+  }, [roomId, supabase])
+
+  const loadParticipants = useCallback(async () => {
+    try {
+      const { data } = await supabase
+        .from('room_participants')
+        .select(`
+          *,
+          user:users(nickname, department)
+        `)
+        .eq('room_id', roomId)
+
+      if (data) {
+        setParticipants(data as any)
+      }
+    } catch (error) {
+      console.error('Load participants error:', error)
+    }
+  }, [roomId, supabase])
+
+  const checkParticipation = useCallback(async (userId: string) => {
+    try {
+      const { data } = await supabase
+        .from('room_participants')
+        .select('confirmed')
+        .eq('room_id', roomId)
+        .eq('user_id', userId)
+        .single()
+
+      if (data) {
+        setIsConfirmed(data.confirmed)
+      }
+    } catch (error) {
+      // 참여자가 아닌 경우
+    }
+  }, [roomId, supabase])
+
+  const checkAuthAndLoadData = useCallback(async () => {
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+
+      if (!authUser) {
+        router.push('/')
+        return
+      }
+
+      const { data: userData } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', authUser.id)
+        .maybeSingle()
+
+      if (!userData) {
+        router.push('/')
+        return
+      }
+
+      setUser(userData)
+      await Promise.all([
+        loadRoom(),
+        loadMessages(),
+        loadParticipants(),
+        checkParticipation(userData.id)
+      ])
+    } catch (error) {
+      console.error('Auth/data loading error:', error)
+      router.push('/')
+    } finally {
+      setLoading(false)
+    }
+  }, [checkParticipation, loadMessages, loadParticipants, loadRoom, router, supabase])
 
   useEffect(() => {
     if (!roomId) {
       router.push('/')
       return
     }
-    
-    checkAuthAndLoadData()
-  }, [roomId])
 
-  useEffect(() => {
-    scrollToBottom()
-  }, [messages])
+    checkAuthAndLoadData()
+  }, [checkAuthAndLoadData, roomId, router])
 
   useEffect(() => {
     if (!room) return
 
-    // 실시간 메시지 구독
     const messagesChannel = supabase
       .channel(`messages:${roomId}`)
       .on(
@@ -56,7 +170,6 @@ export default function ChatRoomPage() {
           filter: `room_id=eq.${roomId}`,
         },
         (payload) => {
-          // 본인이 보낸 메시지가 아닐 때만 새로고침
           if (payload.new.user_id !== user?.id) {
             loadMessages()
           }
@@ -64,7 +177,6 @@ export default function ChatRoomPage() {
       )
       .subscribe()
 
-    // 참여자 변경 구독
     const participantsChannel = supabase
       .channel(`participants:${roomId}`)
       .on(
@@ -75,7 +187,7 @@ export default function ChatRoomPage() {
           table: 'room_participants',
           filter: `room_id=eq.${roomId}`,
         },
-        (payload) => {
+        () => {
           loadParticipants()
         }
       )
@@ -85,115 +197,7 @@ export default function ChatRoomPage() {
       supabase.removeChannel(messagesChannel)
       supabase.removeChannel(participantsChannel)
     }
-  }, [room, user?.id])
-
-  const checkAuthAndLoadData = async () => {
-    try {
-      const { data: { user: authUser } } = await supabase.auth.getUser()
-      
-      if (!authUser) {
-        router.push('/')
-        return
-      }
-
-      const { data: userData } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', authUser.id)
-        .single()
-      
-      if (userData) {
-        setUser(userData)
-        await Promise.all([
-          loadRoom(),
-          loadMessages(),
-          loadParticipants(),
-          checkParticipation(userData.id)
-        ])
-      }
-    } catch (error) {
-      console.error('Auth/data loading error:', error)
-      router.push('/')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadRoom = async () => {
-    try {
-      const { data } = await supabase
-        .from('chat_rooms')
-        .select(`
-          *,
-          creator:created_by(nickname, department)
-        `)
-        .eq('id', roomId)
-        .single()
-      
-      if (data) {
-        setRoom(data as any)
-      } else {
-        router.push('/')
-      }
-    } catch (error) {
-      console.error('Load room error:', error)
-      router.push('/')
-    }
-  }
-
-  const loadMessages = async () => {
-    try {
-      const { data } = await supabase
-        .from('messages')
-        .select(`
-          *,
-          user:users(nickname, department)
-        `)
-        .eq('room_id', roomId)
-        .order('created_at', { ascending: true })
-      
-      if (data) {
-        setMessages(data as any)
-      }
-    } catch (error) {
-      console.error('Load messages error:', error)
-    }
-  }
-
-  const loadParticipants = async () => {
-    try {
-      const { data } = await supabase
-        .from('room_participants')
-        .select(`
-          *,
-          user:users(nickname, department)
-        `)
-        .eq('room_id', roomId)
-      
-      if (data) {
-        setParticipants(data as any)
-      }
-    } catch (error) {
-      console.error('Load participants error:', error)
-    }
-  }
-
-  const checkParticipation = async (userId: string) => {
-    try {
-      const { data } = await supabase
-        .from('room_participants')
-        .select('confirmed')
-        .eq('room_id', roomId)
-        .eq('user_id', userId)
-        .single()
-      
-      if (data) {
-        setIsConfirmed(data.confirmed)
-      }
-    } catch (error) {
-      // 참여자가 아닌 경우
-    }
-  }
+  }, [loadMessages, loadParticipants, room, roomId, supabase, user?.id])
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !user) return
@@ -258,7 +262,7 @@ export default function ChatRoomPage() {
 
   const handleLeaveRoom = async () => {
     if (!user) return
-    
+
     if (!confirm('정말로 채팅방을 나가시겠습니까?')) return
 
     try {
@@ -279,27 +283,14 @@ export default function ChatRoomPage() {
 
       if (leaveError) throw leaveError
 
-      // 마지막 참여자였다면 채팅방과 관련 데이터 삭제
       if (participantCount <= 1) {
-        // 메시지 먼저 삭제
-        await supabase
-          .from('messages')
-          .delete()
-          .eq('room_id', roomId)
-
-        // 신고 내역 삭제
-        await supabase
-          .from('reports')
-          .delete()
-          .eq('room_id', roomId)
-
-        // 채팅방 삭제
         await supabase
           .from('chat_rooms')
-          .delete()
+          .update({ status: 'closed' })
           .eq('id', roomId)
+          .eq('created_by', user.id)
 
-        toast.success('채팅방을 나갔습니다. 빈 채팅방이 삭제되었습니다.')
+        toast.success('채팅방을 나갔습니다')
       } else {
         toast.success('채팅방을 나갔습니다')
       }
@@ -334,10 +325,6 @@ export default function ChatRoomPage() {
       console.error('Report error:', error)
       toast.error('신고 접수 중 오류가 발생했습니다')
     }
-  }
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
   const isParticipant = participants.some(p => p.user_id === user?.id)
@@ -396,8 +383,8 @@ export default function ChatRoomPage() {
               <div
                 key={participant.id}
                 className={`px-3 py-1 rounded-full text-sm flex items-center ${
-                  participant.confirmed 
-                    ? 'bg-green-100 text-green-800' 
+                  participant.confirmed
+                    ? 'bg-green-100 text-green-800'
                     : 'bg-gray-100 text-gray-600'
                 }`}
               >
@@ -465,7 +452,7 @@ export default function ChatRoomPage() {
               type="text"
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+              onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
               placeholder="메시지를 입력하세요..."
               className="flex-1 px-4 py-2 border border-gray-200 rounded-full focus:border-primary-600 focus:ring-2 focus:ring-primary-100"
             />
@@ -477,7 +464,7 @@ export default function ChatRoomPage() {
               <Send className="w-5 h-5" />
             </button>
           </div>
-          
+
           <div className="flex justify-center mt-4">
             <button
               onClick={handleLeaveRoom}
@@ -509,7 +496,7 @@ export default function ChatRoomPage() {
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -560,7 +547,7 @@ export default function ChatRoomPage() {
                   신고하기
                 </button>
               </div>
-              
+
               <p className="text-xs text-gray-500 mt-3 text-center">
                 신고 사유 검토 후 이용정지 등의 제재가 있을 수 있습니다
               </p>

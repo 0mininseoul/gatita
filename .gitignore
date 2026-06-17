@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Next.js output
+.next/
+out/
+
+# Local environment
+.env*.local
+.secrets/
+
+# Logs and package-manager cache
+.npm-cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS and editor files
+.DS_Store
+*.swp
+
+# Local tool configuration
+.claude/settings.local.json
+mcp.json
+.vercel/
+.playwright-cli/
+output/
+supabase/.temp/
+
+# Accidental copied home-directory artifacts
+~/
+.vercel

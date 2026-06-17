@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { User, LocationType, LOCATIONS, Favorite } from '@/lib/supabase'
@@ -24,40 +24,73 @@ export default function HomePage() {
   const [toLocation, setToLocation] = useState<LocationType | ''>('')
   const [favorites, setFavorites] = useState<Favorite[]>([])
   const router = useRouter()
-  const supabase = createClient()
+  const hyperspeedOptions = useMemo(() => ({ ...hyperspeedPresets.one }), [])
 
-  useEffect(() => {
-    checkAuth()
-    
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        await checkAuth()
-        setAuthMode(null);
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null)
-        setFavorites([])
-      }
-    })
-
-    return () => subscription.unsubscribe()
+  const supabase = useMemo(() => {
+    try {
+      return createClient()
+    } catch (error) {
+      console.error('Supabase client creation error:', error)
+      return null
+    }
   }, [])
 
-  const checkAuth = async () => {
+  const loadFavorites = useCallback(async (userId: string) => {
+    if (!supabase) {
+      return
+    }
+
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      
+      const { data } = await supabase
+        .from('favorites')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+
+      if (data) setFavorites(data)
+    } catch (error) {
+      console.error('Load favorites error:', error)
+    }
+  }, [supabase])
+
+  const checkAuth = useCallback(async () => {
+    if (!supabase) {
+      setLoading(false)
+      return
+    }
+
+    try {
+      const timeout = new Promise<never>((_, reject) => {
+        window.setTimeout(() => reject(new Error('getSession timeout')), 15000)
+      })
+      const { data: { session }, error: sessionError } = await Promise.race([
+        supabase.auth.getSession(),
+        timeout
+      ])
+
+      if (sessionError) {
+        throw sessionError
+      }
+
       if (session?.user) {
+        const email = session.user.email
+        if (!email?.endsWith('@gachon.ac.kr')) {
+          toast.error('가천대학교 이메일만 사용 가능합니다')
+          await supabase.auth.signOut()
+          return
+        }
+
         const { data: userData } = await supabase
           .from('users')
           .select('*')
           .eq('id', session.user.id)
-          .single()
-        
+          .maybeSingle()
+
         if (userData) {
           setUser(userData)
-          loadFavorites(userData.id)
+          await loadFavorites(userData.id)
         } else {
-          await supabase.auth.signOut()
+          setAuthMode('signup')
         }
       }
     } catch (error) {
@@ -65,28 +98,61 @@ export default function HomePage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [loadFavorites, supabase])
 
-  const loadFavorites = async (userId: string) => {
-    try {
-      const { data } = await supabase
-        .from('favorites')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-      
-      if (data) setFavorites(data)
-    } catch (error) {
-      console.error('Load favorites error:', error)
+  useEffect(() => {
+    if (!supabase) {
+      setLoading(false)
+      return
     }
-  }
+
+    const params = new URLSearchParams(window.location.search)
+    const urlMode = params.get('mode')
+
+    if (urlMode === 'login' || urlMode === 'signup') {
+      setAuthMode(urlMode as AuthMode)
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+
+    checkAuth()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        const email = session.user.email
+        if (email && !email.endsWith('@gachon.ac.kr')) {
+          toast.error('가천대학교 이메일만 사용 가능합니다')
+          await supabase.auth.signOut()
+          return
+        }
+
+        const { data: userData } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .maybeSingle()
+
+        if (userData) {
+          setUser(userData)
+          await loadFavorites(userData.id)
+          setAuthMode(null)
+        } else {
+          setAuthMode('signup')
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null)
+        setFavorites([])
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [checkAuth, loadFavorites, supabase])
 
   const handleSearch = () => {
     if (!fromLocation || !toLocation) {
       toast.error('출발지와 도착지를 모두 선택해주세요')
       return
     }
-    
+
     if (fromLocation === toLocation) {
       toast.error('출발지와 도착지가 같을 수 없습니다')
       return
@@ -100,6 +166,8 @@ export default function HomePage() {
   }
 
   const handleLogout = async () => {
+    if (!supabase) return
+
     try {
       await supabase.auth.signOut()
       setUser(null)
@@ -116,15 +184,24 @@ export default function HomePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-black">
-        <p className="text-white">Loading...</p> 
+      <div className="min-h-screen flex flex-col items-center justify-center bg-black">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mb-4"></div>
+        <p className="text-white text-lg">로딩 중...</p>
+        <p className="text-gray-400 text-sm mt-2">잠시만 기다려주세요</p>
       </div>
     )
   }
 
   if (!user) {
-    if (authMode === 'login') { return <LoginForm onSuccess={() => setAuthMode(null)} onBackToLanding={() => setAuthMode(null)} /> }
-    if (authMode === 'signup') { return <SignupForm onSuccess={() => setAuthMode(null)} /> }
+    if (authMode === 'login') {
+      return (
+        <LoginForm
+          onBackToLanding={() => setAuthMode(null)}
+          onStartSignup={() => setAuthMode('signup')}
+        />
+      )
+    }
+    if (authMode === 'signup') { return <SignupForm onSuccess={() => setAuthMode(null)} onBackToLanding={() => setAuthMode(null)} /> }
 
     return (
       <main style={{
@@ -133,15 +210,15 @@ export default function HomePage() {
         overflow: 'hidden',
       }}>
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0 }}>
-          <Hyperspeed effectOptions={{ ...hyperspeedPresets.one }} />
+          <Hyperspeed effectOptions={hyperspeedOptions} />
         </div>
-        
+
         <div style={{
           position: 'relative', zIndex: 10, width: '100%', height: '100%',
           display: 'flex', flexDirection: 'column', alignItems: 'center',
           paddingTop: '2rem', paddingLeft: '1rem', paddingRight: '1rem',
         }}>
-          
+
           <NavigationBar onFindClick={handleFindClick} />
 
           <div style={{
@@ -159,18 +236,18 @@ export default function HomePage() {
               to={{ opacity: 1, y: 0, scale: 1 }}
               duration={0.8}
               delay={80}
-              style={{ fontSize: 'clamp(2.5rem, 5vw, 4rem)', marginBottom: '1rem' }}
+              style={{ fontSize: '3rem', marginBottom: '1rem' }}
             />
-            
+
             <p style={{
               fontFamily: "'Pretendard', sans-serif",
               fontWeight: 500,
-              fontSize: 'clamp(1rem, 2.5vw, 1.25rem)', maxWidth: '600px',
+              fontSize: '1.125rem', maxWidth: '600px',
               marginBottom: '2.5rem', color: 'rgba(255, 255, 255, 0.8)'
             }}>
               가천대 학생들을 위한 통학길 동행 플랫폼
             </p>
-            
+
             <div style={{ display: 'flex', gap: '1rem' }}>
               <button onClick={() => setAuthMode('login')} style={{ padding: '0.75rem 2rem', fontSize: '1rem', fontWeight: '600', color: '#000', backgroundColor: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', transition: 'transform 0.2s' }} onMouseOver={e => e.currentTarget.style.transform = 'scale(1.05)'} onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}>
                 로그인

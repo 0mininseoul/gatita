@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { User } from '@/lib/supabase'
@@ -15,13 +15,9 @@ export default function SettingsPage() {
   const [newNickname, setNewNickname] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [nicknameError, setNicknameError] = useState('')
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
-  useEffect(() => {
-    checkAuthAndLoadData()
-  }, [])
-
-  const checkAuthAndLoadData = async () => {
+  const checkAuthAndLoadData = useCallback(async () => {
     try {
       const { data: { user: authUser } } = await supabase.auth.getUser()
       
@@ -34,11 +30,13 @@ export default function SettingsPage() {
         .from('users')
         .select('*')
         .eq('id', authUser.id)
-        .single()
+        .maybeSingle()
       
       if (userData) {
         setUser(userData)
         setNewNickname(userData.nickname)
+      } else {
+        router.push('/')
       }
     } catch (error) {
       console.error('Auth/data loading error:', error)
@@ -46,7 +44,11 @@ export default function SettingsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [router, supabase])
+
+  useEffect(() => {
+    checkAuthAndLoadData()
+  }, [checkAuthAndLoadData])
 
   const canChangeNickname = (lastUpdated?: string) => {
     if (!lastUpdated) return true // 한 번도 변경한 적 없으면 가능
@@ -90,7 +92,7 @@ export default function SettingsPage() {
         .select('nickname')
         .eq('nickname', newNickname.trim())
         .neq('id', user.id)
-        .single()
+        .maybeSingle()
 
       if (existingUser) {
         setNicknameError('이미 사용 중인 닉네임입니다')

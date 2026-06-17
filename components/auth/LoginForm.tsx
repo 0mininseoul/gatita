@@ -2,134 +2,36 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { ChevronLeft, Eye, EyeOff, AlertCircle } from 'lucide-react'
+import { ChevronLeft } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 interface LoginFormProps {
-  onSuccess: () => void
-  onBackToLanding: () => void  // 필수로 변경
+  onBackToLanding: () => void
+  onStartSignup: () => void
 }
 
-export default function LoginForm({ onSuccess, onBackToLanding }: LoginFormProps) {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
+export default function LoginForm({ onBackToLanding, onStartSignup }: LoginFormProps) {
   const [isLoading, setIsLoading] = useState(false)
-  const [errors, setErrors] = useState<Record<string, string>>({})
-  const [showForgotPassword, setShowForgotPassword] = useState(false)
   const supabase = createClient()
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    // 유효성 검사
-    const newErrors: Record<string, string> = {}
-    
-    if (!email) {
-      newErrors.email = '이메일을 입력해주세요'
-    } else if (!email.endsWith('@gachon.ac.kr')) {
-      newErrors.email = '가천대학교 이메일만 사용할 수 있습니다'
-    }
-    
-    if (!password) {
-      newErrors.password = '비밀번호를 입력해주세요'
-    }
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors)
-      return
-    }
-
+  const handleGoogleLogin = async () => {
     setIsLoading(true)
-    setErrors({})
-
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email,
-        password: password,
-      })
-
-      if (error) {
-        console.error('Login error:', error)
-        if (error.message.includes('Invalid login credentials')) {
-          setErrors({ 
-            password: '이메일 또는 비밀번호가 올바르지 않습니다' 
-          })
-        } else {
-          toast.error('로그인 중 오류가 발생했습니다')
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}?mode=login`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          }
         }
-        return
-      }
-
-      if (data.user) {
-        // 사용자 프로필 확인
-        const { data: userData } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', data.user.id)
-          .single()
-
-        if (!userData) {
-          toast.error('사용자 정보를 찾을 수 없습니다')
-          await supabase.auth.signOut()
-          return
-        }
-
-        toast.success('로그인되었습니다!')
-        onSuccess()
-      }
-    } catch (error: any) {
-      console.error('Login error:', error)
-      toast.error('로그인 중 오류가 발생했습니다')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleForgotPassword = async () => {
-    if (!email) {
-      toast.error('먼저 이메일을 입력해주세요')
-      return
-    }
-
-    if (!email.endsWith('@gachon.ac.kr')) {
-      toast.error('가천대학교 이메일을 입력해주세요')
-      return
-    }
-
-    setIsLoading(true)
-
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
       })
-
       if (error) throw error
-
-      toast.success('비밀번호 재설정 이메일을 보냈습니다!')
-      setShowForgotPassword(false)
     } catch (error: any) {
-      console.error('Password reset error:', error)
-      toast.error('비밀번호 재설정 이메일 전송 중 오류가 발생했습니다')
-    } finally {
+      console.error('Google login error:', error)
+      toast.error('구글 로그인 중 오류가 발생했습니다')
       setIsLoading(false)
-    }
-  }
-
-  const handleInputChange = (field: string, value: string) => {
-    if (field === 'email') {
-      setEmail(value)
-    } else {
-      setPassword(value)
-    }
-    
-    // 실시간 에러 제거
-    if (errors[field]) {
-      setErrors(prev => {
-        const newErrors = { ...prev }
-        delete newErrors[field]
-        return newErrors
-      })
     }
   }
 
@@ -147,156 +49,50 @@ export default function LoginForm({ onSuccess, onBackToLanding }: LoginFormProps
       </div>
 
       {/* Content */}
-      <div className="flex-1 flex flex-col p-6">
-        <div className="flex-1">
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              다시 만나서 반가워요!
+      <div className="flex-1 flex flex-col items-center justify-center p-6">
+        <div className="w-full max-w-md space-y-8">
+          <div className="text-center">
+            <h2 className="text-3xl font-bold text-gray-900 mb-2">
+              다시 만나서<br/>반가워요!
             </h2>
             <p className="text-gray-600">
-              가천대 이메일로 로그인해주세요
+              가천대학교 구글 계정으로 로그인하세요
             </p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-6">
-            {/* 이메일 입력 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                이메일
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => handleInputChange('email', e.target.value)}
-                placeholder="example@gachon.ac.kr"
-                className={`input-field ${errors.email ? 'border-red-500' : ''}`}
-                autoComplete="email"
-              />
-              {errors.email && (
-                <div className="flex items-center mt-2 text-red-500 text-sm">
-                  <AlertCircle className="w-4 h-4 mr-1" />
-                  {errors.email}
-                </div>
-              )}
-            </div>
-
-            {/* 비밀번호 입력 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                비밀번호
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => handleInputChange('password', e.target.value)}
-                  placeholder="비밀번호를 입력하세요"
-                  className={`input-field pr-12 ${errors.password ? 'border-red-500' : ''}`}
-                  autoComplete="current-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-gray-100 rounded"
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-5 h-5 text-gray-400" />
-                  ) : (
-                    <Eye className="w-5 h-5 text-gray-400" />
-                  )}
-                </button>
-              </div>
-              {errors.password && (
-                <div className="flex items-center mt-2 text-red-500 text-sm">
-                  <AlertCircle className="w-4 h-4 mr-1" />
-                  {errors.password}
-                </div>
-              )}
-            </div>
-
-            {/* 비밀번호 찾기 */}
-            <div className="text-right">
-              <button
-                type="button"
-                onClick={() => setShowForgotPassword(true)}
-                className="text-sm text-primary-600 hover:text-primary-700"
-              >
-                비밀번호를 잊으셨나요?
-              </button>
-            </div>
-
-            {/* 로그인 버튼 */}
-            <button
-              type="submit"
-              disabled={isLoading || !email || !password}
-              className="btn-primary w-full"
-            >
-              {isLoading ? (
-                <div className="flex items-center justify-center">
-                  <div className="loading-spinner mr-2" />
-                  로그인 중...
-                </div>
-              ) : (
-                '로그인'
-              )}
-            </button>
-          </form>
-        </div>
-
-        {/* 하단 링크 */}
-        <div className="text-center space-y-4">
-          <p className="text-sm text-gray-600">
-            아직 계정이 없으신가요?
-          </p>
           <button
-            onClick={onBackToLanding}
-            className="text-primary-600 font-medium text-sm"
+            onClick={handleGoogleLogin}
+            disabled={isLoading}
+            className="w-full bg-white border-2 border-gray-300 hover:border-gray-400 rounded-xl px-6 py-4 flex items-center justify-center space-x-3 transition-all"
           >
-            회원가입하기
+            <svg className="w-6 h-6" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+            </svg>
+            <span className="text-lg font-medium text-gray-700">
+              {isLoading ? '로그인 중...' : 'Google로 로그인'}
+            </span>
           </button>
-        </div>
-      </div>
 
-      {/* 비밀번호 찾기 모달 */}
-      {showForgotPassword && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md">
-            <div className="p-6">
-              <h3 className="text-lg font-semibold mb-4">비밀번호 재설정</h3>
-              
-              <p className="text-sm text-gray-600 mb-4">
-                가입한 이메일 주소를 입력하면 비밀번호 재설정 링크를 보내드립니다.
-              </p>
+          <p className="text-sm text-gray-500 text-center">
+            * 가천대학교 이메일(@gachon.ac.kr)만 사용 가능합니다
+          </p>
 
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="example@gachon.ac.kr"
-                className="input-field mb-4"
-                disabled={isLoading}
-              />
-
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => setShowForgotPassword(false)}
-                  className="btn-secondary flex-1"
-                  disabled={isLoading}
-                >
-                  취소
-                </button>
-                <button
-                  onClick={handleForgotPassword}
-                  disabled={isLoading || !email}
-                  className="btn-primary flex-1"
-                >
-                  {isLoading ? '전송 중...' : '이메일 전송'}
-                </button>
-              </div>
-            </div>
+          <div className="text-center pt-4 border-t border-gray-100">
+            <p className="text-sm text-gray-600 mb-2">
+              아직 계정이 없으신가요?
+            </p>
+            <button
+              onClick={onStartSignup}
+              className="text-primary-600 font-medium text-sm hover:text-primary-700"
+            >
+              회원가입하기
+            </button>
           </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }

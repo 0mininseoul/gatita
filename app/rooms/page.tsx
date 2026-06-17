@@ -1,12 +1,11 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, Suspense, useCallback, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { ChatRoom, User, LocationType, LOCATIONS, RoomParticipant } from '@/lib/supabase'
-import { ArrowLeft, Users, Clock, Plus, ChevronDown, Star } from 'lucide-react'
-import { format, isAfter, isSameDay, parseISO } from 'date-fns'
-import { ko } from 'date-fns/locale'
+import { ChatRoom, User, LocationType, LOCATIONS } from '@/lib/supabase'
+import { ArrowLeft, Users, Clock, Plus, Star } from 'lucide-react'
+import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 
 function RoomsPageContent() {
@@ -17,48 +16,12 @@ function RoomsPageContent() {
   const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [isCreatingRoom, setIsCreatingRoom] = useState(false)
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const fromLocation = searchParams.get('from') as LocationType
   const toLocation = searchParams.get('to') as LocationType
 
-  useEffect(() => {
-    if (!fromLocation || !toLocation) {
-      router.push('/')
-      return
-    }
-    
-    checkAuthAndLoadData()
-  }, [fromLocation, toLocation, selectedDate])
-
-  const checkAuthAndLoadData = async () => {
-    try {
-      const { data: { user: authUser } } = await supabase.auth.getUser()
-      
-      if (!authUser) {
-        router.push('/')
-        return
-      }
-
-      const { data: userData } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', authUser.id)
-        .single()
-      
-      if (userData) {
-        setUser(userData)
-        await loadRooms(userData.id)
-      }
-    } catch (error) {
-      console.error('Auth/data loading error:', error)
-      router.push('/')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadRooms = async (userId: string) => {
+  const loadRooms = useCallback(async () => {
     try {
       const { data } = await supabase
         .from('chat_rooms')
@@ -84,7 +47,46 @@ function RoomsPageContent() {
     } catch (error) {
       console.error('Load rooms error:', error)
     }
-  }
+  }, [fromLocation, selectedDate, supabase, toLocation])
+
+  const checkAuthAndLoadData = useCallback(async () => {
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+
+      if (!authUser) {
+        router.push('/')
+        return
+      }
+
+      const { data: userData } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', authUser.id)
+        .maybeSingle()
+
+      if (!userData) {
+        router.push('/')
+        return
+      }
+
+      setUser(userData)
+      await loadRooms()
+    } catch (error) {
+      console.error('Auth/data loading error:', error)
+      router.push('/')
+    } finally {
+      setLoading(false)
+    }
+  }, [loadRooms, router, supabase])
+
+  useEffect(() => {
+    if (!fromLocation || !toLocation) {
+      router.push('/')
+      return
+    }
+
+    checkAuthAndLoadData()
+  }, [checkAuthAndLoadData, fromLocation, router, toLocation])
 
   const addToFavorites = async () => {
     if (!user) return
@@ -98,13 +100,13 @@ function RoomsPageContent() {
           to_location: toLocation
         })
 
-      if (error && !error.message.includes('duplicate')) {
+      if (error && error.code !== '23505') {
         throw error
       }
 
       toast.success('즐겨찾기에 추가되었습니다!')
     } catch (error: any) {
-      if (error.message.includes('duplicate')) {
+      if (error?.code === '23505') {
         toast.success('이미 즐겨찾기에 있는 경로입니다')
       } else {
         toast.error('즐겨찾기 추가 중 오류가 발생했습니다')
@@ -115,19 +117,19 @@ function RoomsPageContent() {
   const getDateOptions = () => {
     const dates = []
     const today = new Date()
-    
+
     // 어제, 오늘, 내일만 표시
     for (let i = -1; i <= 1; i++) {
       const date = new Date()
       date.setDate(today.getDate() + i)
       dates.push({
         value: format(date, 'yyyy-MM-dd'),
-        label: i === 0 ? '오늘' : 
-               i === 1 ? '내일' : 
+        label: i === 0 ? '오늘' :
+               i === 1 ? '내일' :
                '어제'
       })
     }
-    
+
     return dates
   }
 
@@ -135,14 +137,14 @@ function RoomsPageContent() {
     const now = new Date()
     const currentTime = format(now, 'HH:mm')
     const isToday = selectedDate === format(now, 'yyyy-MM-dd')
-    
+
     const myRooms: ChatRoom[] = []
     const futureRooms: ChatRoom[] = []
     const pastRooms: ChatRoom[] = []
 
     rooms.forEach(room => {
       const isParticipant = room.participants?.some(p => p.user_id === user?.id)
-      
+
       if (isParticipant) {
         myRooms.push(room)
       } else if (isToday && room.departure_time < currentTime) {
@@ -162,7 +164,14 @@ function RoomsPageContent() {
       const room = rooms.find(r => r.id === roomId)
       if (!room) return
 
-      const currentParticipants = room.participants?.length || 0
+      const { count, error: countError } = await supabase
+        .from('room_participants')
+        .select('id', { count: 'exact', head: true })
+        .eq('room_id', roomId)
+
+      if (countError) throw countError
+
+      const currentParticipants = count ?? room.participants?.length ?? 0
       if (currentParticipants >= room.max_participants) {
         toast.error('채팅방이 가득 찼습니다')
         return
@@ -177,7 +186,7 @@ function RoomsPageContent() {
         })
 
       if (error) {
-        if (error.message.includes('duplicate')) {
+        if (error.code === '23505') {
           toast.error('이미 참여 중인 채팅방입니다')
         } else {
           throw error
@@ -365,7 +374,7 @@ interface RoomCardProps {
 
 function RoomCard({ room, onJoin, isParticipant, showJoinButton, isPast }: RoomCardProps) {
   const participantCount = room.participants?.length || 0
-  
+
   return (
     <div className={`card p-4 ${isParticipant ? 'ring-2 ring-primary-200 bg-primary-50' : ''} ${isPast ? 'opacity-60' : ''}`}>
       <div className="flex items-center justify-between mb-3">
@@ -446,10 +455,10 @@ function CreateRoomModal({ fromLocation, toLocation, selectedDate, user, onClose
     if (!departureTime || !user) return
 
     setIsLoading(true)
-    
+
     try {
       const title = `${departureTime} ${LOCATIONS[fromLocation]}→${LOCATIONS[toLocation]}`
-      
+
       const { data: room, error } = await supabase
         .from('chat_rooms')
         .insert({
@@ -475,7 +484,15 @@ function CreateRoomModal({ fromLocation, toLocation, selectedDate, user, onClose
           confirmed: true
         })
 
-      if (participantError) throw participantError
+      if (participantError) {
+        await supabase
+          .from('chat_rooms')
+          .delete()
+          .eq('id', room.id)
+          .eq('created_by', user.id)
+
+        throw participantError
+      }
 
       toast.success('채팅방이 생성되었습니다!')
       onSuccess(room.id)
@@ -492,7 +509,7 @@ function CreateRoomModal({ fromLocation, toLocation, selectedDate, user, onClose
       <div className="bg-white rounded-xl w-full max-w-md">
         <div className="p-6">
           <h3 className="text-lg font-semibold mb-4">새 채팅방 만들기</h3>
-          
+
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">

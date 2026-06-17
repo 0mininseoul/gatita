@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react'
+
 // PWA 관련 유틸리티 함수들
 
 export const isPWASupported = (): boolean => {
@@ -69,8 +71,8 @@ export const requestNotificationPermission = async (): Promise<NotificationPermi
 export const showLocalNotification = (title: string, options?: NotificationOptions) => {
   if (Notification.permission === 'granted') {
     const notification = new Notification(title, {
-      icon: '/icon-192x192.png',
-      badge: '/icon-72x72.png',
+      icon: '/icons/icon-192x192.png',
+      badge: '/icons/icon-72x72.png',
       ...options
     })
 
@@ -83,27 +85,6 @@ export const showLocalNotification = (title: string, options?: NotificationOptio
     return notification
   }
   return null
-}
-
-// 푸시 알림 구독
-export const subscribeToPushNotifications = async (
-  registration: ServiceWorkerRegistration
-): Promise<PushSubscription | null> => {
-  try {
-    // VAPID 공개 키 (실제 프로젝트에서는 환경변수로 관리)
-    const vapidPublicKey = 'YOUR_VAPID_PUBLIC_KEY_HERE'
-    
-    const subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: vapidPublicKey
-    })
-
-    console.log('Push subscription:', subscription)
-    return subscription
-  } catch (error) {
-    console.error('Failed to subscribe to push notifications:', error)
-    return null
-  }
 }
 
 // 앱 설치 프롬프트 관리
@@ -176,11 +157,13 @@ export const getPWADisplayMode = (): string => {
 
 // 오프라인 상태 감지
 export const useOnlineStatus = () => {
-  if (typeof window === 'undefined') return true
-  
-  const [isOnline, setIsOnline] = useState(navigator.onLine)
+  const [isOnline, setIsOnline] = useState(() => (
+    typeof navigator === 'undefined' ? true : navigator.onLine
+  ))
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+
     const handleOnline = () => setIsOnline(true)
     const handleOffline = () => setIsOnline(false)
 
@@ -195,6 +178,3 @@ export const useOnlineStatus = () => {
 
   return isOnline
 }
-
-// 필요한 React import
-import { useState, useEffect } from 'react'

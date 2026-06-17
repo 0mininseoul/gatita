@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { User, Report, ChatRoom, Message } from '@/lib/supabase'
@@ -17,66 +17,76 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<TabType>('reports')
   const [isAuthorized, setIsAuthorized] = useState(false)
-  
+
   // Data states
   const [users, setUsers] = useState<User[]>([])
   const [reports, setReports] = useState<Report[]>([])
   const [rooms, setRooms] = useState<ChatRoom[]>([])
   const [messages, setMessages] = useState<Message[]>([])
-  
+
   // UI states
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedRoomId, setSelectedRoomId] = useState<string>('')
   const [showUserModal, setShowUserModal] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
-  
-  const supabase = createClient()
 
-  useEffect(() => {
-    checkAuthAndLoadData()
-  }, [])
+  const supabase = useMemo(() => createClient(), [])
 
-  useEffect(() => {
-    if (isAuthorized) {
-      loadTabData()
-    }
-  }, [activeTab, isAuthorized])
+  const loadUsers = useCallback(async () => {
+    const { data } = await supabase
+      .from('users')
+      .select('*')
+      .order('created_at', { ascending: false })
 
-  const checkAuthAndLoadData = async () => {
-    try {
-      const { data: { user: authUser } } = await supabase.auth.getUser()
-      
-      if (!authUser) {
-        router.push('/')
-        return
-      }
+    if (data) setUsers(data)
+  }, [supabase])
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', authUser.id)
-        .single()
-      
-      if (userData) {
-        setUser(userData)
-        
-        // 관리자 권한 확인
-        if (userData.is_admin || userData.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL) {
-          setIsAuthorized(true)
-        } else {
-          router.push('/')
-          return
-        }
-      }
-    } catch (error) {
-      console.error('Auth error:', error)
-      router.push('/')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const loadReports = useCallback(async () => {
+    const { data } = await supabase
+      .from('reports')
+      .select(`
+        *,
+        reporter:reporter_id(nickname, email, department),
+        reported:reported_id(nickname, email, department),
+        room:room_id(title, from_location, to_location)
+      `)
+      .order('created_at', { ascending: false })
 
-  const loadTabData = async () => {
+    if (data) setReports(data as any)
+  }, [supabase])
+
+  const loadRooms = useCallback(async () => {
+    const { data } = await supabase
+      .from('chat_rooms')
+      .select(`
+        *,
+        creator:created_by(nickname, department),
+        participants:room_participants(
+          id,
+          user:users(nickname)
+        )
+      `)
+      .order('created_at', { ascending: false })
+
+    if (data) setRooms(data as any)
+  }, [supabase])
+
+  const loadMessages = useCallback(async () => {
+    if (!selectedRoomId) return
+
+    const { data } = await supabase
+      .from('messages')
+      .select(`
+        *,
+        user:users(nickname, department)
+      `)
+      .eq('room_id', selectedRoomId)
+      .order('created_at', { ascending: true })
+
+    if (data) setMessages(data as any)
+  }, [selectedRoomId, supabase])
+
+  const loadTabData = useCallback(async () => {
     try {
       switch (activeTab) {
         case 'users':
@@ -97,61 +107,50 @@ export default function AdminPage() {
     } catch (error) {
       console.error('Load data error:', error)
     }
-  }
+  }, [activeTab, loadMessages, loadReports, loadRooms, loadUsers, selectedRoomId])
 
-  const loadUsers = async () => {
-    const { data } = await supabase
-      .from('users')
-      .select('*')
-      .order('created_at', { ascending: false })
-    
-    if (data) setUsers(data)
-  }
+  const checkAuthAndLoadData = useCallback(async () => {
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser()
 
-  const loadReports = async () => {
-    const { data } = await supabase
-      .from('reports')
-      .select(`
-        *,
-        reporter:reporter_id(nickname, email, department),
-        reported:reported_id(nickname, email, department),
-        room:room_id(title, from_location, to_location)
-      `)
-      .order('created_at', { ascending: false })
-    
-    if (data) setReports(data as any)
-  }
+      if (!authUser) {
+        router.push('/')
+        return
+      }
 
-  const loadRooms = async () => {
-    const { data } = await supabase
-      .from('chat_rooms')
-      .select(`
-        *,
-        creator:created_by(nickname, department),
-        participants:room_participants(
-          id,
-          user:users(nickname)
-        )
-      `)
-      .order('created_at', { ascending: false })
-    
-    if (data) setRooms(data as any)
-  }
+      const { data: userData } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', authUser.id)
+        .single()
 
-  const loadMessages = async () => {
-    if (!selectedRoomId) return
-    
-    const { data } = await supabase
-      .from('messages')
-      .select(`
-        *,
-        user:users(nickname, department)
-      `)
-      .eq('room_id', selectedRoomId)
-      .order('created_at', { ascending: true })
-    
-    if (data) setMessages(data as any)
-  }
+      if (userData) {
+        setUser(userData)
+
+        if (userData.is_admin) {
+          setIsAuthorized(true)
+        } else {
+          router.push('/')
+          return
+        }
+      }
+    } catch (error) {
+      console.error('Auth error:', error)
+      router.push('/')
+    } finally {
+      setLoading(false)
+    }
+  }, [router, supabase])
+
+  useEffect(() => {
+    checkAuthAndLoadData()
+  }, [checkAuthAndLoadData])
+
+  useEffect(() => {
+    if (isAuthorized) {
+      loadTabData()
+    }
+  }, [isAuthorized, loadTabData])
 
   const handleUserStatusChange = async (userId: string, status: 'active' | 'suspended') => {
     try {
@@ -207,7 +206,7 @@ export default function AdminPage() {
     )
   }
 
-  const filteredUsers = users.filter(user => 
+  const filteredUsers = users.filter(user =>
     user.nickname.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.department.toLowerCase().includes(searchTerm.toLowerCase())
@@ -262,7 +261,7 @@ export default function AdminPage() {
           <div className="space-y-6">
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h2 className="text-xl font-semibold mb-6">신고 내역</h2>
-              
+
               {reports.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   신고 내역이 없습니다
@@ -374,8 +373,8 @@ export default function AdminPage() {
                         </td>
                         <td className="px-4 py-3">
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            user.status === 'active' 
-                              ? 'bg-green-100 text-green-800' 
+                            user.status === 'active'
+                              ? 'bg-green-100 text-green-800'
                               : 'bg-red-100 text-red-800'
                           }`}>
                             {user.status === 'active' ? '활성' : '정지됨'}
@@ -397,7 +396,7 @@ export default function AdminPage() {
                             </button>
                             <button
                               onClick={() => handleUserStatusChange(
-                                user.id, 
+                                user.id,
                                 user.status === 'active' ? 'suspended' : 'active'
                               )}
                               className={`p-1 rounded ${
@@ -428,7 +427,7 @@ export default function AdminPage() {
           <div className="space-y-6">
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h2 className="text-xl font-semibold mb-6">채팅방 목록</h2>
-              
+
               <div className="space-y-4">
                 {rooms.map((room) => (
                   <div key={room.id} className="border border-gray-200 rounded-lg p-4">
@@ -453,8 +452,8 @@ export default function AdminPage() {
                           대화 기록
                         </button>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          room.status === 'active' 
-                            ? 'bg-green-100 text-green-800' 
+                          room.status === 'active'
+                            ? 'bg-green-100 text-green-800'
                             : 'bg-gray-100 text-gray-800'
                         }`}>
                           {room.status === 'active' ? '활성' : '종료'}
@@ -534,7 +533,7 @@ export default function AdminPage() {
           <div className="bg-white rounded-xl w-full max-w-md">
             <div className="p-6">
               <h3 className="text-lg font-semibold mb-4">사용자 상세 정보</h3>
-              
+
               <div className="space-y-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">닉네임</label>
@@ -559,8 +558,8 @@ export default function AdminPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700">상태</label>
                   <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
-                    selectedUser.status === 'active' 
-                      ? 'bg-green-100 text-green-800' 
+                    selectedUser.status === 'active'
+                      ? 'bg-green-100 text-green-800'
                       : 'bg-red-100 text-red-800'
                   }`}>
                     {selectedUser.status === 'active' ? '활성' : '정지됨'}
@@ -584,7 +583,7 @@ export default function AdminPage() {
                 <button
                   onClick={() => {
                     handleUserStatusChange(
-                      selectedUser.id, 
+                      selectedUser.id,
                       selectedUser.status === 'active' ? 'suspended' : 'active'
                     )
                     setShowUserModal(false)

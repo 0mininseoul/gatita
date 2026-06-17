@@ -1,9 +1,9 @@
-const CACHE_NAME = 'gaji-ta-v1.0.0'
+const CACHE_NAME = 'gatita-v1.0.0'
 const urlsToCache = [
   '/',
   '/manifest.json',
-  '/icon-192x192.png',
-  '/icon-512x512.png'
+  '/icons/icon-192x192.png',
+  '/icons/icon-512x512.png'
 ]
 
 // Service Worker 설치
@@ -66,85 +66,4 @@ self.addEventListener('fetch', (event) => {
         })
       })
   )
-})
-
-// 푸시 알림 수신
-self.addEventListener('push', (event) => {
-  if (event.data) {
-    const data = event.data.json()
-    
-    const options = {
-      body: data.body || '새로운 알림이 있습니다',
-      icon: '/icon-192x192.png',
-      badge: '/icon-72x72.png',
-      vibrate: [100, 50, 100],
-      data: {
-        dateOfArrival: Date.now(),
-        primaryKey: data.id || 1,
-        url: data.url || '/'
-      },
-      actions: [
-        {
-          action: 'explore',
-          title: '확인하기',
-          icon: '/icon-72x72.png'
-        },
-        {
-          action: 'close',
-          title: '닫기',
-          icon: '/icon-72x72.png'
-        }
-      ],
-      requireInteraction: true,
-      tag: data.tag || 'default'
-    }
-
-    event.waitUntil(
-      self.registration.showNotification(
-        data.title || '같이타 알림',
-        options
-      )
-    )
-  }
-})
-
-// 알림 클릭 처리
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close()
-
-  if (event.action === 'close') {
-    return
-  }
-
-  const urlToOpen = event.notification.data?.url || '/'
-
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true })
-      .then((clientList) => {
-        // 이미 열린 탭이 있으면 그 탭으로 이동
-        for (const client of clientList) {
-          if (client.url === urlToOpen && 'focus' in client) {
-            return client.focus()
-          }
-        }
-
-        // 열린 탭이 없으면 새로 열기
-        if (clients.openWindow) {
-          return clients.openWindow(urlToOpen)
-        }
-      })
-  )
-})
-
-// 알림 닫기 처리
-self.addEventListener('notificationclose', (event) => {
-  console.log('Notification was closed', event)
-})
-
-// 백그라운드 동기화
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'background-sync') {
-    console.log('Background sync triggered')
-    // 여기에 오프라인에서 쌓인 데이터 동기화 로직 추가
-  }
 })

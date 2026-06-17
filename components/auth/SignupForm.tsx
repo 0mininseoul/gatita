@@ -4,10 +4,9 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { DEPARTMENTS } from '@/lib/supabase'
+import { NON_GACHON_ACCOUNT_MESSAGE, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
 import { ChevronDown, Check, AlertCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
-
-const getOAuthRedirectUrl = () => `${window.location.origin}/`
 
 type SignupStep = {
   id: string
@@ -79,7 +78,7 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
 
       if (session?.user) {
         const email = session.user.email
-        if (email?.endsWith('@gachon.ac.kr')) {
+        if (isGachonEmail(email)) {
           setGoogleEmail(email)
 
           const { data: profile } = await supabase
@@ -94,7 +93,7 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
             onSuccess()
           }
         } else {
-          toast.error('가천대학교 이메일만 사용 가능합니다')
+          toast.error(NON_GACHON_ACCOUNT_MESSAGE)
           await supabase.auth.signOut()
         }
       }
@@ -112,9 +111,7 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: {
-          redirectTo: getOAuthRedirectUrl(),
-        }
+        options: getGoogleOAuthOptions(),
       })
       if (error) throw error
     } catch (error: any) {

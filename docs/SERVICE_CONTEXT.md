@@ -75,7 +75,7 @@ Last updated: 2026-06-17
 3. `users` 프로필이 없으면 이름, 전화번호, 닉네임, 학과를 입력받아 `users` row를 생성한다.
 4. 프로필이 있으면 홈 화면으로 진입한다.
 
-로그아웃 랜딩의 CTA는 `Google로 3초 안에 시작하기` 단일 버튼이다. OAuth `redirectTo`는 쿼리 파라미터 없이 사이트 루트로 보낸 뒤, 돌아온 세션의 프로필 존재 여부로 가입 보완 또는 서비스 진입을 결정한다. 로그인된 사용자가 루트에 접근하면 랜딩 CTA가 `바로 시작하기`로 바뀌고, 누르면 서비스 홈으로 진입한다.
+로그아웃 랜딩의 CTA는 `Google로 3초 안에 시작하기` 단일 버튼이다. CTA 위에는 `가천대학교 계정만 로그인 가능` 말풍선을 반복 모션으로 노출한다. OAuth `redirectTo`는 사이트 루트로 보내며, Google OAuth 요청에는 `hd=gachon.ac.kr` 힌트를 함께 보낸다. 이 값은 계정 선택 보조용일 뿐 강제 정책이 아니므로, 돌아온 Supabase 세션의 이메일이 `@gachon.ac.kr`로 끝나는지 앱에서 다시 확인한다. 다른 도메인의 Google 계정이면 즉시 로그아웃시키고 `가천대학교 계정이 아니라서 로그인이 실패했습니다.` 안내를 토스트와 랜딩 화면에 표시한다. 로그인된 사용자가 루트에 접근하면 랜딩 CTA가 `바로 시작하기`로 바뀌고, 누르면 서비스 홈으로 진입한다.
 
 현재 프로필 생성은 클라이언트에서 직접 수행한다. DB 트리거나 서버 API가 프로필 생성 책임을 갖고 있지 않다.
 
@@ -138,6 +138,8 @@ manifest와 service worker의 아이콘 경로는 실제 파일 위치에 맞췄
 
 - `npm run lint`: 통과
 - `npm run build`: 통과
+- OAuth URL 생성 검사: `provider=google`, `hd=gachon.ac.kr`, `redirect_to=https://gatitagachon.vercel.app/` 확인
+- 모바일 Playwright viewport `390x844`: 비가천대 계정 실패 안내 UI 확인
 - 로컬 개발 서버: `http://127.0.0.1:3000`
 - 모바일 Playwright viewport `390x844`: 랜딩/회원가입 진입 확인
 - Vercel 환경변수: 새 Supabase 프로젝트 값으로 업데이트됨

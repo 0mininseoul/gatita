@@ -63,6 +63,22 @@
     border-top: 0.45rem solid rgba(255, 255, 255, 0.94);
   }
 
+  .auth-notice {
+    width: 100%;
+    max-width: 320px;
+    margin-top: 0.875rem;
+    padding: 0.75rem 0.875rem;
+    border: 1px solid rgba(248, 113, 113, 0.45);
+    border-radius: 8px;
+    background: rgba(254, 242, 242, 0.96);
+    color: #991b1b;
+    font-size: 0.875rem;
+    font-weight: 700;
+    line-height: 1.4;
+    text-align: center;
+    box-shadow: 0 10px 24px rgba(127, 29, 29, 0.16);
+  }
+
   .btn-primary {
     @apply bg-primary-600 hover:bg-primary-700 text-white font-medium py-3 px-6 rounded-xl transition-colors duration-200 disabled:bg-gray-300 disabled:cursor-not-allowed;
   }

@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { User, LocationType, LOCATIONS, Favorite } from '@/lib/supabase'
+import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
 import { MapPin, ArrowRight, Star, Settings, LogOut } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -15,8 +16,6 @@ import SplitText from '@/components/SplitText'
 import NavigationBar from '@/components/NavigationBar'
 
 type AuthMode = 'signup' | null
-
-const getOAuthRedirectUrl = () => `${window.location.origin}/`
 
 function GoogleIcon({ className = 'w-5 h-5' }: { className?: string }) {
   return (
@@ -38,6 +37,8 @@ export default function HomePage() {
   const [favorites, setFavorites] = useState<Favorite[]>([])
   const [isStartingGoogle, setIsStartingGoogle] = useState(false)
   const [hasEnteredApp, setHasEnteredApp] = useState(false)
+  const [authNotice, setAuthNotice] = useState<string | null>(null)
+  const lastAuthErrorAtRef = useRef(0)
   const router = useRouter()
   const hyperspeedOptions = useMemo(() => ({ ...hyperspeedPresets.one }), [])
 
@@ -49,6 +50,28 @@ export default function HomePage() {
       return null
     }
   }, [])
+
+  const showAuthError = useCallback((message: string) => {
+    const now = Date.now()
+    setAuthNotice(message)
+
+    if (now - lastAuthErrorAtRef.current > 1500) {
+      toast.error(message)
+      lastAuthErrorAtRef.current = now
+    }
+  }, [])
+
+  const rejectNonGachonAccount = useCallback(async () => {
+    showAuthError(NON_GACHON_ACCOUNT_MESSAGE)
+    setUser(null)
+    setFavorites([])
+    setAuthMode(null)
+    setHasEnteredApp(false)
+
+    if (supabase) {
+      await supabase.auth.signOut()
+    }
+  }, [showAuthError, supabase])
 
   const loadFavorites = useCallback(async (userId: string) => {
     if (!supabase) {
@@ -89,9 +112,8 @@ export default function HomePage() {
 
       if (session?.user) {
         const email = session.user.email
-        if (!email?.endsWith('@gachon.ac.kr')) {
-          toast.error('가천대학교 이메일만 사용 가능합니다')
-          await supabase.auth.signOut()
+        if (!isGachonEmail(email)) {
+          await rejectNonGachonAccount()
           return
         }
 
@@ -102,6 +124,7 @@ export default function HomePage() {
           .maybeSingle()
 
         if (userData) {
+          setAuthNotice(null)
           setUser(userData)
           await loadFavorites(userData.id)
           if (enterApp) setHasEnteredApp(true)
@@ -114,7 +137,7 @@ export default function HomePage() {
     } finally {
       setLoading(false)
     }
-  }, [loadFavorites, supabase])
+  }, [loadFavorites, rejectNonGachonAccount, supabase])
 
   useEffect(() => {
     if (!supabase) {
@@ -127,7 +150,9 @@ export default function HomePage() {
     const authError = params.get('error_description') || hashParams.get('error_description')
 
     if (authError) {
-      toast.error(decodeURIComponent(authError).replace(/\+/g, ' '))
+      const message = decodeURIComponent(authError).replace(/\+/g, ' ')
+      setAuthNotice(message)
+      toast.error(message)
       window.history.replaceState({}, '', window.location.pathname)
     }
 
@@ -136,9 +161,8 @@ export default function HomePage() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
         const email = session.user.email
-        if (email && !email.endsWith('@gachon.ac.kr')) {
-          toast.error('가천대학교 이메일만 사용 가능합니다')
-          await supabase.auth.signOut()
+        if (!isGachonEmail(email)) {
+          await rejectNonGachonAccount()
           return
         }
 
@@ -149,6 +173,7 @@ export default function HomePage() {
           .maybeSingle()
 
         if (userData) {
+          setAuthNotice(null)
           setUser(userData)
           await loadFavorites(userData.id)
           setAuthMode(null)
@@ -158,11 +183,13 @@ export default function HomePage() {
       } else if (event === 'SIGNED_OUT') {
         setUser(null)
         setFavorites([])
+        setAuthMode(null)
+        setHasEnteredApp(false)
       }
     })
 
     return () => subscription.unsubscribe()
-  }, [checkAuth, loadFavorites, supabase])
+  }, [checkAuth, loadFavorites, rejectNonGachonAccount, supabase])
 
   const handleSearch = () => {
     if (!fromLocation || !toLocation) {
@@ -201,13 +228,12 @@ export default function HomePage() {
       return
     }
 
+    setAuthNotice(null)
     setIsStartingGoogle(true)
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: {
-          redirectTo: getOAuthRedirectUrl(),
-        },
+        options: getGoogleOAuthOptions(),
       })
       if (error) throw error
     } catch (error) {
@@ -302,7 +328,7 @@ export default function HomePage() {
             }}>
               {!user && (
                 <span id="gachon-account-hint" className="cta-bubble">
-                  가천대학교 계정만 로그인 가능
+                  {GACHON_ACCOUNT_HINT}
                 </span>
               )}
               <button
@@ -336,6 +362,12 @@ export default function HomePage() {
                 {user ? '바로 시작하기' : (isStartingGoogle ? 'Google로 이동 중...' : 'Google로 3초 안에 시작하기')}
               </button>
             </div>
+
+            {authNotice && !user && (
+              <div role="alert" className="auth-notice">
+                {authNotice}
+              </div>
+            )}
           </div>
 
           <div style={{

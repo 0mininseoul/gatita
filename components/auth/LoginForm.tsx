@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase'
 import { ChevronLeft } from 'lucide-react'
 import toast from 'react-hot-toast'
 
+const getOAuthRedirectUrl = () => `${window.location.origin}/`
+
 interface LoginFormProps {
   onBackToLanding: () => void
   onStartSignup: () => void
@@ -21,11 +23,7 @@ export default function LoginForm({ onBackToLanding, onStartSignup }: LoginFormP
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}?mode=login`,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          }
+          redirectTo: getOAuthRedirectUrl(),
         }
       })
       if (error) throw error

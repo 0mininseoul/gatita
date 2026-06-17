@@ -7,6 +7,8 @@ import { DEPARTMENTS } from '@/lib/supabase'
 import { ChevronDown, Check, AlertCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 
+const getOAuthRedirectUrl = () => `${window.location.origin}/`
+
 type SignupStep = {
   id: string
   label: string
@@ -111,11 +113,7 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}?mode=signup`,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          }
+          redirectTo: getOAuthRedirectUrl(),
         }
       })
       if (error) throw error

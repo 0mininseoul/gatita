@@ -22,7 +22,7 @@ Last updated: 2026-06-17
 - Local Google OAuth credential file: `.secrets/google-oauth-client-secret.json`
 - Brand logo source: `public/brand/gatita-logo.png`
 - Public policy URLs: `/privacy`, `/terms`
-- Google Search Console verification file: `public/googlecbd9b79f0d2eedb4.html`
+- Google Search Console verification files: `public/googlecbd9b79f0d2eedb4.html`, `public/google938c92375e156b37.html`
 
 비밀값은 레포에 커밋하지 않는다. `.env.local`, `.vercel/`, `.secrets/`, `supabase/.temp/`는 로컬/운영 연결용으로만 사용한다.
 

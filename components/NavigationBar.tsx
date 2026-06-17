@@ -48,6 +48,17 @@ const NavigationBar: React.FC<NavigationBarProps> = ({ onFindClick }) => {
           priority
           style={{ flex: '0 0 auto' }}
         />
+        <span
+          style={{
+            flex: '0 0 auto',
+            fontFamily: 'var(--font-paperlogy), sans-serif',
+            fontSize: '1rem',
+            fontWeight: 800,
+            color: '#ffffff',
+          }}
+        >
+          같이타
+        </span>
         <TextType
           text={[
             "AI 공학관 같이 갈 사람?",

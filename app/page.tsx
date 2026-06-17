@@ -147,40 +147,23 @@ export default function HomePage() {
 
     const params = new URLSearchParams(window.location.search)
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
-    const authError = params.get('error_description') || hashParams.get('error_description')
+    const authError = params.get('auth_error') || params.get('error_description') || hashParams.get('error_description')
+    const shouldEnterApp = params.get('auth') === 'complete'
 
     if (authError) {
-      const message = decodeURIComponent(authError).replace(/\+/g, ' ')
+      const message = authError.replace(/\+/g, ' ')
       setAuthNotice(message)
       toast.error(message)
+    }
+
+    if (authError || shouldEnterApp) {
       window.history.replaceState({}, '', window.location.pathname)
     }
 
-    checkAuth()
+    checkAuth(shouldEnterApp)
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        const email = session.user.email
-        if (!isGachonEmail(email)) {
-          await rejectNonGachonAccount()
-          return
-        }
-
-        const { data: userData } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .maybeSingle()
-
-        if (userData) {
-          setAuthNotice(null)
-          setUser(userData)
-          await loadFavorites(userData.id)
-          setAuthMode(null)
-        } else {
-          setAuthMode('signup')
-        }
-      } else if (event === 'SIGNED_OUT') {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
         setUser(null)
         setFavorites([])
         setAuthMode(null)
@@ -189,7 +172,7 @@ export default function HomePage() {
     })
 
     return () => subscription.unsubscribe()
-  }, [checkAuth, loadFavorites, rejectNonGachonAccount, supabase])
+  }, [checkAuth, supabase])
 
   const handleSearch = () => {
     if (!fromLocation || !toLocation) {

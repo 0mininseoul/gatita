@@ -3,7 +3,14 @@
 import { useState, useEffect, Suspense, useCallback, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { ChatRoom, User, LocationType, LOCATIONS } from '@/lib/supabase'
+import {
+  ChatRoom,
+  LOCATIONS,
+  LocationType,
+  ROUTE_TOO_CLOSE_MESSAGE,
+  User,
+  isRestrictedRoutePair,
+} from '@/lib/supabase'
 import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
 import { ArrowLeft, Users, Clock, Plus, Star } from 'lucide-react'
 import { format } from 'date-fns'
@@ -21,6 +28,7 @@ function RoomsPageContent() {
 
   const fromLocation = searchParams.get('from') as LocationType
   const toLocation = searchParams.get('to') as LocationType
+  const shouldCreateRoom = searchParams.get('create') === '1'
   const routePresenceChannel = user && fromLocation && toLocation
     ? `presence:route:${encodeURIComponent(fromLocation)}:${encodeURIComponent(toLocation)}`
     : null
@@ -85,13 +93,31 @@ function RoomsPageContent() {
   }, [loadRooms, router, supabase])
 
   useEffect(() => {
-    if (!fromLocation || !toLocation) {
+    if (!fromLocation || !toLocation || !LOCATIONS[fromLocation] || !LOCATIONS[toLocation]) {
+      router.push('/')
+      return
+    }
+
+    if (fromLocation === toLocation) {
+      toast.error('출발지와 도착지가 같을 수 없습니다')
+      router.push('/')
+      return
+    }
+
+    if (isRestrictedRoutePair(fromLocation, toLocation)) {
+      toast.error(ROUTE_TOO_CLOSE_MESSAGE)
       router.push('/')
       return
     }
 
     checkAuthAndLoadData()
   }, [checkAuthAndLoadData, fromLocation, router, toLocation])
+
+  useEffect(() => {
+    if (!loading && user && shouldCreateRoom) {
+      setIsCreatingRoom(true)
+    }
+  }, [loading, shouldCreateRoom, user])
 
   const addToFavorites = async () => {
     if (!user) return

@@ -28,6 +28,8 @@ function loadSupabaseExports() {
 
 const {
   GACHON_GLOBAL_CAMPUS_BOUNDS,
+  isRestrictedRoutePair,
+  LOCATION_ORDER,
   LOCATION_POINTS,
 } = loadSupabaseExports()
 
@@ -40,19 +42,22 @@ function assertPointInRange(location, bounds) {
 }
 
 test('campus map fixed points use the requested real-world anchors', () => {
+  assert.ok(LOCATION_ORDER.includes('중앙도서관'), 'central library is a fixed point')
+  assert.ok(!LOCATION_ORDER.includes('제3기숙사'), 'third dormitory is no longer a fixed point')
+
   assert.equal(LOCATION_POINTS['가천대역_1번출구'].shortLabel, '1번출구')
   assertPointInRange('가천대역_1번출구', {
-    south: 37.45122,
-    north: 37.45126,
-    west: 127.12936,
-    east: 127.12942,
+    south: 37.45078,
+    north: 37.4509,
+    west: 127.12578,
+    east: 127.1259,
   })
 
   assertPointInRange('가천대학교_정문', {
-    south: 37.4507,
-    north: 37.45095,
-    west: 127.12725,
-    east: 127.12765,
+    south: 37.4502,
+    north: 37.45042,
+    west: 127.1276,
+    east: 127.12784,
   })
 
   assertPointInRange('교육대학원', {
@@ -69,18 +74,18 @@ test('campus map fixed points use the requested real-world anchors', () => {
     east: 127.13485,
   })
 
-  assertPointInRange('제3기숙사', {
-    south: 37.45615,
-    north: 37.4566,
-    west: 127.13465,
-    east: 127.13535,
-  })
-
   assertPointInRange('AI공학관', {
     south: 37.45505,
     north: 37.45525,
     west: 127.1333,
     east: 127.1337,
+  })
+
+  assertPointInRange('중앙도서관', {
+    south: 37.45225,
+    north: 37.45245,
+    west: 127.13295,
+    east: 127.1332,
   })
 })
 
@@ -89,4 +94,13 @@ test('campus map bounds include the northern dormitory and AI building area', ()
     GACHON_GLOBAL_CAMPUS_BOUNDS.north >= 37.4566,
     `north bound ${GACHON_GLOBAL_CAMPUS_BOUNDS.north} should include the upper campus`,
   )
+})
+
+test('route pairs that are too close are rejected in both directions', () => {
+  assert.equal(typeof isRestrictedRoutePair, 'function')
+  assert.equal(isRestrictedRoutePair('가천대역_1번출구', '가천대학교_정문'), true)
+  assert.equal(isRestrictedRoutePair('가천대학교_정문', '가천대역_1번출구'), true)
+  assert.equal(isRestrictedRoutePair('제2기숙사', 'AI공학관'), true)
+  assert.equal(isRestrictedRoutePair('AI공학관', '제2기숙사'), true)
+  assert.equal(isRestrictedRoutePair('중앙도서관', 'AI공학관'), false)
 })

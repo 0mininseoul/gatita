@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, Compass, MapPin, Navigation, Route, Users, X } from 'lucide-react'
+import { ArrowRight, Clock, Compass, Plus, Users, X } from 'lucide-react'
 import {
   GACHON_GLOBAL_CAMPUS_BOUNDS,
   GACHON_GLOBAL_CAMPUS_CENTER,
@@ -25,7 +25,6 @@ export type CampusMapRoom = {
 
 type Stat = {
   roomCount: number
-  participantCount: number
   nextTime: string | null
 }
 
@@ -33,11 +32,10 @@ type CampusRouteMapProps = {
   rooms: CampusMapRoom[]
   onlineCount: number
   selectedFrom: LocationType | ''
-  selectedTo: LocationType | ''
   isLoading?: boolean
   onSelectFrom: (location: LocationType | '') => void
-  onSelectTo: (location: LocationType | '') => void
-  onOpenRooms: () => void
+  onCreateRoom: (location: LocationType) => void
+  onJoinRoom: (roomId: string) => void
 }
 
 declare global {
@@ -48,16 +46,13 @@ declare global {
 }
 
 const KAKAO_MAP_SDK_ID = 'gatita-kakao-map-sdk'
-const MAX_MAP_LEVEL = 4
+const MAX_MAP_LEVEL = 6
 const MIN_MAP_LEVEL = 1
 
 const emptyStat = (): Stat => ({
   roomCount: 0,
-  participantCount: 0,
   nextTime: null,
 })
-
-const getRouteKey = (from: LocationType, to: LocationType) => `${from}__${to}`
 
 function loadKakaoMaps(appKey: string) {
   if (window.kakao?.maps) {
@@ -100,22 +95,6 @@ function loadKakaoMaps(appKey: string) {
   return window.__gatitaKakaoMapPromise
 }
 
-function getDistanceMeters(from: LocationType, to: LocationType) {
-  const fromPoint = LOCATION_POINTS[from]
-  const toPoint = LOCATION_POINTS[to]
-  const earthRadius = 6371000
-  const lat1 = (fromPoint.lat * Math.PI) / 180
-  const lat2 = (toPoint.lat * Math.PI) / 180
-  const deltaLat = ((toPoint.lat - fromPoint.lat) * Math.PI) / 180
-  const deltaLng = ((toPoint.lng - fromPoint.lng) * Math.PI) / 180
-  const a =
-    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2)
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-
-  return Math.round((earthRadius * c) / 10) * 10
-}
-
 function clampMapToCampus(map: any, kakao: any) {
   const center = map.getCenter()
   const lat = center.getLat()
@@ -137,51 +116,34 @@ function clampMapToCampus(map: any, kakao: any) {
 }
 
 function buildStats(rooms: CampusMapRoom[]) {
-  const locationStats = new Map<LocationType, Stat>()
-  const routeStats = new Map<string, Stat>()
+  const originStats = new Map<LocationType, Stat>()
 
   LOCATION_ORDER.forEach((location) => {
-    locationStats.set(location, emptyStat())
+    originStats.set(location, emptyStat())
   })
 
   rooms.forEach((room) => {
-    const participantCount = room.participants?.length ?? 0
-    const involvedLocations = [room.from_location, room.to_location]
-    const routeKey = getRouteKey(room.from_location, room.to_location)
-    const currentRouteStat = routeStats.get(routeKey) ?? emptyStat()
+    const currentOriginStat = originStats.get(room.from_location) ?? emptyStat()
 
-    currentRouteStat.roomCount += 1
-    currentRouteStat.participantCount += participantCount
-    currentRouteStat.nextTime =
-      !currentRouteStat.nextTime || room.departure_time < currentRouteStat.nextTime
+    currentOriginStat.roomCount += 1
+    currentOriginStat.nextTime =
+      !currentOriginStat.nextTime || room.departure_time < currentOriginStat.nextTime
         ? room.departure_time
-        : currentRouteStat.nextTime
-    routeStats.set(routeKey, currentRouteStat)
-
-    involvedLocations.forEach((location) => {
-      const currentLocationStat = locationStats.get(location) ?? emptyStat()
-      currentLocationStat.roomCount += 1
-      currentLocationStat.participantCount += participantCount
-      currentLocationStat.nextTime =
-        !currentLocationStat.nextTime || room.departure_time < currentLocationStat.nextTime
-          ? room.departure_time
-          : currentLocationStat.nextTime
-      locationStats.set(location, currentLocationStat)
-    })
+        : currentOriginStat.nextTime
+    originStats.set(room.from_location, currentOriginStat)
   })
 
-  return { locationStats, routeStats }
+  return { originStats }
 }
 
 export default function CampusRouteMap({
   rooms,
   onlineCount,
   selectedFrom,
-  selectedTo,
   isLoading = false,
   onSelectFrom,
-  onSelectTo,
-  onOpenRooms,
+  onCreateRoom,
+  onJoinRoom,
 }: CampusRouteMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<any>(null)
@@ -191,26 +153,21 @@ export default function CampusRouteMap({
   const [mapStatus, setMapStatus] = useState<'loading' | 'ready' | 'missing-key' | 'error'>('loading')
   const [focusedLocation, setFocusedLocation] = useState<LocationType | null>(selectedFrom || null)
 
-  const { locationStats, routeStats } = useMemo(() => buildStats(rooms), [rooms])
-  const selectedRouteStat = selectedFrom && selectedTo
-    ? routeStats.get(getRouteKey(selectedFrom, selectedTo)) ?? emptyStat()
-    : emptyStat()
+  const { originStats } = useMemo(() => buildStats(rooms), [rooms])
+  const selectedOriginRooms = useMemo(
+    () => selectedFrom
+      ? rooms
+          .filter((room) => room.from_location === selectedFrom)
+          .slice()
+          .sort((a, b) => a.departure_time.localeCompare(b.departure_time))
+      : [],
+    [rooms, selectedFrom]
+  )
 
   const handleLocationSelect = useCallback((location: LocationType) => {
     setFocusedLocation(location)
-
-    if (!selectedFrom) {
-      onSelectFrom(location)
-      onSelectTo('')
-      return
-    }
-
-    if (selectedFrom === location) {
-      return
-    }
-
-    onSelectTo(location)
-  }, [onSelectFrom, onSelectTo, selectedFrom])
+    onSelectFrom(location)
+  }, [onSelectFrom])
 
   useEffect(() => {
     const appKey = process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY
@@ -269,18 +226,13 @@ export default function CampusRouteMap({
       const point = LOCATION_POINTS[location]
       const position = new kakao.maps.LatLng(point.lat, point.lng)
       const marker = new kakao.maps.Marker({ position })
-      const locationStat = locationStats.get(location) ?? emptyStat()
-      const routeStat = selectedFrom && selectedFrom !== location
-        ? routeStats.get(getRouteKey(selectedFrom, location)) ?? emptyStat()
-        : locationStat
+      const originStat = originStats.get(location) ?? emptyStat()
       const isOrigin = selectedFrom === location
-      const isDestination = selectedTo === location
-      const isEmpty = !isOrigin && routeStat.roomCount === 0
-      const label = isOrigin ? '출발' : `${routeStat.roomCount}개`
+      const isEmpty = !isOrigin && originStat.roomCount === 0
+      const label = isOrigin ? '출발' : `${originStat.roomCount}개`
       const overlayClass = [
         'gatita-map-overlay',
         isOrigin ? 'is-origin' : '',
-        isDestination ? 'is-destination' : '',
         isEmpty ? 'is-empty' : '',
       ].filter(Boolean).join(' ')
       const overlayElement = document.createElement('button')
@@ -318,7 +270,7 @@ export default function CampusRouteMap({
       markerRefs.current = []
       overlayRefs.current = []
     }
-  }, [handleLocationSelect, locationStats, mapStatus, routeStats, selectedFrom, selectedTo])
+  }, [handleLocationSelect, mapStatus, originStats, selectedFrom])
 
   useEffect(() => {
     if (!selectedFrom) {
@@ -326,11 +278,8 @@ export default function CampusRouteMap({
     }
   }, [selectedFrom])
 
-  const focusedStat = focusedLocation
-    ? locationStats.get(focusedLocation) ?? emptyStat()
-    : emptyStat()
   const selectedOriginStat = selectedFrom
-    ? locationStats.get(selectedFrom) ?? emptyStat()
+    ? originStats.get(selectedFrom) ?? emptyStat()
     : emptyStat()
   const isSheetOpen = Boolean(selectedFrom || focusedLocation)
 
@@ -366,11 +315,8 @@ export default function CampusRouteMap({
           </div>
           {LOCATION_ORDER.map((location) => {
             const point = LOCATION_POINTS[location]
-            const routeStat = selectedFrom && selectedFrom !== location
-              ? routeStats.get(getRouteKey(selectedFrom, location)) ?? emptyStat()
-              : locationStats.get(location) ?? emptyStat()
+            const originStat = originStats.get(location) ?? emptyStat()
             const isOrigin = selectedFrom === location
-            const isDestination = selectedTo === location
 
             return (
               <button
@@ -380,15 +326,13 @@ export default function CampusRouteMap({
                 className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-lg border px-3 py-2 text-left text-xs shadow-lg transition ${
                   isOrigin
                     ? 'border-primary-600 bg-primary-600 text-white'
-                    : isDestination
-                      ? 'border-gray-950 bg-gray-950 text-white'
-                      : 'border-white bg-white text-gray-900 hover:border-primary-300'
+                    : 'border-white bg-white text-gray-900 hover:border-primary-300'
                 }`}
                 style={{ left: `${point.mapX}%`, top: `${point.mapY}%` }}
               >
                 <span className="block whitespace-nowrap font-bold">{point.shortLabel}</span>
                 <span className="block whitespace-nowrap opacity-80">
-                  {isOrigin ? '출발' : `${routeStat.roomCount}개 방`}
+                  {isOrigin ? '출발' : `${originStat.roomCount}개 방`}
                 </span>
               </button>
             )
@@ -412,7 +356,6 @@ export default function CampusRouteMap({
             aria-label="선택 닫기"
             onClick={() => {
               onSelectFrom('')
-              onSelectTo('')
               setFocusedLocation(null)
             }}
             className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
@@ -420,56 +363,71 @@ export default function CampusRouteMap({
             <X className="h-5 w-5" />
           </button>
 
-          {selectedFrom && selectedTo ? (
-            <div className="grid gap-4 pr-8 sm:grid-cols-[1fr_auto] sm:items-end sm:pr-0">
-              <div className="min-w-0">
-                <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">선택 경로</p>
-                <div className="mt-1 flex min-w-0 items-center gap-2 text-base font-extrabold text-gray-950">
-                  <span className="truncate">{LOCATIONS[selectedFrom]}</span>
-                  <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
-                  <span className="truncate">{LOCATIONS[selectedTo]}</span>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-gray-600">
-                  <span>오늘 예정 방 {selectedRouteStat.roomCount}개</span>
-                  {selectedRouteStat.nextTime && <span>다음 출발 {selectedRouteStat.nextTime}</span>}
-                  <span className="inline-flex items-center gap-1">
-                    <Route className="h-3.5 w-3.5" />
-                    {getDistanceMeters(selectedFrom, selectedTo)}m
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={onOpenRooms}
-                className="inline-flex items-center justify-center rounded-lg bg-gray-950 px-4 py-2.5 text-sm font-extrabold text-white transition hover:bg-gray-800"
-              >
-                방 보기
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </button>
-            </div>
-          ) : selectedFrom ? (
+          {selectedFrom ? (
             <div className="pr-8">
               <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">출발 지점</p>
               <div className="mt-1 flex min-w-0 items-center gap-2 text-base font-extrabold text-gray-950">
-                <Navigation className="h-4 w-4 shrink-0 text-primary-600" />
+                <Compass className="h-4 w-4 shrink-0 text-primary-600" />
                 <span className="truncate">{LOCATIONS[selectedFrom]}</span>
               </div>
               <p className="mt-2 text-sm font-semibold text-gray-600">
-                오늘 연결된 방 {selectedOriginStat.roomCount}개
+                오늘 출발 방 {selectedOriginStat.roomCount}개
                 {selectedOriginStat.nextTime ? ` · 다음 출발 ${selectedOriginStat.nextTime}` : ''}
               </p>
-            </div>
-          ) : focusedLocation ? (
-            <div className="pr-8">
-              <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">고정 지점</p>
-              <div className="mt-1 flex min-w-0 items-center gap-2 text-base font-extrabold text-gray-950">
-                <MapPin className="h-4 w-4 shrink-0 text-primary-600" />
-                <span className="truncate">{LOCATIONS[focusedLocation]}</span>
-              </div>
-              <p className="mt-2 text-sm font-semibold text-gray-600">
-                연결된 오늘 예정 방 {focusedStat.roomCount}개
-                {focusedStat.nextTime ? ` · 다음 출발 ${focusedStat.nextTime}` : ''}
-              </p>
+
+              {selectedOriginRooms.length > 0 ? (
+                <div className="mt-3 max-h-[34vh] space-y-2 overflow-y-auto pr-1">
+                  {selectedOriginRooms.map((room) => {
+                    const participantCount = room.participants?.length ?? 0
+                    const isFull = participantCount >= room.max_participants
+
+                    return (
+                      <div
+                        key={room.id}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 text-sm font-black text-gray-950">
+                            <Clock className="h-4 w-4 text-primary-600" />
+                            <span>{room.departure_time}</span>
+                          </div>
+                          <div className="mt-1 flex min-w-0 items-center gap-1 text-xs font-bold text-gray-600">
+                            <span className="truncate">{LOCATIONS[room.from_location]}</span>
+                            <ArrowRight className="h-3 w-3 shrink-0 text-gray-400" />
+                            <span className="truncate">{LOCATIONS[room.to_location]}</span>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span className="text-xs font-black text-gray-500">
+                            {participantCount}/{room.max_participants}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => onJoinRoom(room.id)}
+                            disabled={isFull}
+                            className="rounded-md bg-gray-950 px-3 py-1.5 text-xs font-black text-white transition hover:bg-gray-800 disabled:bg-gray-300"
+                          >
+                            {isFull ? '마감' : '입장'}
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="mt-3 rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-4 text-sm font-bold text-gray-600">
+                  아직 방이 없습니다
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => onCreateRoom(selectedFrom)}
+                className="mt-3 inline-flex w-full items-center justify-center rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-black text-white transition hover:bg-primary-700"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                방 생성하기
+              </button>
             </div>
           ) : null}
         </div>

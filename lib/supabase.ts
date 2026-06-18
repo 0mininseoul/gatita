@@ -112,6 +112,7 @@ export type LocationType =
   | '제3기숙사'
   | '제2기숙사'
   | 'AI공학관'
+  | '중앙도서관'
 
 export type LocationPoint = {
   id: LocationType
@@ -131,17 +132,32 @@ export const LOCATIONS: Record<LocationType, string> = {
   '교육대학원': '교육대학원',
   '제3기숙사': '제3기숙사',
   '제2기숙사': '제2기숙사',
-  'AI공학관': 'AI공학관'
+  'AI공학관': 'AI공학관',
+  '중앙도서관': '중앙도서관'
 }
 
 export const LOCATION_ORDER: LocationType[] = [
   '가천대역_1번출구',
   '가천대학교_정문',
   '교육대학원',
+  '중앙도서관',
   'AI공학관',
-  '제3기숙사',
   '제2기숙사'
 ]
+
+export const ROUTE_TOO_CLOSE_MESSAGE = '너무 가까워서 선택할 수 없습니다'
+
+const restrictedRoutePairs = new Set([
+  '가천대역_1번출구__가천대학교_정문',
+  '가천대학교_정문__가천대역_1번출구',
+  '제2기숙사__AI공학관',
+  'AI공학관__제2기숙사'
+])
+
+export function isRestrictedRoutePair(fromLocation: LocationType | '', toLocation: LocationType | '') {
+  if (!fromLocation || !toLocation) return false
+  return restrictedRoutePairs.has(`${fromLocation}__${toLocation}`)
+}
 
 export const LOCATION_POINTS: Record<LocationType, LocationPoint> = {
   '가천대역_1번출구': {
@@ -149,20 +165,20 @@ export const LOCATION_POINTS: Record<LocationType, LocationPoint> = {
     label: '가천대역 1번출구',
     shortLabel: '1번출구',
     description: '역 출구 앞',
-    lat: 37.451237,
-    lng: 127.129389,
-    mapX: 41.3,
-    mapY: 60.7
+    lat: 37.450838,
+    lng: 127.125842,
+    mapX: 10.7,
+    mapY: 64.9
   },
   '가천대학교_정문': {
     id: '가천대학교_정문',
     label: '가천대학교 정문',
     shortLabel: '정문',
-    description: '반도체대학 아래 도로',
-    lat: 37.45082,
-    lng: 127.12742,
-    mapX: 24.3,
-    mapY: 65.1
+    description: '비전타워 북측 진입로',
+    lat: 37.45031,
+    lng: 127.12772,
+    mapX: 26.9,
+    mapY: 70.4
   },
   '교육대학원': {
     id: '교육대학원',
@@ -203,18 +219,28 @@ export const LOCATION_POINTS: Record<LocationType, LocationPoint> = {
     lng: 127.133488,
     mapX: 76.6,
     mapY: 19.4
+  },
+  '중앙도서관': {
+    id: '중앙도서관',
+    label: '중앙도서관',
+    shortLabel: '중앙도서관',
+    description: '중앙도서관 건물',
+    lat: 37.45234386757405,
+    lng: 127.13309824619479,
+    mapX: 73.3,
+    mapY: 49
   }
 }
 
 export const GACHON_GLOBAL_CAMPUS_CENTER = {
-  lat: 37.4528,
+  lat: 37.4531,
   lng: 127.1319
 }
 
 export const GACHON_GLOBAL_CAMPUS_BOUNDS = {
   south: 37.4475,
   west: 127.1246,
-  north: 37.457,
+  north: 37.4582,
   east: 127.1362
 }
 

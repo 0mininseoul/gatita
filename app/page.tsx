@@ -1,10 +1,20 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { ChatRoom, User, LocationType, LOCATIONS, Favorite } from '@/lib/supabase'
+import {
+  ChatRoom,
+  Favorite,
+  LOCATION_ORDER,
+  LOCATIONS,
+  LocationType,
+  ROUTE_TOO_CLOSE_MESSAGE,
+  User,
+  isRestrictedRoutePair,
+} from '@/lib/supabase'
 import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
 import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
 import { MapPin, ArrowRight, Star, Settings, LogOut, SlidersHorizontal, X } from 'lucide-react'
@@ -18,6 +28,7 @@ import SplitText from '@/components/SplitText'
 import NavigationBar from '@/components/NavigationBar'
 
 type AuthMode = 'signup' | null
+type RoutePanelMode = 'search' | 'create'
 
 function GoogleIcon({ className = 'w-5 h-5' }: { className?: string }) {
   return (
@@ -43,6 +54,7 @@ export default function HomePage() {
   const [hasEnteredApp, setHasEnteredApp] = useState(false)
   const [authNotice, setAuthNotice] = useState<string | null>(null)
   const [isDirectRouteOpen, setIsDirectRouteOpen] = useState(false)
+  const [routePanelMode, setRoutePanelMode] = useState<RoutePanelMode>('search')
   const lastAuthErrorAtRef = useRef(0)
   const router = useRouter()
 
@@ -72,6 +84,7 @@ export default function HomePage() {
     setAuthMode(null)
     setHasEnteredApp(false)
     setIsDirectRouteOpen(false)
+    setRoutePanelMode('search')
 
     if (supabase) {
       await supabase.auth.signOut()
@@ -221,6 +234,7 @@ export default function HomePage() {
         setAuthMode(null)
         setHasEnteredApp(false)
         setIsDirectRouteOpen(false)
+        setRoutePanelMode('search')
       }
     })
 
@@ -303,24 +317,48 @@ export default function HomePage() {
     }
   }, [showLanding])
 
-  const handleSearch = () => {
-    if (!fromLocation || !toLocation) {
+  const validateRouteSelection = (from: LocationType | '', to: LocationType | '') => {
+    if (!from || !to) {
       toast.error('출발지와 도착지를 모두 선택해주세요')
-      return
+      return false
     }
 
-    if (fromLocation === toLocation) {
+    if (from === to) {
       toast.error('출발지와 도착지가 같을 수 없습니다')
-      return
+      return false
     }
+
+    if (isRestrictedRoutePair(from, to)) {
+      toast.error(ROUTE_TOO_CLOSE_MESSAGE)
+      return false
+    }
+
+    return true
+  }
+
+  const handleSearch = () => {
+    if (!validateRouteSelection(fromLocation, toLocation)) return
 
     router.push(`/rooms?from=${fromLocation}&to=${toLocation}`)
   }
 
+  const handleCreateRoute = () => {
+    if (!validateRouteSelection(fromLocation, toLocation)) return
+
+    router.push(`/rooms?from=${fromLocation}&to=${toLocation}&create=1`)
+  }
+
   const handleFromLocationChange = (location: LocationType | '') => {
     setFromLocation(location)
+
     if (!location || location === toLocation) {
       setToLocation('')
+      return
+    }
+
+    if (isRestrictedRoutePair(location, toLocation)) {
+      setToLocation('')
+      toast.error(ROUTE_TOO_CLOSE_MESSAGE)
     }
   }
 
@@ -330,11 +368,76 @@ export default function HomePage() {
       return
     }
 
+    if (isRestrictedRoutePair(fromLocation, location)) {
+      toast.error(ROUTE_TOO_CLOSE_MESSAGE)
+      return
+    }
+
     setToLocation(location)
   }
 
   const handleFavoriteClick = (favorite: Favorite) => {
+    if (!validateRouteSelection(favorite.from_location, favorite.to_location)) return
+
     router.push(`/rooms?from=${favorite.from_location}&to=${favorite.to_location}`)
+  }
+
+  const handleCreateRoomFromMap = (location: LocationType) => {
+    setFromLocation(location)
+    setRoutePanelMode('create')
+    setIsDirectRouteOpen(true)
+
+    if (toLocation === location || isRestrictedRoutePair(location, toLocation)) {
+      setToLocation('')
+    }
+  }
+
+  const handleJoinMapRoom = async (roomId: string) => {
+    if (!user || !supabase) return
+
+    try {
+      const room = mapRooms.find((mapRoom) => mapRoom.id === roomId)
+      if (!room) return
+
+      if (room.participants?.some((participant) => participant.user_id === user.id)) {
+        router.push(`/rooms/${roomId}`)
+        return
+      }
+
+      const { count, error: countError } = await supabase
+        .from('room_participants')
+        .select('id', { count: 'exact', head: true })
+        .eq('room_id', roomId)
+
+      if (countError) throw countError
+
+      if ((count ?? room.participants?.length ?? 0) >= room.max_participants) {
+        toast.error('채팅방이 가득 찼습니다')
+        return
+      }
+
+      const { error } = await supabase
+        .from('room_participants')
+        .insert({
+          room_id: roomId,
+          user_id: user.id,
+          confirmed: false,
+        })
+
+      if (error) {
+        if (error.code === '23505') {
+          router.push(`/rooms/${roomId}`)
+          return
+        }
+
+        throw error
+      }
+
+      router.push(`/rooms/${roomId}`)
+    } catch (error) {
+      console.error('Join map room error:', error)
+      toast.error('채팅방 참여 중 오류가 발생했습니다')
+    }
   }
 
   const handleLogout = async () => {
@@ -345,6 +448,7 @@ export default function HomePage() {
       setUser(null)
       setFavorites([])
       setIsDirectRouteOpen(false)
+      setRoutePanelMode('search')
       toast.success('로그아웃되었습니다')
     } catch (error) {
       toast.error('로그아웃 중 오류가 발생했습니다')
@@ -521,11 +625,10 @@ export default function HomePage() {
         rooms={mapRooms}
         onlineCount={onlineDisplayCount}
         selectedFrom={fromLocation}
-        selectedTo={toLocation}
         isLoading={isLoadingMapRooms}
         onSelectFrom={handleFromLocationChange}
-        onSelectTo={handleToLocationChange}
-        onOpenRooms={handleSearch}
+        onCreateRoom={handleCreateRoomFromMap}
+        onJoinRoom={handleJoinMapRoom}
       />
 
       <header
@@ -533,9 +636,19 @@ export default function HomePage() {
         style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
       >
         <div className="pointer-events-auto mx-auto flex max-w-3xl items-center justify-between gap-3 rounded-lg border border-white/75 bg-white/90 px-3 py-2.5 shadow-[0_12px_34px_rgba(17,24,39,0.14)] backdrop-blur">
-          <div className="min-w-0">
-            <h1 className="text-base font-black text-gray-950">같이타</h1>
-            <p className="truncate text-xs font-semibold text-gray-600">{user.nickname}님, 안녕하세요!</p>
+          <div className="flex min-w-0 items-center gap-2">
+            <Image
+              src="/brand/gatita-logo.png"
+              alt=""
+              width={36}
+              height={36}
+              className="h-9 w-9 shrink-0"
+              priority
+            />
+            <div className="min-w-0">
+              <h1 className="text-base font-black text-gray-950">같이타</h1>
+              <p className="truncate text-xs font-semibold text-gray-600">{user.nickname}님, 안녕하세요!</p>
+            </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <button
@@ -575,7 +688,9 @@ export default function HomePage() {
         >
           <div className="mb-4 flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <h2 className="text-base font-black text-gray-950">직접 경로 지정</h2>
+              <h2 className="text-base font-black text-gray-950">
+                {routePanelMode === 'create' ? '방 생성하기' : '직접 경로 지정'}
+              </h2>
             </div>
             <button
               type="button"
@@ -595,8 +710,8 @@ export default function HomePage() {
                 className="input-field"
               >
                 <option value="">출발지 선택</option>
-                {Object.entries(LOCATIONS).map(([key, value]) => (
-                  <option key={key} value={key}>{value}</option>
+                {LOCATION_ORDER.map((key) => (
+                  <option key={key} value={key}>{LOCATIONS[key]}</option>
                 ))}
               </select>
             </div>
@@ -608,18 +723,18 @@ export default function HomePage() {
                 className="input-field"
               >
                 <option value="">도착지 선택</option>
-                {Object.entries(LOCATIONS).map(([key, value]) => (
-                  <option key={key} value={key}>{value}</option>
+                {LOCATION_ORDER.map((key) => (
+                  <option key={key} value={key}>{LOCATIONS[key]}</option>
                 ))}
               </select>
             </div>
             <button
               type="button"
-              onClick={handleSearch}
+              onClick={routePanelMode === 'create' ? handleCreateRoute : handleSearch}
               disabled={!fromLocation || !toLocation}
               className="btn-primary flex w-full items-center justify-center"
             >
-              동행자 찾기
+              {routePanelMode === 'create' ? '방 생성하기' : '동행자 찾기'}
               <ArrowRight className="ml-2 h-5 w-5" />
             </button>
           </div>
@@ -659,7 +774,10 @@ export default function HomePage() {
       <button
         type="button"
         aria-label="직접 경로 지정"
-        onClick={() => setIsDirectRouteOpen((isOpen) => !isOpen)}
+        onClick={() => {
+          setRoutePanelMode('search')
+          setIsDirectRouteOpen((isOpen) => !isOpen)
+        }}
         className="fab absolute right-4 z-40 h-14 w-14"
         style={{ bottom: routeButtonBottom }}
       >

@@ -8,7 +8,8 @@ create type location_type as enum (
   '교육대학원',
   '제3기숙사',
   '제2기숙사',
-  'AI공학관'
+  'AI공학관',
+  '중앙도서관'
 );
 
 -- Users table

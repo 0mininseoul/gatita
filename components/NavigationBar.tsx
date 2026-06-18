@@ -65,7 +65,7 @@ const NavigationBar: React.FC<NavigationBarProps> = ({ onFindClick }) => {
           text={[
             "AI 공학관 같이 갈 사람?",
             "교육대학원 같이 갈 사람?",
-            "제3기숙사 같이 갈 사람?",
+            "중앙도서관 같이 갈 사람?",
             "제2기숙사 같이 갈 사람?"
           ]}
           as="span"

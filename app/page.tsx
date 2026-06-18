@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase'
 import { ChatRoom, User, LocationType, LOCATIONS, Favorite } from '@/lib/supabase'
 import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
 import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
-import { MapPin, ArrowRight, Star, Settings, LogOut, SlidersHorizontal } from 'lucide-react'
+import { MapPin, ArrowRight, Star, Settings, LogOut, SlidersHorizontal, X } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 
@@ -42,6 +42,7 @@ export default function HomePage() {
   const [isStartingGoogle, setIsStartingGoogle] = useState(false)
   const [hasEnteredApp, setHasEnteredApp] = useState(false)
   const [authNotice, setAuthNotice] = useState<string | null>(null)
+  const [isDirectRouteOpen, setIsDirectRouteOpen] = useState(false)
   const lastAuthErrorAtRef = useRef(0)
   const router = useRouter()
 
@@ -70,6 +71,7 @@ export default function HomePage() {
     setFavorites([])
     setAuthMode(null)
     setHasEnteredApp(false)
+    setIsDirectRouteOpen(false)
 
     if (supabase) {
       await supabase.auth.signOut()
@@ -218,6 +220,7 @@ export default function HomePage() {
         setFavorites([])
         setAuthMode(null)
         setHasEnteredApp(false)
+        setIsDirectRouteOpen(false)
       }
     })
 
@@ -341,6 +344,7 @@ export default function HomePage() {
       await supabase.auth.signOut()
       setUser(null)
       setFavorites([])
+      setIsDirectRouteOpen(false)
       toast.success('로그아웃되었습니다')
     } catch (error) {
       toast.error('로그아웃 중 오류가 발생했습니다')
@@ -503,91 +507,164 @@ export default function HomePage() {
     )
   }
 
+  const hasMapSelectionSheet = Boolean(fromLocation)
+  const routeButtonBottom = hasMapSelectionSheet
+    ? 'calc(env(safe-area-inset-bottom) + 11rem)'
+    : 'calc(env(safe-area-inset-bottom) + 1rem)'
+  const routePanelBottom = hasMapSelectionSheet
+    ? 'calc(env(safe-area-inset-bottom) + 15.75rem)'
+    : 'calc(env(safe-area-inset-bottom) + 5.75rem)'
+
   return (
-    <div className="min-h-screen app-bg">
-      <header className="app-header px-4 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-extrabold text-gray-900">같이타</h1>
-            <p className="text-sm text-gray-600">{user.nickname}님, 안녕하세요!</p>
+    <main className="relative h-[100dvh] min-h-screen w-screen overflow-hidden bg-[#e7edf4]">
+      <CampusRouteMap
+        rooms={mapRooms}
+        onlineCount={onlineDisplayCount}
+        selectedFrom={fromLocation}
+        selectedTo={toLocation}
+        isLoading={isLoadingMapRooms}
+        onSelectFrom={handleFromLocationChange}
+        onSelectTo={handleToLocationChange}
+        onOpenRooms={handleSearch}
+      />
+
+      <header
+        className="pointer-events-none absolute inset-x-0 top-0 z-40 px-3"
+        style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
+      >
+        <div className="pointer-events-auto mx-auto flex max-w-3xl items-center justify-between gap-3 rounded-lg border border-white/75 bg-white/90 px-3 py-2.5 shadow-[0_12px_34px_rgba(17,24,39,0.14)] backdrop-blur">
+          <div className="min-w-0">
+            <h1 className="text-base font-black text-gray-950">같이타</h1>
+            <p className="truncate text-xs font-semibold text-gray-600">{user.nickname}님, 안녕하세요!</p>
           </div>
-          <div className="flex items-center space-x-2">
-            <button onClick={() => router.push('/settings')} className="p-2 hover:bg-gray-100 rounded-lg">
-              <Settings className="w-5 h-5 text-gray-600" />
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              aria-label="설정"
+              onClick={() => router.push('/settings')}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition hover:bg-gray-100 hover:text-gray-950"
+            >
+              <Settings className="h-5 w-5" />
             </button>
             {user.is_admin && (
-              <button onClick={() => router.push('/admin')} className="p-2 hover:bg-gray-100 rounded-lg bg-red-50" title="관리자 페이지">
-                <Star className="w-5 h-5 text-red-600" />
+              <button
+                type="button"
+                aria-label="관리자 페이지"
+                onClick={() => router.push('/admin')}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-red-50 text-red-600 transition hover:bg-red-100"
+              >
+                <Star className="h-5 w-5" />
               </button>
             )}
-            <button onClick={handleLogout} className="p-2 hover:bg-gray-100 rounded-lg">
-              <LogOut className="w-5 h-5 text-gray-600" />
+            <button
+              type="button"
+              aria-label="로그아웃"
+              onClick={handleLogout}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition hover:bg-gray-100 hover:text-gray-950"
+            >
+              <LogOut className="h-5 w-5" />
             </button>
           </div>
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-6 space-y-6">
-        <CampusRouteMap
-          rooms={mapRooms}
-          onlineCount={onlineDisplayCount}
-          selectedFrom={fromLocation}
-          selectedTo={toLocation}
-          isLoading={isLoadingMapRooms}
-          onSelectFrom={handleFromLocationChange}
-          onSelectTo={handleToLocationChange}
-          onOpenRooms={handleSearch}
-        />
-
-        <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-[0_10px_30px_rgba(31,41,70,0.06)]">
+      {isDirectRouteOpen && (
+        <div
+          className="absolute right-3 z-50 w-[calc(100vw_-_1.5rem)] max-w-sm overflow-y-auto rounded-lg border border-white/80 bg-white/95 p-4 shadow-[0_18px_48px_rgba(17,24,39,0.22)] backdrop-blur"
+          style={{ bottom: routePanelBottom, maxHeight: 'min(70vh, 28rem)' }}
+        >
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-base font-extrabold text-gray-950">직접 경로 지정</h2>
-            <SlidersHorizontal className="h-5 w-5 text-gray-400" />
+            <div className="min-w-0">
+              <h2 className="text-base font-black text-gray-950">직접 경로 지정</h2>
+            </div>
+            <button
+              type="button"
+              aria-label="직접 경로 지정 닫기"
+              onClick={() => setIsDirectRouteOpen(false)}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">출발지</label>
-              <select value={fromLocation} onChange={(e) => handleFromLocationChange(e.target.value as LocationType | '')} className="input-field">
+              <label className="mb-2 block text-sm font-bold text-gray-700">출발지</label>
+              <select
+                value={fromLocation}
+                onChange={(e) => handleFromLocationChange(e.target.value as LocationType | '')}
+                className="input-field"
+              >
                 <option value="">출발지 선택</option>
-                {Object.entries(LOCATIONS).map(([key, value]) => ( <option key={key} value={key}>{value}</option> ))}
+                {Object.entries(LOCATIONS).map(([key, value]) => (
+                  <option key={key} value={key}>{value}</option>
+                ))}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">도착지</label>
-              <select value={toLocation} onChange={(e) => handleToLocationChange(e.target.value as LocationType | '')} className="input-field">
+              <label className="mb-2 block text-sm font-bold text-gray-700">도착지</label>
+              <select
+                value={toLocation}
+                onChange={(e) => handleToLocationChange(e.target.value as LocationType | '')}
+                className="input-field"
+              >
                 <option value="">도착지 선택</option>
-                {Object.entries(LOCATIONS).map(([key, value]) => ( <option key={key} value={key}>{value}</option> ))}
+                {Object.entries(LOCATIONS).map(([key, value]) => (
+                  <option key={key} value={key}>{value}</option>
+                ))}
               </select>
             </div>
-            <button onClick={handleSearch} disabled={!fromLocation || !toLocation} className="btn-primary w-full flex items-center justify-center">
+            <button
+              type="button"
+              onClick={handleSearch}
+              disabled={!fromLocation || !toLocation}
+              className="btn-primary flex w-full items-center justify-center"
+            >
               동행자 찾기
-              <ArrowRight className="w-5 h-5 ml-2" />
+              <ArrowRight className="ml-2 h-5 w-5" />
             </button>
           </div>
-        </div>
 
-        {favorites.length > 0 && (
-          <div className="card p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">즐겨찾기 경로</h3>
-              <Star className="w-5 h-5 text-yellow-500" />
+          {favorites.length > 0 && (
+            <div className="mt-4 border-t border-gray-100 pt-4">
+              <div className="mb-2 flex items-center gap-2 text-sm font-black text-gray-900">
+                <Star className="h-4 w-4 text-yellow-500" />
+                <span>즐겨찾기 경로</span>
+              </div>
+              <div className="space-y-2">
+                {favorites.map((favorite) => (
+                  <button
+                    key={favorite.id}
+                    type="button"
+                    onClick={() => {
+                      setIsDirectRouteOpen(false)
+                      handleFavoriteClick(favorite)
+                    }}
+                    className="flex w-full items-center justify-between gap-3 rounded-lg bg-gray-50 p-3 text-left transition hover:bg-gray-100"
+                  >
+                    <div className="flex min-w-0 items-center">
+                      <MapPin className="mr-2 h-4 w-4 shrink-0 text-gray-500" />
+                      <span className="truncate text-sm font-bold text-gray-800">
+                        {LOCATIONS[favorite.from_location]} → {LOCATIONS[favorite.to_location]}
+                      </span>
+                    </div>
+                    <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="space-y-3">
-              {favorites.map((favorite) => (
-                <button key={favorite.id} onClick={() => handleFavoriteClick(favorite)} className="w-full p-4 bg-gray-50 hover:bg-gray-100 rounded-lg flex items-center justify-between transition-colors">
-                  <div className="flex items-center">
-                    <MapPin className="w-4 h-4 text-gray-500 mr-2" />
-                    <span className="text-sm font-medium">
-                      {LOCATIONS[favorite.from_location]} → {LOCATIONS[favorite.to_location]}
-                    </span>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-gray-400" />
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+          )}
+        </div>
+      )}
+
+      <button
+        type="button"
+        aria-label="직접 경로 지정"
+        onClick={() => setIsDirectRouteOpen((isOpen) => !isOpen)}
+        className="fab absolute right-4 z-40 h-14 w-14"
+        style={{ bottom: routeButtonBottom }}
+      >
+        <SlidersHorizontal className="h-6 w-6" />
+      </button>
+    </main>
   )
 }

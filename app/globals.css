@@ -288,8 +288,21 @@
     color: #111827;
     box-shadow: 0 12px 28px rgba(17, 24, 39, 0.18);
     font-family: var(--font-paperlogy), sans-serif;
-    pointer-events: none;
+    pointer-events: auto;
+    cursor: pointer;
     white-space: nowrap;
+    transition: transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+    appearance: none;
+  }
+
+  .gatita-map-overlay:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 16px 34px rgba(17, 24, 39, 0.22);
+  }
+
+  .gatita-map-overlay:focus-visible {
+    outline: 3px solid rgba(39, 130, 255, 0.28);
+    outline-offset: 2px;
   }
 
   .gatita-map-overlay span {

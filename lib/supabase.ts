@@ -147,74 +147,74 @@ export const LOCATION_POINTS: Record<LocationType, LocationPoint> = {
   '가천대역_1번출구': {
     id: '가천대역_1번출구',
     label: '가천대역 1번출구',
-    shortLabel: '가천대역',
+    shortLabel: '1번출구',
     description: '역 출구 앞',
     lat: 37.451237,
     lng: 127.129389,
-    mapX: 16,
-    mapY: 55
+    mapX: 41.3,
+    mapY: 60.7
   },
   '가천대학교_정문': {
     id: '가천대학교_정문',
     label: '가천대학교 정문',
     shortLabel: '정문',
-    description: '글로벌캠퍼스 진입 지점',
-    lat: 37.45112,
-    lng: 127.13092,
-    mapX: 33,
-    mapY: 50
+    description: '반도체대학 아래 도로',
+    lat: 37.45082,
+    lng: 127.12742,
+    mapX: 24.3,
+    mapY: 65.1
   },
   '교육대학원': {
     id: '교육대학원',
     label: '교육대학원',
     shortLabel: '교육대학원',
-    description: '캠퍼스 중앙 남측',
-    lat: 37.45013,
-    lng: 127.13218,
-    mapX: 57,
-    mapY: 68
+    description: '교육대학원 건물',
+    lat: 37.451908340075576,
+    lng: 127.13179212698977,
+    mapX: 62,
+    mapY: 53.6
   },
   '제3기숙사': {
     id: '제3기숙사',
     label: '제3기숙사',
     shortLabel: '제3기숙사',
-    description: '기숙사 북측',
-    lat: 37.45227,
-    lng: 127.13318,
-    mapX: 76,
-    mapY: 29
+    description: '학생생활관 북동측',
+    lat: 37.45638,
+    lng: 127.13505,
+    mapX: 90.1,
+    mapY: 6.5
   },
   '제2기숙사': {
     id: '제2기숙사',
     label: '제2기숙사',
     shortLabel: '제2기숙사',
-    description: '기숙사 남측',
-    lat: 37.44942,
-    lng: 127.13368,
-    mapX: 79,
-    mapY: 80
+    description: '학생생활관 서측',
+    lat: 37.45605,
+    lng: 127.13452,
+    mapX: 85.5,
+    mapY: 10
   },
   'AI공학관': {
     id: 'AI공학관',
     label: 'AI공학관',
     shortLabel: 'AI공학관',
-    description: 'AI·공학관 인근',
-    lat: 37.45142,
-    lng: 127.13242,
-    mapX: 61,
-    mapY: 46
+    description: 'AI관 건물',
+    lat: 37.455155,
+    lng: 127.133488,
+    mapX: 76.6,
+    mapY: 19.4
   }
 }
 
 export const GACHON_GLOBAL_CAMPUS_CENTER = {
-  lat: 37.45085,
-  lng: 127.13135
+  lat: 37.4528,
+  lng: 127.1319
 }
 
 export const GACHON_GLOBAL_CAMPUS_BOUNDS = {
-  south: 37.4478,
+  south: 37.4475,
   west: 127.1246,
-  north: 37.4539,
+  north: 37.457,
   east: 127.1362
 }
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, Compass, LocateFixed, MapPin, Navigation, Route, Users } from 'lucide-react'
+import { ArrowRight, Compass, MapPin, Navigation, Route, Users, X } from 'lucide-react'
 import {
   GACHON_GLOBAL_CAMPUS_BOUNDS,
   GACHON_GLOBAL_CAMPUS_CENTER,
@@ -100,15 +100,6 @@ function loadKakaoMaps(appKey: string) {
   return window.__gatitaKakaoMapPromise
 }
 
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
-}
-
 function getDistanceMeters(from: LocationType, to: LocationType) {
   const fromPoint = LOCATION_POINTS[from]
   const toPoint = LOCATION_POINTS[to]
@@ -205,26 +196,6 @@ export default function CampusRouteMap({
     ? routeStats.get(getRouteKey(selectedFrom, selectedTo)) ?? emptyStat()
     : emptyStat()
 
-  const candidateLocations = useMemo(() => {
-    if (!selectedFrom) {
-      return LOCATION_ORDER
-        .slice()
-        .sort((a, b) => {
-          const aStat = locationStats.get(a) ?? emptyStat()
-          const bStat = locationStats.get(b) ?? emptyStat()
-          return bStat.roomCount - aStat.roomCount
-        })
-    }
-
-    return LOCATION_ORDER
-      .filter((location) => location !== selectedFrom)
-      .sort((a, b) => {
-        const aStat = routeStats.get(getRouteKey(selectedFrom, a)) ?? emptyStat()
-        const bStat = routeStats.get(getRouteKey(selectedFrom, b)) ?? emptyStat()
-        return bStat.roomCount - aStat.roomCount || getDistanceMeters(selectedFrom, a) - getDistanceMeters(selectedFrom, b)
-      })
-  }, [locationStats, routeStats, selectedFrom])
-
   const handleLocationSelect = useCallback((location: LocationType) => {
     setFocusedLocation(location)
 
@@ -312,16 +283,26 @@ export default function CampusRouteMap({
         isDestination ? 'is-destination' : '',
         isEmpty ? 'is-empty' : '',
       ].filter(Boolean).join(' ')
+      const overlayElement = document.createElement('button')
+      overlayElement.type = 'button'
+      overlayElement.className = overlayClass
+      overlayElement.setAttribute('aria-label', `${point.label} 선택`)
+
+      const overlayLabel = document.createElement('span')
+      overlayLabel.textContent = point.shortLabel
+      const overlayCount = document.createElement('strong')
+      overlayCount.textContent = label
+      overlayElement.append(overlayLabel, overlayCount)
+      overlayElement.addEventListener('click', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        handleLocationSelect(location)
+      })
 
       const overlay = new kakao.maps.CustomOverlay({
         position,
         yAnchor: 1.42,
-        content: `
-          <div class="${overlayClass}">
-            <span>${escapeHtml(point.shortLabel)}</span>
-            <strong>${escapeHtml(label)}</strong>
-          </div>
-        `,
+        content: overlayElement,
       })
 
       marker.setMap(map)
@@ -348,191 +329,149 @@ export default function CampusRouteMap({
   const focusedStat = focusedLocation
     ? locationStats.get(focusedLocation) ?? emptyStat()
     : emptyStat()
+  const selectedOriginStat = selectedFrom
+    ? locationStats.get(selectedFrom) ?? emptyStat()
+    : emptyStat()
+  const isSheetOpen = Boolean(selectedFrom || focusedLocation)
 
   return (
-    <section className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.08em] text-primary-700">Gachon Global Campus</p>
-          <h2 className="mt-1 text-xl font-extrabold text-gray-950">지도에서 바로 고르기</h2>
+    <section className="relative h-full min-h-[100dvh] w-full overflow-hidden bg-[#e7edf4]">
+      <div ref={mapContainerRef} className="absolute inset-0 h-full w-full" />
+
+      <div className="pointer-events-none absolute left-3 top-24 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap gap-2 sm:left-4">
+        <div className="inline-flex items-center gap-2 rounded-lg border border-white/75 bg-white/90 px-3 py-2 text-xs font-extrabold text-gray-950 shadow-[0_10px_28px_rgba(17,24,39,0.12)] backdrop-blur">
+          <Compass className="h-4 w-4 text-primary-600" />
+          <span>오늘 예정 방 {rooms.length}개</span>
         </div>
-        <div className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-primary-100 bg-white px-3 py-2 text-sm font-bold text-gray-900 shadow-sm">
+        <div className="inline-flex items-center gap-2 rounded-lg border border-white/75 bg-white/90 px-3 py-2 text-xs font-extrabold text-gray-950 shadow-[0_10px_28px_rgba(17,24,39,0.12)] backdrop-blur">
           <Users className="h-4 w-4 text-primary-600" />
           <span>{onlineCount}명 접속 중</span>
         </div>
+        {isLoading && (
+          <div className="inline-flex items-center gap-2 rounded-lg border border-white/75 bg-white/90 px-3 py-2 text-xs font-bold text-gray-600 shadow-[0_10px_28px_rgba(17,24,39,0.12)] backdrop-blur">
+            <div className="loading-spinner h-4 w-4" />
+            <span>방 현황 불러오는 중</span>
+          </div>
+        )}
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-[0_14px_34px_rgba(31,41,70,0.08)]">
-        <div className="relative h-[420px] min-h-[360px] bg-[#e7edf4]">
-          <div ref={mapContainerRef} className="h-full w-full" />
+      {(mapStatus === 'missing-key' || mapStatus === 'error') && (
+        <div className="absolute inset-0 overflow-hidden bg-[linear-gradient(135deg,#eaf2ff_0%,#f8fbff_45%,#eef6f1_100%)]">
+          <div className="absolute left-[8%] top-[46%] h-2 w-[84%] -rotate-6 rounded-full bg-white/80 shadow-inner" />
+          <div className="absolute left-[36%] top-[12%] h-[76%] w-2 rotate-12 rounded-full bg-white/75 shadow-inner" />
+          <div className="absolute inset-x-4 top-24 rounded-lg border border-white/70 bg-white/85 px-3 py-2 text-xs font-semibold text-gray-600 shadow-sm backdrop-blur">
+            {mapStatus === 'missing-key'
+              ? '카카오맵 JavaScript 키를 연결하면 실제 지도로 표시됩니다.'
+              : '지도를 불러오지 못해 캠퍼스 기준 지점으로 표시합니다.'}
+          </div>
+          {LOCATION_ORDER.map((location) => {
+            const point = LOCATION_POINTS[location]
+            const routeStat = selectedFrom && selectedFrom !== location
+              ? routeStats.get(getRouteKey(selectedFrom, location)) ?? emptyStat()
+              : locationStats.get(location) ?? emptyStat()
+            const isOrigin = selectedFrom === location
+            const isDestination = selectedTo === location
 
-          {(mapStatus === 'missing-key' || mapStatus === 'error') && (
-            <div className="absolute inset-0 overflow-hidden bg-[linear-gradient(135deg,#eaf2ff_0%,#f8fbff_45%,#eef6f1_100%)]">
-              <div className="absolute left-[8%] top-[46%] h-2 w-[84%] -rotate-6 rounded-full bg-white/80 shadow-inner" />
-              <div className="absolute left-[36%] top-[12%] h-[76%] w-2 rotate-12 rounded-full bg-white/75 shadow-inner" />
-              <div className="absolute inset-x-4 top-4 rounded-lg border border-white/70 bg-white/80 px-3 py-2 text-xs font-semibold text-gray-600 shadow-sm backdrop-blur">
-                {mapStatus === 'missing-key'
-                  ? '카카오맵 JavaScript 키를 연결하면 실제 지도로 표시됩니다.'
-                  : '지도를 불러오지 못해 캠퍼스 기준 지점으로 표시합니다.'}
-              </div>
-              {LOCATION_ORDER.map((location) => {
-                const point = LOCATION_POINTS[location]
-                const routeStat = selectedFrom && selectedFrom !== location
-                  ? routeStats.get(getRouteKey(selectedFrom, location)) ?? emptyStat()
-                  : locationStats.get(location) ?? emptyStat()
-                const isOrigin = selectedFrom === location
-                const isDestination = selectedTo === location
-
-                return (
-                  <button
-                    key={location}
-                    type="button"
-                    onClick={() => handleLocationSelect(location)}
-                    className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-lg border px-3 py-2 text-left text-xs shadow-lg transition ${
-                      isOrigin
-                        ? 'border-primary-600 bg-primary-600 text-white'
-                        : isDestination
-                          ? 'border-gray-950 bg-gray-950 text-white'
-                          : 'border-white bg-white text-gray-900 hover:border-primary-300'
-                    }`}
-                    style={{ left: `${point.mapX}%`, top: `${point.mapY}%` }}
-                  >
-                    <span className="block whitespace-nowrap font-bold">{point.shortLabel}</span>
-                    <span className="block whitespace-nowrap opacity-80">
-                      {isOrigin ? '출발' : `${routeStat.roomCount}개 방`}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          )}
-
-          {mapStatus === 'loading' && (
-            <div className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-sm">
-              <div className="loading-spinner" />
-            </div>
-          )}
+            return (
+              <button
+                key={location}
+                type="button"
+                onClick={() => handleLocationSelect(location)}
+                className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-lg border px-3 py-2 text-left text-xs shadow-lg transition ${
+                  isOrigin
+                    ? 'border-primary-600 bg-primary-600 text-white'
+                    : isDestination
+                      ? 'border-gray-950 bg-gray-950 text-white'
+                      : 'border-white bg-white text-gray-900 hover:border-primary-300'
+                }`}
+                style={{ left: `${point.mapX}%`, top: `${point.mapY}%` }}
+              >
+                <span className="block whitespace-nowrap font-bold">{point.shortLabel}</span>
+                <span className="block whitespace-nowrap opacity-80">
+                  {isOrigin ? '출발' : `${routeStat.roomCount}개 방`}
+                </span>
+              </button>
+            )
+          })}
         </div>
+      )}
 
-        <div className="border-t border-gray-100 bg-white p-4">
-          <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
-            <div className="min-w-0">
-              {selectedFrom && selectedTo ? (
-                <>
-                  <div className="flex min-w-0 items-center gap-2 text-base font-extrabold text-gray-950">
-                    <span className="truncate">{LOCATIONS[selectedFrom]}</span>
-                    <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
-                    <span className="truncate">{LOCATIONS[selectedTo]}</span>
-                  </div>
-                  <p className="mt-1 text-sm text-gray-600">
-                    오늘 예정 방 {selectedRouteStat.roomCount}개
-                    {selectedRouteStat.nextTime ? ` · 다음 출발 ${selectedRouteStat.nextTime}` : ''}
-                  </p>
-                </>
-              ) : selectedFrom ? (
-                <>
-                  <div className="flex items-center gap-2 text-base font-extrabold text-gray-950">
-                    <Navigation className="h-4 w-4 text-primary-600" />
-                    <span>{LOCATIONS[selectedFrom]} 출발</span>
-                  </div>
-                  <p className="mt-1 text-sm text-gray-600">도착 후보를 고르면 해당 경로 방으로 이동합니다.</p>
-                </>
-              ) : focusedLocation ? (
-                <>
-                  <div className="flex items-center gap-2 text-base font-extrabold text-gray-950">
-                    <MapPin className="h-4 w-4 text-primary-600" />
-                    <span>{LOCATIONS[focusedLocation]}</span>
-                  </div>
-                  <p className="mt-1 text-sm text-gray-600">
-                    연결된 오늘 예정 방 {focusedStat.roomCount}개
-                    {focusedStat.nextTime ? ` · 다음 출발 ${focusedStat.nextTime}` : ''}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className="flex items-center gap-2 text-base font-extrabold text-gray-950">
-                    <Compass className="h-4 w-4 text-primary-600" />
-                    <span>오늘 예정 방 {rooms.length}개</span>
-                  </div>
-                  <p className="mt-1 text-sm text-gray-600">방이 많은 지점부터 먼저 확인할 수 있습니다.</p>
-                </>
-              )}
-            </div>
+      {mapStatus === 'loading' && (
+        <div className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-sm">
+          <div className="loading-spinner" />
+        </div>
+      )}
 
-            <div className="flex gap-2">
-              {selectedFrom && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSelectFrom('')
-                    onSelectTo('')
-                    setFocusedLocation(null)
-                  }}
-                  className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-bold text-gray-700 transition hover:bg-gray-50"
-                >
-                  다시 선택
-                </button>
-              )}
+      {isSheetOpen && (
+        <div
+          className="absolute inset-x-3 bottom-3 z-30 mx-auto max-w-2xl rounded-lg border border-white/80 bg-white/95 px-4 pt-4 shadow-[0_18px_48px_rgba(17,24,39,0.22)] backdrop-blur"
+          style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+        >
+          <button
+            type="button"
+            aria-label="선택 닫기"
+            onClick={() => {
+              onSelectFrom('')
+              onSelectTo('')
+              setFocusedLocation(null)
+            }}
+            className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
+          >
+            <X className="h-5 w-5" />
+          </button>
+
+          {selectedFrom && selectedTo ? (
+            <div className="grid gap-4 pr-8 sm:grid-cols-[1fr_auto] sm:items-end sm:pr-0">
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">선택 경로</p>
+                <div className="mt-1 flex min-w-0 items-center gap-2 text-base font-extrabold text-gray-950">
+                  <span className="truncate">{LOCATIONS[selectedFrom]}</span>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
+                  <span className="truncate">{LOCATIONS[selectedTo]}</span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-gray-600">
+                  <span>오늘 예정 방 {selectedRouteStat.roomCount}개</span>
+                  {selectedRouteStat.nextTime && <span>다음 출발 {selectedRouteStat.nextTime}</span>}
+                  <span className="inline-flex items-center gap-1">
+                    <Route className="h-3.5 w-3.5" />
+                    {getDistanceMeters(selectedFrom, selectedTo)}m
+                  </span>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={onOpenRooms}
-                disabled={!selectedFrom || !selectedTo}
-                className="inline-flex items-center justify-center rounded-lg bg-gray-950 px-4 py-2 text-sm font-bold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
+                className="inline-flex items-center justify-center rounded-lg bg-gray-950 px-4 py-2.5 text-sm font-extrabold text-white transition hover:bg-gray-800"
               >
                 방 보기
                 <ArrowRight className="ml-2 h-4 w-4" />
               </button>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-2 sm:grid-cols-2">
-        {candidateLocations.map((location) => {
-          const point = LOCATION_POINTS[location]
-          const stat = selectedFrom
-            ? routeStats.get(getRouteKey(selectedFrom, location)) ?? emptyStat()
-            : locationStats.get(location) ?? emptyStat()
-          const isDestination = selectedTo === location
-
-          return (
-            <button
-              key={location}
-              type="button"
-              onClick={() => handleLocationSelect(location)}
-              className={`rounded-lg border p-3 text-left transition ${
-                isDestination
-                  ? 'border-gray-950 bg-gray-950 text-white'
-                  : stat.roomCount > 0
-                    ? 'border-primary-100 bg-white text-gray-950 shadow-sm hover:border-primary-300'
-                    : 'border-gray-200 bg-white/72 text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    {selectedFrom ? <Route className="h-4 w-4 shrink-0" /> : <LocateFixed className="h-4 w-4 shrink-0" />}
-                    <span className="truncate text-sm font-extrabold">{point.label}</span>
-                  </div>
-                  <p className={`mt-1 text-xs ${isDestination ? 'text-white/72' : 'text-gray-500'}`}>
-                    {selectedFrom ? `${getDistanceMeters(selectedFrom, location)}m 근처` : point.description}
-                  </p>
-                </div>
-                <div className={`shrink-0 rounded-md px-2.5 py-1 text-sm font-black ${
-                  isDestination ? 'bg-white text-gray-950' : 'bg-primary-50 text-primary-700'
-                }`}>
-                  {stat.roomCount}개
-                </div>
+          ) : selectedFrom ? (
+            <div className="pr-8">
+              <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">출발 지점</p>
+              <div className="mt-1 flex min-w-0 items-center gap-2 text-base font-extrabold text-gray-950">
+                <Navigation className="h-4 w-4 shrink-0 text-primary-600" />
+                <span className="truncate">{LOCATIONS[selectedFrom]}</span>
               </div>
-            </button>
-          )
-        })}
-      </div>
-
-      {isLoading && (
-        <div className="flex items-center justify-center py-2 text-sm font-semibold text-gray-500">
-          <div className="loading-spinner mr-2" />
-          방 현황 불러오는 중
+              <p className="mt-2 text-sm font-semibold text-gray-600">
+                오늘 연결된 방 {selectedOriginStat.roomCount}개
+                {selectedOriginStat.nextTime ? ` · 다음 출발 ${selectedOriginStat.nextTime}` : ''}
+              </p>
+            </div>
+          ) : focusedLocation ? (
+            <div className="pr-8">
+              <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">고정 지점</p>
+              <div className="mt-1 flex min-w-0 items-center gap-2 text-base font-extrabold text-gray-950">
+                <MapPin className="h-4 w-4 shrink-0 text-primary-600" />
+                <span className="truncate">{LOCATIONS[focusedLocation]}</span>
+              </div>
+              <p className="mt-2 text-sm font-semibold text-gray-600">
+                연결된 오늘 예정 방 {focusedStat.roomCount}개
+                {focusedStat.nextTime ? ` · 다음 출발 ${focusedStat.nextTime}` : ''}
+              </p>
+            </div>
+          ) : null}
         </div>
       )}
     </section>

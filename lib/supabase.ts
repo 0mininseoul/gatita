@@ -164,11 +164,11 @@ export const LOCATION_POINTS: Record<LocationType, LocationPoint> = {
     id: '가천대역_1번출구',
     label: '가천대역 1번출구',
     shortLabel: '1번출구',
-    description: '역 출구 앞',
-    lat: 37.450838,
-    lng: 127.125842,
-    mapX: 10.7,
-    mapY: 64.9
+    description: '가천대역 1번 출구 앞 인도',
+    lat: 37.4495735,
+    lng: 127.1268578,
+    mapX: 19.5,
+    mapY: 78.2
   },
   '가천대학교_정문': {
     id: '가천대학교_정문',

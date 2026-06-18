@@ -47,10 +47,10 @@ test('campus map fixed points use the requested real-world anchors', () => {
 
   assert.equal(LOCATION_POINTS['가천대역_1번출구'].shortLabel, '1번출구')
   assertPointInRange('가천대역_1번출구', {
-    south: 37.45078,
-    north: 37.4509,
-    west: 127.12578,
-    east: 127.1259,
+    south: 37.4495,
+    north: 37.44965,
+    west: 127.12678,
+    east: 127.12694,
   })
 
   assertPointInRange('가천대학교_정문', {

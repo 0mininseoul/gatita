@@ -33,22 +33,30 @@ export default function ChatRoomPage() {
     const body = document.body
     const previousRootOverflow = root.style.overflow
     const previousBodyOverflow = body.style.overflow
+    const previousBodyPosition = body.style.position
+    const previousBodyInset = body.style.inset
+    const previousBodyWidth = body.style.width
+    const previousBodyHeight = body.style.height
+    const previousBodyOverscrollBehavior = body.style.overscrollBehavior
     const previousChatViewportHeight = root.style.getPropertyValue('--chat-viewport-height')
-    const previousChatKeyboardOffset = root.style.getPropertyValue('--chat-keyboard-offset')
 
     const updateChatViewport = () => {
       const visualViewport = window.visualViewport
-      const viewportHeight = window.innerHeight
-      const keyboardOffset = visualViewport
-        ? Math.max(0, window.innerHeight - visualViewport.height - visualViewport.offsetTop)
-        : 0
+      const viewportHeight = visualViewport?.height ?? window.innerHeight
 
       root.style.setProperty('--chat-viewport-height', `${Math.ceil(viewportHeight)}px`)
-      root.style.setProperty('--chat-keyboard-offset', `${Math.ceil(keyboardOffset)}px`)
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ block: 'end' })
+      })
     }
 
     root.style.overflow = 'hidden'
     body.style.overflow = 'hidden'
+    body.style.position = 'fixed'
+    body.style.inset = '0'
+    body.style.width = '100%'
+    body.style.height = '100%'
+    body.style.overscrollBehavior = 'none'
     updateChatViewport()
     window.visualViewport?.addEventListener('resize', updateChatViewport)
     window.visualViewport?.addEventListener('scroll', updateChatViewport)
@@ -57,15 +65,15 @@ export default function ChatRoomPage() {
     return () => {
       root.style.overflow = previousRootOverflow
       body.style.overflow = previousBodyOverflow
+      body.style.position = previousBodyPosition
+      body.style.inset = previousBodyInset
+      body.style.width = previousBodyWidth
+      body.style.height = previousBodyHeight
+      body.style.overscrollBehavior = previousBodyOverscrollBehavior
       if (previousChatViewportHeight) {
         root.style.setProperty('--chat-viewport-height', previousChatViewportHeight)
       } else {
         root.style.removeProperty('--chat-viewport-height')
-      }
-      if (previousChatKeyboardOffset) {
-        root.style.setProperty('--chat-keyboard-offset', previousChatKeyboardOffset)
-      } else {
-        root.style.removeProperty('--chat-keyboard-offset')
       }
       window.visualViewport?.removeEventListener('resize', updateChatViewport)
       window.visualViewport?.removeEventListener('scroll', updateChatViewport)
@@ -479,15 +487,15 @@ export default function ChatRoomPage() {
       </header>
 
       {/* 채팅 메시지 영역 */}
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-3 py-4">
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overflow-x-hidden px-3 py-3">
         {messages.map((message) => (
           <div
             key={message.id}
             className={`flex w-full min-w-0 ${message.user_id === user.id ? 'justify-end' : 'justify-start'}`}
           >
-            <div className={`min-w-0 max-w-[min(82vw,20rem)] ${message.user_id === user.id ? 'ml-8' : 'mr-8'}`}>
+            <div className={`min-w-0 max-w-[min(78vw,18rem)] ${message.user_id === user.id ? 'ml-7' : 'mr-7'}`}>
               {message.user_id !== user.id && (
-                <p className="mb-1 truncate px-1 text-xs text-gray-500">
+                <p className="mb-0.5 truncate px-1 text-xs text-gray-500">
                   {message.user?.nickname} ({message.user?.department})
                 </p>
               )}
@@ -498,7 +506,7 @@ export default function ChatRoomPage() {
               >
                 {message.content}
               </div>
-              <p className="text-xs text-gray-400 mt-1 px-1">
+              <p className="mt-0.5 px-1 text-xs text-gray-400">
                 {format(new Date(message.created_at), 'HH:mm')}
               </p>
             </div>
@@ -511,10 +519,7 @@ export default function ChatRoomPage() {
       {isParticipant ? (
         <div
           className="shrink-0 border-t border-gray-100 bg-white px-3 pt-3"
-          style={{
-            paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
-            transform: 'translateY(calc(-1 * var(--chat-keyboard-offset)))',
-          }}
+          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
         >
           <div className="flex min-w-0 items-center gap-2">
             <input

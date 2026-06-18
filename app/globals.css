@@ -10,7 +10,6 @@
   --landing-viewport-height: 100vh;
   --landing-background-height: 100vh;
   --chat-viewport-height: 100dvh;
-  --chat-keyboard-offset: 0px;
 }
 
 @layer base {
@@ -213,7 +212,10 @@
   }
 
   .chat-message {
-    @apply p-3 rounded-2xl max-w-xs break-words;
+    @apply max-w-xs break-words text-sm;
+    padding: 0.45rem 0.7rem;
+    border-radius: 0.875rem;
+    line-height: 1.35;
   }
 
   .chat-message-own {

@@ -374,14 +374,22 @@ export default function HomePage() {
     const previousRootOverflow = root.style.overflow
     const previousBodyOverflow = body.style.overflow
     const previousBodyOverscrollBehavior = body.style.overscrollBehavior
+    const standaloneDisplayQuery = window.matchMedia('(display-mode: standalone)')
 
     const setAppViewport = () => {
       const visualHeight = window.visualViewport?.height ?? window.innerHeight
 
       root.style.setProperty('--app-viewport-height', `${Math.ceil(visualHeight)}px`)
     }
+    const applyMapDisplayMode = () => {
+      const isStandaloneMap = isInstalled()
+
+      root.classList.toggle('gatita-standalone-map', isStandaloneMap)
+      root.classList.toggle('gatita-browser-map', !isStandaloneMap)
+    }
 
     setAppViewport()
+    applyMapDisplayMode()
     window.scrollTo(0, 0)
     root.style.overflow = 'hidden'
     body.style.overflow = 'hidden'
@@ -391,6 +399,11 @@ export default function HomePage() {
     window.addEventListener('orientationchange', setAppViewport)
     window.visualViewport?.addEventListener('resize', setAppViewport)
     window.visualViewport?.addEventListener('scroll', setAppViewport)
+    if (typeof standaloneDisplayQuery.addEventListener === 'function') {
+      standaloneDisplayQuery.addEventListener('change', applyMapDisplayMode)
+    } else {
+      standaloneDisplayQuery.addListener(applyMapDisplayMode)
+    }
 
     return () => {
       if (previousAppViewportHeight) {
@@ -401,10 +414,16 @@ export default function HomePage() {
       root.style.overflow = previousRootOverflow
       body.style.overflow = previousBodyOverflow
       body.style.overscrollBehavior = previousBodyOverscrollBehavior
+      root.classList.remove('gatita-standalone-map', 'gatita-browser-map')
       window.removeEventListener('resize', setAppViewport)
       window.removeEventListener('orientationchange', setAppViewport)
       window.visualViewport?.removeEventListener('resize', setAppViewport)
       window.visualViewport?.removeEventListener('scroll', setAppViewport)
+      if (typeof standaloneDisplayQuery.removeEventListener === 'function') {
+        standaloneDisplayQuery.removeEventListener('change', applyMapDisplayMode)
+      } else {
+        standaloneDisplayQuery.removeListener(applyMapDisplayMode)
+      }
     }
   }, [hasEnteredApp, user])
 

@@ -228,6 +228,16 @@ test('map shows a one-time PWA home screen onboarding modal', () => {
   assert.match(manifest, /"start_url":\s*"\/map"/)
 })
 
+test('service worker refreshes navigations before falling back to cached app shell', () => {
+  const source = readProjectFile('public/sw.js')
+
+  assert.match(source, /gatita-v1\.0\.1/)
+  assert.match(source, /event\.request\.mode === 'navigate'/)
+  assert.match(source, /fetch\(event\.request\)/)
+  assert.match(source, /cache\.put\(event\.request, responseToCache\)/)
+  assert.doesNotMatch(source, /if \(response\) \{\s*return response\s*\}/)
+})
+
 test('iOS PWA startup images are generated and registered for current iPhones', () => {
   const layout = readProjectFile('app/layout.tsx')
   const splashScript = readProjectFile('scripts/generate-ios-splash.mjs')

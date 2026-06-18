@@ -171,12 +171,17 @@ test('kakao map zoom control is offset below the app header', () => {
 })
 
 test('map stats are offset from the translucent PWA status bar and room joins disable after departure', () => {
+  const pageSource = readProjectFile('app/page.tsx')
   const mapSource = readProjectFile('components/CampusRouteMap.tsx')
   const cssSource = readProjectFile('app/globals.css')
 
   assert.match(mapSource, /gatita-map-stats/)
   assert.match(cssSource, /\.gatita-map-stats/)
-  assert.match(cssSource, /env\(safe-area-inset-top\) \+ 5rem/)
+  assert.match(pageSource, /gatita-standalone-map/)
+  assert.match(pageSource, /gatita-browser-map/)
+  assert.match(cssSource, /env\(safe-area-inset-top\) \+ 3\.75rem/)
+  assert.match(cssSource, /html\.gatita-standalone-map \.gatita-map-stats/)
+  assert.match(cssSource, /env\(safe-area-inset-top\) \+ 3\.5rem/)
   assert.doesNotMatch(cssSource, /9\.25rem/, 'map stat chips should not be pushed deep below the header')
   assert.match(mapSource, /isRoomJoinable/)
   assert.match(mapSource, /isPastDeparture/)

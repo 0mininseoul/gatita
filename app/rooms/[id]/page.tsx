@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { ChatRoom, User, Message, RoomParticipant, LOCATIONS } from '@/lib/supabase'
-import { ArrowLeft, Users, Clock, Send, Flag, Check, X } from 'lucide-react'
+import { ArrowLeft, Users, Clock, Send, Flag, Check, X, LogOut } from 'lucide-react'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -27,6 +27,21 @@ export default function ChatRoomPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const supabase = useMemo(() => createClient(), [])
+
+  useEffect(() => {
+    const root = document.documentElement
+    const body = document.body
+    const previousRootOverflow = root.style.overflow
+    const previousBodyOverflow = body.style.overflow
+
+    root.style.overflow = 'hidden'
+    body.style.overflow = 'hidden'
+
+    return () => {
+      root.style.overflow = previousRootOverflow
+      body.style.overflow = previousBodyOverflow
+    }
+  }, [])
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -295,7 +310,7 @@ export default function ChatRoomPage() {
         toast.success('채팅방을 나갔습니다')
       }
 
-      router.back()
+      router.push('/?auth=complete')
     } catch (error) {
       console.error('Leave room error:', error)
       toast.error('채팅방 나가기 중 오류가 발생했습니다')
@@ -342,13 +357,14 @@ export default function ChatRoomPage() {
   }
 
   return (
-    <div className="flex h-[100dvh] max-h-[100dvh] w-full max-w-full flex-col overflow-hidden app-bg">
+    <div className="fixed inset-0 flex w-screen max-w-full flex-col overflow-hidden overscroll-none app-bg">
       {/* Header */}
       <header className="app-header shrink-0 overflow-hidden px-3 py-3">
         <div className="flex min-w-0 items-start justify-between gap-2">
           <div className="flex min-w-0 items-start">
             <button
-              onClick={() => router.back()}
+              aria-label="지도로 돌아가기"
+              onClick={() => router.push('/?auth=complete')}
               className="mr-2 shrink-0 rounded-lg p-2 hover:bg-gray-100"
             >
               <ArrowLeft className="w-5 h-5" />
@@ -367,13 +383,25 @@ export default function ChatRoomPage() {
               </div>
             </div>
           </div>
-          <div className="flex shrink-0 items-center">
+          <div className="flex shrink-0 items-center gap-1">
             <button
+              type="button"
+              aria-label="신고하기"
               onClick={() => setShowReportModal(true)}
               className="p-2 hover:bg-gray-100 rounded-lg"
             >
               <Flag className="w-5 h-5 text-gray-600" />
             </button>
+            {isParticipant && (
+              <button
+                type="button"
+                aria-label="채팅방 나가기"
+                onClick={handleLeaveRoom}
+                className="rounded-lg p-2 text-red-600 hover:bg-red-50 hover:text-red-700"
+              >
+                <LogOut className="h-5 w-5" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -467,15 +495,6 @@ export default function ChatRoomPage() {
               className="shrink-0 rounded-full bg-primary-600 p-2 text-white hover:bg-primary-700 disabled:bg-gray-300"
             >
               <Send className="w-5 h-5" />
-            </button>
-          </div>
-
-          <div className="flex justify-center mt-4">
-            <button
-              onClick={handleLeaveRoom}
-              className="text-sm text-red-600 hover:text-red-700"
-            >
-              채팅방 나가기
             </button>
           </div>
         </div>

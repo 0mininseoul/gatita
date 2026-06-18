@@ -167,7 +167,7 @@ export default function CampusRouteMap({
   const { originStats } = useMemo(() => buildStats(rooms), [rooms])
   const destinationOptions = useMemo(() => getDestinationOptions(selectedFrom), [selectedFrom])
   const departureTimeOptions = useMemo(
-    () => isCreateMode ? getDepartureTimeOptions(new Date(), 10, 18) : [],
+    () => isCreateMode ? getDepartureTimeOptions(new Date(), 5) : [],
     [isCreateMode]
   )
   const selectedOriginRooms = useMemo(

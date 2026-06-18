@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import {
   ChatRoom,
+  getDepartureDateForTime,
   LOCATIONS,
   LocationType,
   ROUTE_TOO_CLOSE_MESSAGE,
@@ -333,7 +334,7 @@ export default function HomePage() {
     setIsCreatingMapRoom(true)
 
     try {
-      const today = format(new Date(), 'yyyy-MM-dd')
+      const departureDate = getDepartureDateForTime(new Date(), departureTime)
       const title = `${departureTime} ${LOCATIONS[roomFromLocation]}→${LOCATIONS[roomToLocation]}`
 
       const { data: room, error } = await supabase
@@ -342,7 +343,7 @@ export default function HomePage() {
           title,
           from_location: roomFromLocation,
           to_location: roomToLocation,
-          departure_date: today,
+          departure_date: departureDate,
           departure_time: departureTime,
           max_participants: 4,
           created_by: user.id,

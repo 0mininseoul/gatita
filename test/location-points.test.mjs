@@ -27,6 +27,7 @@ function loadSupabaseExports() {
 }
 
 const {
+  getDepartureDateForTime,
   getDepartureTimeOptions,
   getDestinationOptions,
   GACHON_GLOBAL_CAMPUS_BOUNDS,
@@ -118,13 +119,26 @@ test('destination options exclude the selected origin and too-close routes', () 
   assert.ok(dormDestinations.includes('교육대학원'))
 })
 
-test('departure time options start at the next interval and stay on the same day', () => {
+test('departure time options use five minute intervals through 01:00', () => {
   assert.deepEqual(
-    getDepartureTimeOptions(new Date('2026-06-18T17:03:00+09:00'), 10),
-    ['17:10', '17:20', '17:30', '17:40', '17:50', '18:00']
+    getDepartureTimeOptions(new Date('2026-06-18T20:48:00+09:00')),
+    [
+      '20:50', '20:55', '21:00', '21:05', '21:10', '21:15', '21:20', '21:25', '21:30', '21:35',
+      '21:40', '21:45', '21:50', '21:55', '22:00', '22:05', '22:10', '22:15', '22:20', '22:25',
+      '22:30', '22:35', '22:40', '22:45', '22:50', '22:55', '23:00', '23:05', '23:10', '23:15',
+      '23:20', '23:25', '23:30', '23:35', '23:40', '23:45', '23:50', '23:55', '00:00', '00:05',
+      '00:10', '00:15', '00:20', '00:25', '00:30', '00:35', '00:40', '00:45', '00:50', '00:55',
+      '01:00',
+    ]
   )
   assert.deepEqual(
     getDepartureTimeOptions(new Date('2026-06-18T23:56:00+09:00'), 10),
-    []
+    ['00:00', '00:10', '00:20', '00:30', '00:40', '00:50', '01:00']
   )
+})
+
+test('departure date follows the selected post-midnight time', () => {
+  const now = new Date('2026-06-18T20:48:00+09:00')
+  assert.equal(getDepartureDateForTime(now, '21:00'), '2026-06-18')
+  assert.equal(getDepartureDateForTime(now, '00:30'), '2026-06-19')
 })

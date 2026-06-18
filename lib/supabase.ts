@@ -167,15 +167,27 @@ export function getDestinationOptions(fromLocation: LocationType | '') {
   )
 }
 
-export function getDepartureTimeOptions(now = new Date(), intervalMinutes = 10, optionCount = 6) {
+function formatLocalDate(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+export function getDepartureTimeOptions(now = new Date(), intervalMinutes = 5) {
   const options: string[] = []
-  const currentDate = now.getDate()
   const nextTime = new Date(now)
   const currentMinutes = nextTime.getMinutes()
   const minutesUntilNextInterval = intervalMinutes - (currentMinutes % intervalMinutes)
   nextTime.setMinutes(currentMinutes + minutesUntilNextInterval, 0, 0)
 
-  while (options.length < optionCount && nextTime.getDate() === currentDate) {
+  const cutoff = new Date(nextTime)
+  cutoff.setHours(1, 0, 0, 0)
+  if (nextTime > cutoff) {
+    cutoff.setDate(cutoff.getDate() + 1)
+  }
+
+  while (nextTime <= cutoff) {
     const hours = String(nextTime.getHours()).padStart(2, '0')
     const minutes = String(nextTime.getMinutes()).padStart(2, '0')
     options.push(`${hours}:${minutes}`)
@@ -183,6 +195,18 @@ export function getDepartureTimeOptions(now = new Date(), intervalMinutes = 10, 
   }
 
   return options
+}
+
+export function getDepartureDateForTime(now: Date, departureTime: string) {
+  const [hours, minutes] = departureTime.split(':').map(Number)
+  const departureDate = new Date(now)
+  departureDate.setHours(hours, minutes, 0, 0)
+
+  if (departureDate <= now) {
+    departureDate.setDate(departureDate.getDate() + 1)
+  }
+
+  return formatLocalDate(departureDate)
 }
 
 export const LOCATION_POINTS: Record<LocationType, LocationPoint> = {

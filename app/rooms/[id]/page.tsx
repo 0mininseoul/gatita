@@ -33,13 +33,43 @@ export default function ChatRoomPage() {
     const body = document.body
     const previousRootOverflow = root.style.overflow
     const previousBodyOverflow = body.style.overflow
+    const previousChatViewportHeight = root.style.getPropertyValue('--chat-viewport-height')
+    const previousChatKeyboardOffset = root.style.getPropertyValue('--chat-keyboard-offset')
+
+    const updateChatViewport = () => {
+      const visualViewport = window.visualViewport
+      const viewportHeight = window.innerHeight
+      const keyboardOffset = visualViewport
+        ? Math.max(0, window.innerHeight - visualViewport.height - visualViewport.offsetTop)
+        : 0
+
+      root.style.setProperty('--chat-viewport-height', `${Math.ceil(viewportHeight)}px`)
+      root.style.setProperty('--chat-keyboard-offset', `${Math.ceil(keyboardOffset)}px`)
+    }
 
     root.style.overflow = 'hidden'
     body.style.overflow = 'hidden'
+    updateChatViewport()
+    window.visualViewport?.addEventListener('resize', updateChatViewport)
+    window.visualViewport?.addEventListener('scroll', updateChatViewport)
+    window.addEventListener('resize', updateChatViewport)
 
     return () => {
       root.style.overflow = previousRootOverflow
       body.style.overflow = previousBodyOverflow
+      if (previousChatViewportHeight) {
+        root.style.setProperty('--chat-viewport-height', previousChatViewportHeight)
+      } else {
+        root.style.removeProperty('--chat-viewport-height')
+      }
+      if (previousChatKeyboardOffset) {
+        root.style.setProperty('--chat-keyboard-offset', previousChatKeyboardOffset)
+      } else {
+        root.style.removeProperty('--chat-keyboard-offset')
+      }
+      window.visualViewport?.removeEventListener('resize', updateChatViewport)
+      window.visualViewport?.removeEventListener('scroll', updateChatViewport)
+      window.removeEventListener('resize', updateChatViewport)
     }
   }, [])
 
@@ -357,7 +387,10 @@ export default function ChatRoomPage() {
   }
 
   return (
-    <div className="fixed inset-0 flex w-screen max-w-full flex-col overflow-hidden overscroll-none app-bg">
+    <div
+      className="fixed inset-x-0 top-0 flex w-screen max-w-full flex-col overflow-hidden overscroll-none app-bg"
+      style={{ height: 'var(--chat-viewport-height)' }}
+    >
       {/* Header */}
       <header className="app-header shrink-0 overflow-hidden px-3 py-3">
         <div className="flex min-w-0 items-start justify-between gap-2">
@@ -478,7 +511,10 @@ export default function ChatRoomPage() {
       {isParticipant ? (
         <div
           className="shrink-0 border-t border-gray-100 bg-white px-3 pt-3"
-          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+          style={{
+            paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
+            transform: 'translateY(calc(-1 * var(--chat-keyboard-offset)))',
+          }}
         >
           <div className="flex min-w-0 items-center gap-2">
             <input

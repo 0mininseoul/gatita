@@ -219,6 +219,10 @@ export default function CampusRouteMap({
 
         const zoomControl = new kakao.maps.ZoomControl()
         map.addControl(zoomControl, kakao.maps.ControlPosition.RIGHT)
+        const zoomControlElement = mapContainerRef.current.querySelector('.zoom_control, .ZoomControl') as HTMLElement | null
+        if (zoomControlElement) {
+          zoomControlElement.style.marginTop = '7rem'
+        }
 
         kakao.maps.event.addListener(map, 'dragend', () => clampMapToCampus(map, kakao))
         kakao.maps.event.addListener(map, 'zoom_changed', () => clampMapToCampus(map, kakao))
@@ -297,6 +301,20 @@ export default function CampusRouteMap({
   }, [handleLocationSelect, mapStatus, originStats, selectedFrom])
 
   useEffect(() => {
+    if (!selectedFrom || mapStatus !== 'ready' || !mapRef.current || !kakaoRef.current) return
+
+    const kakao = kakaoRef.current
+    const map = mapRef.current
+    const handleMapClick = () => closeSheet()
+
+    kakao.maps.event.addListener(map, 'click', handleMapClick)
+
+    return () => {
+      kakao.maps.event.removeListener(map, 'click', handleMapClick)
+    }
+  }, [closeSheet, mapStatus, selectedFrom])
+
+  useEffect(() => {
     if (!selectedFrom) {
       setFocusedLocation(null)
       setIsCreateMode(false)
@@ -332,7 +350,7 @@ export default function CampusRouteMap({
 
   return (
     <section className="relative h-full min-h-[100dvh] w-full overflow-hidden bg-[#e7edf4]">
-      <div ref={mapContainerRef} className="absolute inset-0 h-full w-full" />
+      <div ref={mapContainerRef} className="gatita-kakao-map absolute inset-0 h-full w-full" />
 
       <div className="pointer-events-none absolute left-3 top-24 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap gap-2 sm:left-4">
         <div className="inline-flex items-center gap-2 rounded-lg border border-white/75 bg-white/90 px-3 py-2 text-xs font-extrabold text-gray-950 shadow-[0_10px_28px_rgba(17,24,39,0.12)] backdrop-blur">
@@ -352,7 +370,12 @@ export default function CampusRouteMap({
       </div>
 
       {(mapStatus === 'missing-key' || mapStatus === 'error') && (
-        <div className="absolute inset-0 overflow-hidden bg-[linear-gradient(135deg,#eaf2ff_0%,#f8fbff_45%,#eef6f1_100%)]">
+        <div
+          onClick={(event) => {
+            if (event.target === event.currentTarget && isSheetOpen) closeSheet()
+          }}
+          className="absolute inset-0 overflow-hidden bg-[linear-gradient(135deg,#eaf2ff_0%,#f8fbff_45%,#eef6f1_100%)]"
+        >
           <div className="absolute left-[8%] top-[46%] h-2 w-[84%] -rotate-6 rounded-full bg-white/80 shadow-inner" />
           <div className="absolute left-[36%] top-[12%] h-[76%] w-2 rotate-12 rounded-full bg-white/75 shadow-inner" />
           <div className="absolute inset-x-4 top-24 rounded-lg border border-white/70 bg-white/85 px-3 py-2 text-xs font-semibold text-gray-600 shadow-sm backdrop-blur">
@@ -391,15 +414,6 @@ export default function CampusRouteMap({
         <div className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-sm">
           <div className="loading-spinner" />
         </div>
-      )}
-
-      {isSheetOpen && (
-        <button
-          type="button"
-          aria-label="지도 선택 닫기"
-          onClick={closeSheet}
-          className="absolute inset-0 z-20 cursor-default bg-transparent"
-        />
       )}
 
       {isSheetOpen && (
@@ -467,11 +481,11 @@ export default function CampusRouteMap({
                     )
                   })}
                 </div>
-              ) : (
+              ) : !isCreateMode ? (
                 <div className="mt-3 rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-4 text-sm font-bold text-gray-600">
                   아직 방이 없습니다
                 </div>
-              )}
+              ) : null}
 
               <button
                 type="button"

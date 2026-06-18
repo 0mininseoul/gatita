@@ -9,6 +9,8 @@
   --brand-gradient: linear-gradient(135deg, #2782ff 0%, #6a73e8 50%, #be97cf 100%);
   --landing-viewport-height: 100vh;
   --landing-background-height: 100vh;
+  --chat-viewport-height: 100dvh;
+  --chat-keyboard-offset: 0px;
 }
 
 @layer base {
@@ -351,6 +353,11 @@
 
   .gatita-map-overlay.is-empty {
     opacity: 0.72;
+  }
+
+  .gatita-kakao-map .zoom_control,
+  .gatita-kakao-map .ZoomControl {
+    top: 7.25rem !important;
   }
 }
 

@@ -143,6 +143,11 @@ function buildStats(rooms: CampusMapRoom[]) {
   return { originStats }
 }
 
+function formatRoomTime(time: string | null) {
+  if (!time) return ''
+  return time.slice(0, 5)
+}
+
 export default function CampusRouteMap({
   rooms,
   onlineCount,
@@ -439,7 +444,7 @@ export default function CampusRouteMap({
               </div>
               <p className="mt-2 text-sm font-semibold text-gray-600">
                 오늘 출발 방 {selectedOriginStat.roomCount}개
-                {selectedOriginStat.nextTime ? ` · 다음 출발 ${selectedOriginStat.nextTime}` : ''}
+                {selectedOriginStat.nextTime ? ` · 다음 출발 ${formatRoomTime(selectedOriginStat.nextTime)}` : ''}
               </p>
 
               {selectedOriginRooms.length > 0 ? (
@@ -456,7 +461,7 @@ export default function CampusRouteMap({
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 text-sm font-black text-gray-950">
                             <Clock className="h-4 w-4 text-primary-600" />
-                            <span>{room.departure_time}</span>
+                            <span>{formatRoomTime(room.departure_time)}</span>
                           </div>
                           <div className="mt-1 flex min-w-0 items-center gap-1 text-xs font-bold text-gray-600">
                             <span className="truncate">{LOCATIONS[room.from_location]}</span>

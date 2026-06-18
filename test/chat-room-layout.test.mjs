@@ -15,7 +15,7 @@ function cssBlock(source, selector) {
   return match.groups.body
 }
 
-test('chat room uses fixed messenger chrome without locking the body position', () => {
+test('chat room uses fixed messenger chrome with document scroll locking', () => {
   const source = readProjectFile('app/rooms/[id]/page.tsx')
 
   assert.match(source, /headerRef/)
@@ -24,8 +24,9 @@ test('chat room uses fixed messenger chrome without locking the body position', 
   assert.match(source, /className="chat-room-header/)
   assert.match(source, /className="chat-messages/)
   assert.match(source, /className="chat-composer/)
-  assert.doesNotMatch(source, /body\.style\.position\s*=\s*'fixed'/)
-  assert.doesNotMatch(source, /body\.style\.inset\s*=\s*'0'/)
+  assert.match(source, /body\.style\.position\s*=\s*'fixed'/)
+  assert.match(source, /body\.style\.inset\s*=\s*'0'/)
+  assert.match(source, /focus\(\{ preventScroll: true \}\)/)
   assert.doesNotMatch(source, /translateY\(calc\(-1 \* var\(--chat-keyboard-offset\)\)\)/)
 })
 
@@ -36,7 +37,7 @@ test('chat room CSS keeps the header fixed while the keyboard only moves the low
   const messagesBlock = cssBlock(source, '.chat-messages')
   const composerBlock = cssBlock(source, '.chat-composer')
 
-  assert.match(shellBlock, /height:\s*100svh;/)
+  assert.match(shellBlock, /height:\s*100%;/)
   assert.doesNotMatch(shellBlock, /height:\s*100dvh;/)
   assert.match(headerBlock, /top:\s*0;/)
   assert.match(messagesBlock, /padding-top:\s*calc\(var\(--chat-header-height\) \+ 0\.75rem\);/)
@@ -90,6 +91,24 @@ test('chat keyboard viewport sync does not animate the message list on every key
   assert.match(source, /window\.setTimeout\(syncKeyboardViewport, 240\)/)
   assert.doesNotMatch(syncBlock, /scrollToBottom/)
   assert.doesNotMatch(source, /setProperty\('--chat-viewport-offset-top'/)
+  assert.doesNotMatch(source, /visualViewport\?\.addEventListener\('scroll'/)
+  assert.doesNotMatch(source, /visualViewport\.height - viewportOffsetTop/)
+})
+
+test('chat history loads message rows even if embedded author loading is unavailable', () => {
+  const source = readProjectFile('app/rooms/[id]/page.tsx')
+  const loadStart = source.indexOf('const loadMessages = useCallback')
+  const loadEnd = source.indexOf('\n  const loadParticipants', loadStart)
+  const loadBlock = source.slice(loadStart, loadEnd)
+
+  assert.ok(loadStart > -1, 'loadMessages exists')
+  assert.ok(loadEnd > loadStart, 'loadMessages block can be inspected')
+  assert.match(loadBlock, /\.select\('id, room_id, user_id, content, created_at'\)/)
+  assert.match(loadBlock, /authorIds/)
+  assert.match(loadBlock, /\.from\('users'\)/)
+  assert.match(loadBlock, /\.in\('id', authorIds\)/)
+  assert.match(loadBlock, /setMessages\(messagesWithAuthors as Message\[\]\)/)
+  assert.doesNotMatch(loadBlock, /user:users\(nickname, department\)/)
 })
 
 test('map app and bottom sheet use the visual viewport and internal sheet scrolling', () => {

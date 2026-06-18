@@ -4,6 +4,10 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import ts from 'typescript'
 
+function readProjectFile(path) {
+  return readFileSync(join(process.cwd(), path), 'utf8')
+}
+
 function loadSupabaseExports() {
   const source = readFileSync(join(process.cwd(), 'lib/supabase.ts'), 'utf8')
   const { outputText } = ts.transpileModule(source, {
@@ -141,4 +145,13 @@ test('departure date follows the selected post-midnight time', () => {
   const now = new Date('2026-06-18T20:48:00+09:00')
   assert.equal(getDepartureDateForTime(now, '21:00'), '2026-06-18')
   assert.equal(getDepartureDateForTime(now, '00:30'), '2026-06-19')
+})
+
+test('campus map room times are displayed without seconds', () => {
+  const source = readProjectFile('components/CampusRouteMap.tsx')
+
+  assert.match(source, /function formatRoomTime/)
+  assert.match(source, /formatRoomTime\(selectedOriginStat\.nextTime\)/)
+  assert.match(source, /formatRoomTime\(room\.departure_time\)/)
+  assert.doesNotMatch(source, /<span>\{room\.departure_time\}<\/span>/)
 })

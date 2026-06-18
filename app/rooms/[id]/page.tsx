@@ -69,9 +69,8 @@ export default function ChatRoomPage() {
   const syncChatChrome = useCallback(() => {
     const root = document.documentElement
     const visualViewport = window.visualViewport
-    const viewportOffsetTop = visualViewport?.offsetTop ?? 0
     const keyboardInset = visualViewport
-      ? Math.max(0, window.innerHeight - visualViewport.height - viewportOffsetTop)
+      ? Math.max(0, window.innerHeight - visualViewport.height)
       : 0
     const headerHeight = headerRef.current?.getBoundingClientRect().height ?? 0
     const composerHeight = composerRef.current?.getBoundingClientRect().height ?? 0
@@ -90,8 +89,16 @@ export default function ChatRoomPage() {
     const root = document.documentElement
     const body = document.body
     const previousRootOverflow = root.style.overflow
+    const previousRootPosition = root.style.position
+    const previousRootInset = root.style.inset
+    const previousRootWidth = root.style.width
+    const previousRootHeight = root.style.height
     const previousBodyOverflow = body.style.overflow
     const previousBodyOverscrollBehavior = body.style.overscrollBehavior
+    const previousBodyPosition = body.style.position
+    const previousBodyInset = body.style.inset
+    const previousBodyWidth = body.style.width
+    const previousBodyHeight = body.style.height
     const previousChatHeaderHeight = root.style.getPropertyValue('--chat-header-height')
     const previousChatComposerHeight = root.style.getPropertyValue('--chat-composer-height')
     const previousChatKeyboardInset = root.style.getPropertyValue('--chat-keyboard-inset')
@@ -105,8 +112,16 @@ export default function ChatRoomPage() {
     }
 
     root.style.overflow = 'hidden'
+    root.style.position = 'fixed'
+    root.style.inset = '0'
+    root.style.width = '100%'
+    root.style.height = '100%'
     body.style.overflow = 'hidden'
     body.style.overscrollBehavior = 'none'
+    body.style.position = 'fixed'
+    body.style.inset = '0'
+    body.style.width = '100%'
+    body.style.height = '100%'
     syncAndPinChat()
 
     const resizeObserver = typeof ResizeObserver !== 'undefined'
@@ -117,21 +132,27 @@ export default function ChatRoomPage() {
     if (composerRef.current) resizeObserver?.observe(composerRef.current)
 
     window.visualViewport?.addEventListener('resize', syncAndPinChat)
-    window.visualViewport?.addEventListener('scroll', syncAndPinChat)
     window.addEventListener('resize', syncAndPinChat)
     window.addEventListener('orientationchange', syncAndPinChat)
     window.addEventListener('scroll', keepWindowPinned, { passive: true })
 
     return () => {
       root.style.overflow = previousRootOverflow
+      root.style.position = previousRootPosition
+      root.style.inset = previousRootInset
+      root.style.width = previousRootWidth
+      root.style.height = previousRootHeight
       body.style.overflow = previousBodyOverflow
       body.style.overscrollBehavior = previousBodyOverscrollBehavior
+      body.style.position = previousBodyPosition
+      body.style.inset = previousBodyInset
+      body.style.width = previousBodyWidth
+      body.style.height = previousBodyHeight
       restoreProperty('--chat-header-height', previousChatHeaderHeight)
       restoreProperty('--chat-composer-height', previousChatComposerHeight)
       restoreProperty('--chat-keyboard-inset', previousChatKeyboardInset)
       resizeObserver?.disconnect()
       window.visualViewport?.removeEventListener('resize', syncAndPinChat)
-      window.visualViewport?.removeEventListener('scroll', syncAndPinChat)
       window.removeEventListener('resize', syncAndPinChat)
       window.removeEventListener('orientationchange', syncAndPinChat)
       window.removeEventListener('scroll', keepWindowPinned)
@@ -154,6 +175,13 @@ export default function ChatRoomPage() {
     window.setTimeout(syncKeyboardViewport, 160)
     window.setTimeout(syncKeyboardViewport, 240)
   }, [pinLatestMessageIfScrollable, syncAndPinChat])
+
+  const handleComposerInputPointerDown = useCallback((event: ReactPointerEvent<HTMLInputElement>) => {
+    if (event.pointerType !== 'touch') return
+
+    event.preventDefault()
+    event.currentTarget.focus({ preventScroll: true })
+  }, [])
 
   const handleMessagesPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return
@@ -214,18 +242,39 @@ export default function ChatRoomPage() {
 
   const loadMessages = useCallback(async () => {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('messages')
-        .select(`
-          *,
-          user:users(nickname, department)
-        `)
+        .select('id, room_id, user_id, content, created_at')
         .eq('room_id', roomId)
         .order('created_at', { ascending: true })
 
-      if (data) {
-        setMessages(data as any)
+      if (error) throw error
+
+      const messageRows = (data ?? []) as Message[]
+      const authorIds = Array.from(new Set(messageRows.map((message) => message.user_id)))
+      const authorsById = new Map<string, Pick<User, 'id' | 'nickname' | 'department'>>()
+
+      if (authorIds.length > 0) {
+        const { data: authors, error: authorError } = await supabase
+          .from('users')
+          .select('id, nickname, department')
+          .in('id', authorIds)
+
+        if (authorError) {
+          console.error('Load message authors error:', authorError)
+        } else {
+          authors?.forEach((author) => {
+            authorsById.set(author.id, author as Pick<User, 'id' | 'nickname' | 'department'>)
+          })
+        }
       }
+
+      const messagesWithAuthors = messageRows.map((message) => ({
+        ...message,
+        user: authorsById.get(message.user_id),
+      }))
+
+      setMessages(messagesWithAuthors as Message[])
     } catch (error) {
       console.error('Load messages error:', error)
     }
@@ -627,6 +676,7 @@ export default function ChatRoomPage() {
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+              onPointerDown={handleComposerInputPointerDown}
               onFocus={handleComposerFocus}
               placeholder="메시지를 입력하세요..."
               className="min-w-0 flex-1 rounded-full border border-gray-200 px-4 py-2 focus:border-primary-600 focus:ring-2 focus:ring-primary-100"

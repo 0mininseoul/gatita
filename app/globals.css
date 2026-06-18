@@ -238,8 +238,8 @@
   }
 
   .chat-shell {
-    height: 100svh;
-    min-height: 100svh;
+    height: 100%;
+    min-height: 100%;
   }
 
   .chat-room-header {

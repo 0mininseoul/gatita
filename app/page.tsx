@@ -249,27 +249,36 @@ export default function HomePage() {
 
     const root = document.documentElement
     const body = document.body
-    const setLandingViewportHeight = () => {
+    const setLandingViewport = () => {
       const visualHeight = window.visualViewport?.height ?? window.innerHeight
+      const backgroundHeight = Math.max(
+        visualHeight,
+        window.innerHeight,
+        window.screen?.height ?? 0
+      )
+
       root.style.setProperty('--landing-viewport-height', `${Math.ceil(visualHeight)}px`)
+      root.style.setProperty('--landing-background-height', `${Math.ceil(backgroundHeight)}px`)
     }
 
-    setLandingViewportHeight()
+    setLandingViewport()
     window.scrollTo(0, 0)
     root.classList.add('landing-lock')
     body.classList.add('landing-lock')
 
-    window.addEventListener('resize', setLandingViewportHeight)
-    window.visualViewport?.addEventListener('resize', setLandingViewportHeight)
-    window.visualViewport?.addEventListener('scroll', setLandingViewportHeight)
+    window.addEventListener('resize', setLandingViewport)
+    window.addEventListener('orientationchange', setLandingViewport)
+    window.visualViewport?.addEventListener('resize', setLandingViewport)
+    window.visualViewport?.addEventListener('scroll', setLandingViewport)
 
     const frameId = window.requestAnimationFrame(() => window.scrollTo(0, 0))
 
     return () => {
       window.cancelAnimationFrame(frameId)
-      window.removeEventListener('resize', setLandingViewportHeight)
-      window.visualViewport?.removeEventListener('resize', setLandingViewportHeight)
-      window.visualViewport?.removeEventListener('scroll', setLandingViewportHeight)
+      window.removeEventListener('resize', setLandingViewport)
+      window.removeEventListener('orientationchange', setLandingViewport)
+      window.visualViewport?.removeEventListener('resize', setLandingViewport)
+      window.visualViewport?.removeEventListener('scroll', setLandingViewport)
       root.classList.remove('landing-lock')
       body.classList.remove('landing-lock')
     }
@@ -377,7 +386,14 @@ export default function HomePage() {
     return (
       <main className="landing-page">
         <div className="landing-background">
-          <Grainient color1="#9f9fff" color2="#2782ff" color3="#be97cf" timeSpeed={2} grainAmount={0.05} />
+          <Grainient
+            className="landing-grainient"
+            color1="#9f9fff"
+            color2="#2782ff"
+            color3="#be97cf"
+            timeSpeed={2}
+            grainAmount={0.05}
+          />
         </div>
 
         <div className="landing-content">

@@ -8,6 +8,7 @@
   /* Signature brand gradient, echoing the landing hero */
   --brand-gradient: linear-gradient(135deg, #2782ff 0%, #6a73e8 50%, #be97cf 100%);
   --landing-viewport-height: 100vh;
+  --landing-background-height: 100vh;
 }
 
 @layer base {
@@ -29,14 +30,16 @@
   body.landing-lock {
     overflow: hidden;
     overscroll-behavior: none;
-    background: #2782ff;
+    background:
+      radial-gradient(900px 680px at 16% 4%, #b9b4ff 0%, rgba(185, 180, 255, 0) 64%),
+      radial-gradient(980px 900px at 86% 88%, #be97cf 0%, rgba(190, 151, 207, 0) 56%),
+      #2782ff;
   }
 
   body.landing-lock {
-    position: fixed;
-    inset: 0;
     width: 100%;
-    height: var(--landing-viewport-height);
+    min-height: var(--landing-background-height);
+    touch-action: none;
   }
 
   /* Input focus styles */
@@ -105,33 +108,48 @@
     position: fixed;
     inset: 0;
     width: 100vw;
-    height: 100vh;
-    min-height: 100svh;
+    height: var(--landing-background-height);
+    min-height: 100vh;
     color: #ffffff;
     overflow: hidden;
     isolation: isolate;
-    background: linear-gradient(180deg, #b9b4ff 0%, #6f6ad8 100%);
+    background:
+      radial-gradient(900px 680px at 16% 4%, #b9b4ff 0%, rgba(185, 180, 255, 0) 64%),
+      radial-gradient(980px 900px at 86% 88%, #be97cf 0%, rgba(190, 151, 207, 0) 56%),
+      #2782ff;
   }
 
   @supports (height: 100lvh) {
     .landing-page {
-      height: 100lvh;
+      min-height: 100lvh;
     }
   }
 
   .landing-background {
-    position: absolute;
-    inset: -1px 0;
+    position: fixed;
+    top: 0;
+    left: 0;
     z-index: 0;
-    width: 100%;
-    height: calc(100% + 2px);
+    width: 100vw;
+    height: var(--landing-background-height);
     min-height: 100vh;
+    overflow: hidden;
+    pointer-events: none;
   }
 
   @supports (height: 100lvh) {
     .landing-background {
       min-height: 100lvh;
     }
+  }
+
+  .landing-background .grainient-container.landing-grainient {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: var(--landing-background-height);
+    min-height: 100vh;
   }
 
   .landing-content {

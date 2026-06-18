@@ -2,7 +2,7 @@
   "name": "같이타 - 가천대 통학 동행 커뮤니티",
   "short_name": "같이타",
   "description": "가천대학교 학생들을 위한 통학 경로 동행자 찾기 서비스",
-  "start_url": "/",
+  "start_url": "/map",
   "display": "standalone",
   "background_color": "#f9fafb",
   "theme_color": "#3b82f6",
@@ -62,10 +62,10 @@
   ],
   "shortcuts": [
     {
-      "name": "홈",
-      "short_name": "홈",
-      "description": "메인 화면으로 이동",
-      "url": "/",
+      "name": "지도",
+      "short_name": "지도",
+      "description": "지도 화면으로 이동",
+      "url": "/map",
       "icons": [
         {
           "src": "/icons/icon-96x96.png",

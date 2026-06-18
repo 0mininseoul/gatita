@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties, 
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { ChatRoom, User, Message, RoomParticipant, PayoutAccount, LOCATIONS } from '@/lib/supabase'
-import { ArrowLeft, Users, Clock, Send, Flag, Check, X, LogOut, Phone, CreditCard } from 'lucide-react'
+import { ArrowLeft, Users, Clock, Send, Flag, Check, X, LogOut, Phone, CreditCard, Copy } from 'lucide-react'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -544,6 +544,24 @@ export default function ChatRoomPage() {
     }
   }
 
+  const copyCreatorPayoutAccount = useCallback(async () => {
+    if (!creatorPayoutAccount) return
+
+    const accountText = [
+      creatorPayoutAccount.bank_name,
+      creatorPayoutAccount.account_number,
+      creatorPayoutAccount.account_holder,
+    ].filter(Boolean).join(' ')
+
+    try {
+      await navigator.clipboard.writeText(accountText)
+      toast.success('계좌 정보를 복사했습니다')
+    } catch (error) {
+      console.error('Copy creator payout account error:', error)
+      toast.error('계좌 정보를 복사하지 못했습니다')
+    }
+  }, [creatorPayoutAccount])
+
   const isParticipant = participants.some(p => p.user_id === user?.id)
 
   if (loading) {
@@ -622,9 +640,21 @@ export default function ChatRoomPage() {
 
         {/* 방장 계좌 */}
         <div className="mt-2 rounded-xl border border-primary-100 bg-primary-50/90 px-3 py-2">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-primary-700">
-            <CreditCard className="h-3.5 w-3.5" />
-            <span>방장 계좌</span>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-primary-700">
+              <CreditCard className="h-3.5 w-3.5" />
+              <span>방장 계좌</span>
+            </div>
+            {creatorPayoutAccount && (
+              <button
+                type="button"
+                onClick={copyCreatorPayoutAccount}
+                className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-white px-2 text-[11px] font-black text-primary-700 shadow-sm ring-1 ring-primary-100 transition hover:bg-primary-50"
+              >
+                <Copy className="h-3.5 w-3.5" />
+                복사
+              </button>
+            )}
           </div>
           {creatorPayoutAccount ? (
             <p className="mt-1 truncate text-xs font-semibold text-gray-900">

@@ -1,24 +1,49 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
   BANK_OPTIONS,
   BankOption,
+  getAccountSegmentsForBank,
   getBankOption,
-  getBankOptionOrDefault,
   joinAccountSegments,
   splitAccountNumberForBank,
 } from '@/lib/banks'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Pencil } from 'lucide-react'
 
-function BankIcon({ bank }: { bank: BankOption }) {
+function BankIcon({ bank, label }: { bank?: BankOption | null; label?: string }) {
+  const [imageFailed, setImageFailed] = useState(false)
+  const text = bank?.icon ?? label?.trim().slice(0, 2) ?? '직접'
+
+  useEffect(() => {
+    setImageFailed(false)
+  }, [bank?.logoSrc])
+
+  if (bank?.logoSrc && !imageFailed) {
+    return (
+      <span
+        className="inline-flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-gray-100 bg-white"
+        aria-hidden="true"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={bank.logoSrc}
+          alt=""
+          className="h-full w-full object-contain"
+          loading="lazy"
+          onError={() => setImageFailed(true)}
+        />
+      </span>
+    )
+  }
+
   return (
     <span
       className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-black text-gray-950"
-      style={{ backgroundColor: bank.color }}
+      style={{ backgroundColor: bank?.color ?? '#eef2ff' }}
       aria-hidden="true"
     >
-      {bank.icon}
+      {text}
     </span>
   )
 }
@@ -35,7 +60,30 @@ export function BankSelectField({
   error?: string
 }) {
   const [isOpen, setIsOpen] = useState(false)
+  const [isCustomBankMode, setIsCustomBankMode] = useState(false)
+  const [customBankName, setCustomBankName] = useState('')
   const selectedBank = getBankOption(value)
+  const customValue = value && !selectedBank ? value : ''
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    setCustomBankName(customValue)
+  }, [customValue, isOpen])
+
+  const onCustomBankChange = (nextValue: string) => {
+    const trimmedValue = nextValue.trim()
+    if (!trimmedValue) return
+
+    onChange(trimmedValue)
+    setIsCustomBankMode(false)
+    setIsOpen(false)
+  }
+
+  const handleCustomSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    onCustomBankChange(customBankName)
+  }
 
   return (
     <div className="relative">
@@ -45,9 +93,9 @@ export function BankSelectField({
         disabled={disabled}
         className={`input-field flex items-center justify-between text-left ${error ? 'border-red-500' : ''}`}
       >
-        <span className={`flex min-w-0 items-center gap-2 ${selectedBank ? 'text-gray-900' : 'text-gray-400'}`}>
-          {selectedBank && <BankIcon bank={selectedBank} />}
-          <span className="truncate">{selectedBank?.name ?? '은행 선택'}</span>
+        <span className={`flex min-w-0 items-center gap-2 ${selectedBank || customValue ? 'text-gray-900' : 'text-gray-400'}`}>
+          {(selectedBank || customValue) && <BankIcon bank={selectedBank} label={customValue} />}
+          <span className="truncate">{(selectedBank?.name ?? customValue) || '은행 선택'}</span>
         </span>
         <ChevronDown className={`h-5 w-5 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
@@ -60,6 +108,7 @@ export function BankSelectField({
               type="button"
               onClick={() => {
                 onChange(bank.name)
+                setIsCustomBankMode(false)
                 setIsOpen(false)
               }}
               className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-bold text-gray-900 transition hover:bg-gray-50"
@@ -68,6 +117,41 @@ export function BankSelectField({
               <span>{bank.name}</span>
             </button>
           ))}
+          <div className="border-t border-gray-100 p-2">
+            {isCustomBankMode ? (
+              <form onSubmit={handleCustomSubmit} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={customBankName}
+                  onChange={(event) => setCustomBankName(event.target.value)}
+                  autoFocus
+                  placeholder="은행명 직접 입력"
+                  className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold outline-none focus:border-primary-600 focus:ring-2 focus:ring-primary-100"
+                />
+                <button
+                  type="submit"
+                  disabled={!customBankName.trim()}
+                  className="shrink-0 rounded-lg bg-gray-950 px-3 py-2 text-xs font-black text-white disabled:bg-gray-300"
+                >
+                  적용
+                </button>
+              </form>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCustomBankMode(true)
+                  setCustomBankName(customValue)
+                }}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-2.5 text-left text-sm font-bold text-gray-700 transition hover:bg-gray-50"
+              >
+                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600">
+                  <Pencil className="h-3.5 w-3.5" />
+                </span>
+                <span>직접 입력</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -91,7 +175,9 @@ export function AccountNumberSegmentField({
   disabled?: boolean
   error?: string
 }) {
-  const bank = getBankOptionOrDefault(bankName)
+  const selectedBank = getBankOption(bankName)
+  const segments = getAccountSegmentsForBank(bankName)
+  const segmentKey = (selectedBank?.id ?? bankName) || 'custom-bank'
   const inputRefs = useRef<Array<HTMLInputElement | null>>([])
   const segmentValues = useMemo(
     () => splitAccountNumberForBank(bankName, value),
@@ -99,7 +185,7 @@ export function AccountNumberSegmentField({
   )
 
   const updateSegment = (index: number, nextValue: string) => {
-    const maxLength = bank.segments[index]
+    const maxLength = segments[index]
     const digits = nextValue.replace(/\D/g, '')
     const nextSegments = [...segmentValues]
 
@@ -120,8 +206,8 @@ export function AccountNumberSegmentField({
   return (
     <div>
       <div className="flex min-w-0 items-center gap-1.5">
-        {bank.segments.map((length, index) => (
-          <div key={`${bank.id}-${index}`} className="flex min-w-0 flex-1 items-center gap-1.5">
+        {segments.map((length, index) => (
+          <div key={`${segmentKey}-${index}`} className="flex min-w-0 flex-1 items-center gap-1.5">
             <input
               ref={(element) => { inputRefs.current[index] = element }}
               type="text"
@@ -136,13 +222,12 @@ export function AccountNumberSegmentField({
               }`}
               placeholder={'0'.repeat(Math.min(length, 4))}
             />
-            {index < bank.segments.length - 1 && (
+            {index < segments.length - 1 && (
               <span className="shrink-0 text-sm font-black text-gray-400">-</span>
             )}
           </div>
         ))}
       </div>
-      <p className="mt-1 text-xs text-gray-500">{bank.name} 형식: {bank.placeholder}</p>
       {error && (
         <p className="mt-2 text-sm text-red-500">{error}</p>
       )}

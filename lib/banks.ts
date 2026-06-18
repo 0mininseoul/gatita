@@ -3,9 +3,12 @@ export type BankOption = {
   name: string
   icon: string
   color: string
+  logoSrc?: string
   segments: number[]
   placeholder: string
 }
+
+export const CUSTOM_BANK_ACCOUNT_SEGMENTS = [4, 4, 4, 4]
 
 export const BANK_OPTIONS: BankOption[] = [
   {
@@ -13,6 +16,7 @@ export const BANK_OPTIONS: BankOption[] = [
     name: '카카오뱅크',
     icon: 'K',
     color: '#ffe500',
+    logoSrc: 'https://www.kakaobank.com/favicon.ico',
     segments: [4, 2, 7],
     placeholder: 'XXXX-XX-XXXXXXX',
   },
@@ -21,6 +25,7 @@ export const BANK_OPTIONS: BankOption[] = [
     name: '토스뱅크',
     icon: 'T',
     color: '#3182f6',
+    logoSrc: 'https://static.toss.im/icons/png/4x/icon-toss-logo.png',
     segments: [4, 4, 4],
     placeholder: 'XXXX-XXXX-XXXX',
   },
@@ -29,6 +34,7 @@ export const BANK_OPTIONS: BankOption[] = [
     name: 'KB국민은행',
     icon: 'KB',
     color: '#f7c600',
+    logoSrc: 'https://www.kbstar.com/favicon.ico',
     segments: [6, 2, 6],
     placeholder: 'XXXXXX-XX-XXXXXX',
   },
@@ -37,6 +43,7 @@ export const BANK_OPTIONS: BankOption[] = [
     name: '신한은행',
     icon: 'S',
     color: '#0046ff',
+    logoSrc: 'https://www.shinhan.com/favicon.ico',
     segments: [3, 3, 6],
     placeholder: 'XXX-XXX-XXXXXX',
   },
@@ -45,6 +52,7 @@ export const BANK_OPTIONS: BankOption[] = [
     name: '우리은행',
     icon: 'W',
     color: '#1898d5',
+    logoSrc: 'https://www.wooribank.com/favicon.ico',
     segments: [4, 3, 6],
     placeholder: 'XXXX-XXX-XXXXXX',
   },
@@ -53,6 +61,7 @@ export const BANK_OPTIONS: BankOption[] = [
     name: '하나은행',
     icon: 'H',
     color: '#00a78e',
+    logoSrc: 'https://www.kebhana.com/favicon.ico',
     segments: [3, 6, 5],
     placeholder: 'XXX-XXXXXX-XXXXX',
   },
@@ -61,6 +70,7 @@ export const BANK_OPTIONS: BankOption[] = [
     name: 'NH농협은행',
     icon: 'NH',
     color: '#0a8f3c',
+    logoSrc: 'https://banking.nonghyup.com/favicon.ico',
     segments: [3, 4, 4, 2],
     placeholder: 'XXX-XXXX-XXXX-XX',
   },
@@ -69,6 +79,7 @@ export const BANK_OPTIONS: BankOption[] = [
     name: 'IBK기업은행',
     icon: 'IBK',
     color: '#0066b3',
+    logoSrc: 'https://www.ibk.co.kr/favicon.ico',
     segments: [3, 6, 2, 3],
     placeholder: 'XXX-XXXXXX-XX-XXX',
   },
@@ -77,6 +88,7 @@ export const BANK_OPTIONS: BankOption[] = [
     name: '케이뱅크',
     icon: 'K',
     color: '#111827',
+    logoSrc: 'https://www.kbanknow.com/favicon.ico',
     segments: [3, 3, 6],
     placeholder: 'XXX-XXX-XXXXXX',
   },
@@ -85,6 +97,7 @@ export const BANK_OPTIONS: BankOption[] = [
     name: 'SC제일은행',
     icon: 'SC',
     color: '#0f8f55',
+    logoSrc: 'https://www.standardchartered.co.kr/favicon.ico',
     segments: [3, 2, 6],
     placeholder: 'XXX-XX-XXXXXX',
   },
@@ -100,12 +113,16 @@ export function getBankOptionOrDefault(bankName?: string | null) {
   return getBankOption(bankName) ?? DEFAULT_BANK_OPTION
 }
 
+export function getAccountSegmentsForBank(bankName?: string | null) {
+  return getBankOption(bankName)?.segments ?? CUSTOM_BANK_ACCOUNT_SEGMENTS
+}
+
 export function splitAccountNumberForBank(bankName: string | null | undefined, accountNumber: string) {
-  const bank = getBankOptionOrDefault(bankName)
+  const segments = getAccountSegmentsForBank(bankName)
   const digits = accountNumber.replace(/\D/g, '')
   let cursor = 0
 
-  return bank.segments.map((length) => {
+  return segments.map((length) => {
     const value = digits.slice(cursor, cursor + length)
     cursor += length
     return value
@@ -118,9 +135,12 @@ export function joinAccountSegments(segments: string[]) {
 
 export function isAccountNumberCompleteForBank(bankName: string | null | undefined, accountNumber: string) {
   const bank = getBankOption(bankName)
-  if (!bank) return false
-
   const digits = accountNumber.replace(/\D/g, '')
+
+  if (!bank) {
+    return digits.length >= 8 && digits.length <= 16
+  }
+
   const expectedLength = bank.segments.reduce((sum, length) => sum + length, 0)
 
   return digits.length === expectedLength

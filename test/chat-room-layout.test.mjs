@@ -124,6 +124,15 @@ test('chat room hides participant chips behind a participant sheet and shows cre
   assert.match(source, /account_number/, 'creator payout account should display the account number')
 })
 
+test('chat room can copy the room creator payout account', () => {
+  const source = readProjectFile('app/rooms/[id]/page.tsx')
+
+  assert.match(source, /copyCreatorPayoutAccount/)
+  assert.match(source, /navigator\.clipboard\.writeText/)
+  assert.match(source, /복사/)
+  assert.match(source, /계좌 정보를 복사했습니다/)
+})
+
 test('map app and bottom sheet use the visual viewport and internal sheet scrolling', () => {
   const pageSource = readProjectFile('app/page.tsx')
   const mapSource = readProjectFile('components/CampusRouteMap.tsx')
@@ -144,7 +153,9 @@ test('kakao map zoom control is offset below the app header', () => {
   const mapSource = readProjectFile('components/CampusRouteMap.tsx')
   const cssSource = readProjectFile('app/globals.css')
 
-  assert.match(mapSource, /gatita-zoom-control-offset/)
-  assert.match(cssSource, /\.gatita-kakao-map \.gatita-zoom-control-offset/)
-  assert.match(cssSource, /top:\s*8\.75rem !important;/)
+  assert.match(mapSource, /gatita-custom-zoom-control/)
+  assert.match(mapSource, /handleZoomIn/)
+  assert.match(mapSource, /handleZoomOut/)
+  assert.match(cssSource, /\.gatita-custom-zoom-control/)
+  assert.match(cssSource, /top:\s*12\.75rem;/)
 })

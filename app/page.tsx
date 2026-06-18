@@ -16,7 +16,8 @@ import {
 } from '@/lib/supabase'
 import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
 import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
-import { ArrowRight, Clock, MessageSquareText, Star, Settings, LogOut, Users, X } from 'lucide-react'
+import { PWAInstallManager, isInstalled } from '@/lib/pwa'
+import { ArrowRight, Clock, Download, MessageSquareText, Share2, Star, Settings, LogOut, Users, X } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 
@@ -31,6 +32,8 @@ type AuthMode = 'signup' | null
 type MyRoomSummary = CampusMapRoom & {
   departure_date: string
 }
+
+const PWA_ONBOARDING_STORAGE_KEY = 'gatita:pwa-onboarding-dismissed'
 
 function GoogleIcon({ className = 'w-5 h-5' }: { className?: string }) {
   return (
@@ -56,6 +59,8 @@ export default function HomePage() {
   const [isCreatingMapRoom, setIsCreatingMapRoom] = useState(false)
   const [isStartingGoogle, setIsStartingGoogle] = useState(false)
   const [hasEnteredApp, setHasEnteredApp] = useState(false)
+  const [showPwaOnboarding, setShowPwaOnboarding] = useState(false)
+  const [pwaInstallManager, setPwaInstallManager] = useState<PWAInstallManager | null>(null)
   const [authNotice, setAuthNotice] = useState<string | null>(null)
   const lastAuthErrorAtRef = useRef(0)
   const router = useRouter()
@@ -398,6 +403,20 @@ export default function HomePage() {
     }
   }, [hasEnteredApp, user])
 
+  useEffect(() => {
+    if (!user || !hasEnteredApp) return
+    if (isInstalled()) return
+    if (window.localStorage.getItem(PWA_ONBOARDING_STORAGE_KEY)) return
+
+    const manager = new PWAInstallManager()
+    const timerId = window.setTimeout(() => {
+      setPwaInstallManager(manager)
+      setShowPwaOnboarding(true)
+    }, 600)
+
+    return () => window.clearTimeout(timerId)
+  }, [hasEnteredApp, user])
+
   const validateRouteSelection = (from: LocationType | '', to: LocationType | '') => {
     if (!from || !to) {
       toast.error('출발지와 도착지를 모두 선택해주세요')
@@ -583,6 +602,23 @@ export default function HomePage() {
     setShowMyRooms(true)
     loadMyRooms()
   }
+
+  const dismissPwaOnboarding = useCallback(() => {
+    window.localStorage.setItem(PWA_ONBOARDING_STORAGE_KEY, 'true')
+    setShowPwaOnboarding(false)
+  }, [])
+
+  const handlePwaInstallClick = useCallback(async () => {
+    const installed = await pwaInstallManager?.showInstallPrompt()
+
+    if (installed) {
+      dismissPwaOnboarding()
+      toast.success('홈 화면에 추가되었습니다')
+      return
+    }
+
+    toast.success('브라우저 메뉴에서 홈 화면에 추가를 선택해주세요')
+  }, [dismissPwaOnboarding, pwaInstallManager])
 
   const handleFindClick = () => {
     toast.error('먼저 로그인하셔야 합니다.');
@@ -796,6 +832,71 @@ export default function HomePage() {
                 참여 중인 방이 없습니다
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {showPwaOnboarding && (
+        <div
+          className="absolute inset-0 z-[60] flex items-end bg-gray-950/30 px-3 pb-3 pt-20"
+          onClick={dismissPwaOnboarding}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pwa-onboarding-title"
+            className="mx-auto w-full max-w-sm rounded-lg border border-white/80 bg-white p-4 shadow-[0_18px_48px_rgba(17,24,39,0.24)]"
+            style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">PWA</p>
+                <h2 id="pwa-onboarding-title" className="mt-1 text-lg font-black text-gray-950">
+                  홈 화면에 추가해서 앱처럼 쓰세요
+                </h2>
+              </div>
+              <button
+                type="button"
+                aria-label="PWA 안내 닫기"
+                onClick={dismissPwaOnboarding}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              <div className="flex gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                <Share2 className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
+                <p className="text-xs font-bold leading-5 text-gray-700">
+                  iPhone에서는 Safari 공유 버튼을 누른 뒤 홈 화면에 추가를 선택하세요.
+                </p>
+              </div>
+              <div className="flex gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                <Download className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
+                <p className="text-xs font-bold leading-5 text-gray-700">
+                  Android Chrome에서는 설치 버튼이나 브라우저 메뉴의 앱 설치를 사용하면 됩니다.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={dismissPwaOnboarding}
+                className="h-11 flex-1 rounded-lg border border-gray-200 bg-white text-sm font-black text-gray-700 transition hover:bg-gray-50"
+              >
+                나중에
+              </button>
+              <button
+                type="button"
+                onClick={handlePwaInstallClick}
+                className="h-11 flex-1 rounded-lg bg-gray-950 text-sm font-black text-white transition hover:bg-gray-800"
+              >
+                설치 시도
+              </button>
+            </div>
           </div>
         </div>
       )}

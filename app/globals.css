@@ -424,7 +424,12 @@
   .gatita-kakao-map .zoom_control,
   .gatita-kakao-map .ZoomControl,
   .gatita-kakao-map .gatita-zoom-control-offset {
-    top: 8.75rem !important;
+    display: none !important;
+  }
+
+  .gatita-custom-zoom-control {
+    top: 12.75rem;
+    right: max(0.75rem, env(safe-area-inset-right));
   }
 
   .gatita-bottom-sheet {

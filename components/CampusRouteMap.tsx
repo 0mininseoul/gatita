@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, Clock, Compass, Plus, Users, X } from 'lucide-react'
+import { ArrowRight, Clock, Compass, Minus, Plus, Users, X } from 'lucide-react'
 import {
   getDepartureTimeOptions,
   getDestinationOptions,
@@ -198,6 +198,20 @@ export default function CampusRouteMap({
     setDraftDepartureTime('')
   }, [onSelectFrom])
 
+  const handleZoomIn = useCallback(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    map.setLevel(Math.max(MIN_MAP_LEVEL, map.getLevel() - 1))
+  }, [])
+
+  const handleZoomOut = useCallback(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    map.setLevel(Math.min(MAX_MAP_LEVEL, map.getLevel() + 1))
+  }, [])
+
   useEffect(() => {
     const appKey = process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY
 
@@ -221,13 +235,6 @@ export default function CampusRouteMap({
         map.setDraggable(true)
         map.setZoomable(true)
         mapRef.current = map
-
-        const zoomControl = new kakao.maps.ZoomControl()
-        map.addControl(zoomControl, kakao.maps.ControlPosition.RIGHT)
-        window.setTimeout(() => {
-          const zoomControlElement = mapContainerRef.current?.querySelector('.zoom_control, .ZoomControl, [class*="ZoomControl"], [class*="zoom_control"]') as HTMLElement | null
-          zoomControlElement?.classList.add('gatita-zoom-control-offset')
-        }, 0)
 
         kakao.maps.event.addListener(map, 'dragend', () => clampMapToCampus(map, kakao))
         kakao.maps.event.addListener(map, 'zoom_changed', () => clampMapToCampus(map, kakao))
@@ -373,6 +380,28 @@ export default function CampusRouteMap({
           </div>
         )}
       </div>
+
+      {mapStatus === 'ready' && (
+        <div className="gatita-custom-zoom-control absolute z-20 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-[0_8px_24px_rgba(17,24,39,0.16)]">
+          <button
+            type="button"
+            aria-label="지도 확대"
+            onClick={handleZoomIn}
+            className="flex h-10 w-10 items-center justify-center text-gray-800 transition hover:bg-gray-50"
+          >
+            <Plus className="h-5 w-5" />
+          </button>
+          <div className="mx-2 h-px bg-gray-200" />
+          <button
+            type="button"
+            aria-label="지도 축소"
+            onClick={handleZoomOut}
+            className="flex h-10 w-10 items-center justify-center text-gray-800 transition hover:bg-gray-50"
+          >
+            <Minus className="h-5 w-5" />
+          </button>
+        </div>
+      )}
 
       {(mapStatus === 'missing-key' || mapStatus === 'error') && (
         <div

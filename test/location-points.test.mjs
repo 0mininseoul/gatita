@@ -204,3 +204,16 @@ test('landing and authenticated map use separate URL paths', () => {
   assert.match(settingsSource, /router\.push\('\/map'\)/)
   assert.match(chatSource, /router\.push\('\/map'\)/)
 })
+
+test('map shows a one-time PWA home screen onboarding modal', () => {
+  const source = readProjectFile('app/page.tsx')
+  const manifest = readProjectFile('public/manifest.json')
+
+  assert.match(source, /showPwaOnboarding/)
+  assert.match(source, /gatita:pwa-onboarding-dismissed/)
+  assert.match(source, /홈 화면에 추가/)
+  assert.match(source, /PWAInstallManager/)
+  assert.match(source, /isInstalled\(\)/)
+  assert.match(manifest, /"display":\s*"standalone"/)
+  assert.match(manifest, /"start_url":\s*"\/map"/)
+})

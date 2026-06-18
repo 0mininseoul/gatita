@@ -153,9 +153,9 @@ export default function SettingsPage() {
   const nextChangeDate = getNextChangeDate(user.nickname_updated_at)
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen app-bg">
       {/* Header */}
-      <header className="bg-white border-b border-gray-100 px-4 py-4">
+      <header className="app-header px-4 py-4">
         <div className="flex items-center">
           <button
             onClick={() => router.back()}
@@ -171,8 +171,11 @@ export default function SettingsPage() {
         {/* 프로필 정보 */}
         <div className="card p-6 mb-6">
           <div className="flex items-center mb-6">
-            <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mr-4">
-              <UserIcon className="w-8 h-8 text-primary-600" />
+            <div
+              className="w-16 h-16 rounded-full flex items-center justify-center mr-4"
+              style={{ backgroundImage: 'var(--brand-gradient)', boxShadow: '0 8px 20px rgba(39, 130, 255, 0.28)' }}
+            >
+              <UserIcon className="w-8 h-8 text-white" />
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900">{user.nickname}</h2>

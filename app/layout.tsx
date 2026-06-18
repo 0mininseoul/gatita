@@ -66,7 +66,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#3b82f6',
+  themeColor: '#2782ff',
   viewportFit: 'cover',
 }
 
@@ -78,7 +78,7 @@ export default function RootLayout({
   return (
     <html lang="ko" className={paperlogy.variable}>
       <body className="antialiased">
-        <div id="root" className="min-h-screen bg-gray-50">
+        <div id="root" className="min-h-screen app-bg">
           {children}
         </div>
         <Toaster

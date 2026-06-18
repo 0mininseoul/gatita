@@ -10,10 +10,10 @@ type LegalShellProps = {
 
 export default function LegalShell({ title, description, updatedAt, children }: LegalShellProps) {
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="min-h-screen app-bg">
       <div className="mx-auto flex w-full max-w-3xl flex-col px-5 py-6 sm:px-6 sm:py-10">
         <nav className="mb-6 flex items-center justify-between text-sm">
-          <Link href="/" className="font-semibold text-primary-600">
+          <Link href="/" className="font-extrabold text-gray-900">
             같이타
           </Link>
           <div className="flex items-center gap-4 text-gray-500">
@@ -26,9 +26,9 @@ export default function LegalShell({ title, description, updatedAt, children }: 
           </div>
         </nav>
 
-        <article className="rounded-lg border border-gray-100 bg-white p-5 shadow-sm sm:p-8">
+        <article className="card p-5 sm:p-8">
           <header className="border-b border-gray-100 pb-6">
-            <p className="mb-2 text-sm font-medium text-primary-600">같이타</p>
+            <p className="mb-2 text-sm font-bold text-gray-900">같이타</p>
             <h1 className="text-3xl font-bold tracking-normal text-gray-950">{title}</h1>
             <p className="mt-3 text-base leading-7 text-gray-600">{description}</p>
             <p className="mt-4 text-sm text-gray-500">시행일 및 최종 업데이트: {updatedAt}</p>

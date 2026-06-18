@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense, useCallback, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { ChatRoom, User, LocationType, LOCATIONS } from '@/lib/supabase'
+import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
 import { ArrowLeft, Users, Clock, Plus, Star } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -20,6 +21,10 @@ function RoomsPageContent() {
 
   const fromLocation = searchParams.get('from') as LocationType
   const toLocation = searchParams.get('to') as LocationType
+  const routePresenceChannel = user && fromLocation && toLocation
+    ? `presence:route:${encodeURIComponent(fromLocation)}:${encodeURIComponent(toLocation)}`
+    : null
+  const routeOnlineDisplayCount = usePresenceDisplayCount(supabase, routePresenceChannel, user)
 
   const loadRooms = useCallback(async () => {
     try {
@@ -212,9 +217,9 @@ function RoomsPageContent() {
   const { myRooms, futureRooms, pastRooms } = separateRooms(rooms)
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen app-bg">
       {/* Header */}
-      <header className="bg-white border-b border-gray-100 px-4 py-4 sticky top-0 z-10">
+      <header className="app-header px-4 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center">
             <button
@@ -251,6 +256,11 @@ function RoomsPageContent() {
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="mt-3 inline-flex items-center gap-2 rounded-lg border border-primary-100 bg-white/80 px-3 py-2 text-sm font-bold text-gray-900 shadow-sm">
+          <Users className="h-4 w-4 text-primary-600" />
+          <span>현재 {routeOnlineDisplayCount}명 접속 중</span>
         </div>
       </header>
 
@@ -324,7 +334,7 @@ function RoomsPageContent() {
               아직 채팅방이 없어요
             </h3>
             <p className="text-gray-600 mb-6">
-              새로운 채팅방을 만들어 동행자를 모집해보세요
+              지금 {routeOnlineDisplayCount}명이 이 경로를 보고 있어요
             </p>
             <button
               onClick={() => setIsCreatingRoom(true)}
@@ -339,7 +349,7 @@ function RoomsPageContent() {
         {/* 플로팅 버튼 */}
         <button
           onClick={() => setIsCreatingRoom(true)}
-          className="fixed bottom-6 right-6 w-14 h-14 bg-primary-600 hover:bg-primary-700 text-white rounded-full shadow-lg flex items-center justify-center z-20"
+          className="fab fixed bottom-6 right-6 w-14 h-14 z-30"
         >
           <Plus className="w-6 h-6" />
         </button>
@@ -506,7 +516,7 @@ function CreateRoomModal({ fromLocation, toLocation, selectedDate, user, onClose
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl w-full max-w-md">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
         <div className="p-6">
           <h3 className="text-lg font-semibold mb-4">새 채팅방 만들기</h3>
 

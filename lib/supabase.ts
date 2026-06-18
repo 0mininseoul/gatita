@@ -113,6 +113,17 @@ export type LocationType =
   | '제2기숙사'
   | 'AI공학관'
 
+export type LocationPoint = {
+  id: LocationType
+  label: string
+  shortLabel: string
+  description: string
+  lat: number
+  lng: number
+  mapX: number
+  mapY: number
+}
+
 // Location display names
 export const LOCATIONS: Record<LocationType, string> = {
   '가천대역_1번출구': '가천대역 1번출구',
@@ -121,6 +132,90 @@ export const LOCATIONS: Record<LocationType, string> = {
   '제3기숙사': '제3기숙사',
   '제2기숙사': '제2기숙사',
   'AI공학관': 'AI공학관'
+}
+
+export const LOCATION_ORDER: LocationType[] = [
+  '가천대역_1번출구',
+  '가천대학교_정문',
+  '교육대학원',
+  'AI공학관',
+  '제3기숙사',
+  '제2기숙사'
+]
+
+export const LOCATION_POINTS: Record<LocationType, LocationPoint> = {
+  '가천대역_1번출구': {
+    id: '가천대역_1번출구',
+    label: '가천대역 1번출구',
+    shortLabel: '가천대역',
+    description: '역 출구 앞',
+    lat: 37.451237,
+    lng: 127.129389,
+    mapX: 16,
+    mapY: 55
+  },
+  '가천대학교_정문': {
+    id: '가천대학교_정문',
+    label: '가천대학교 정문',
+    shortLabel: '정문',
+    description: '글로벌캠퍼스 진입 지점',
+    lat: 37.45112,
+    lng: 127.13092,
+    mapX: 33,
+    mapY: 50
+  },
+  '교육대학원': {
+    id: '교육대학원',
+    label: '교육대학원',
+    shortLabel: '교육대학원',
+    description: '캠퍼스 중앙 남측',
+    lat: 37.45013,
+    lng: 127.13218,
+    mapX: 57,
+    mapY: 68
+  },
+  '제3기숙사': {
+    id: '제3기숙사',
+    label: '제3기숙사',
+    shortLabel: '제3기숙사',
+    description: '기숙사 북측',
+    lat: 37.45227,
+    lng: 127.13318,
+    mapX: 76,
+    mapY: 29
+  },
+  '제2기숙사': {
+    id: '제2기숙사',
+    label: '제2기숙사',
+    shortLabel: '제2기숙사',
+    description: '기숙사 남측',
+    lat: 37.44942,
+    lng: 127.13368,
+    mapX: 79,
+    mapY: 80
+  },
+  'AI공학관': {
+    id: 'AI공학관',
+    label: 'AI공학관',
+    shortLabel: 'AI공학관',
+    description: 'AI·공학관 인근',
+    lat: 37.45142,
+    lng: 127.13242,
+    mapX: 61,
+    mapY: 46
+  }
+}
+
+export const GACHON_GLOBAL_CAMPUS_CENTER = {
+  lat: 37.45085,
+  lng: 127.13135
+}
+
+export const GACHON_GLOBAL_CAMPUS_BOUNDS = {
+  south: 37.4478,
+  west: 127.1246,
+  north: 37.4539,
+  east: 127.1362
 }
 
 // Department options

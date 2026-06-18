@@ -12,15 +12,17 @@ const NavigationBar: React.FC<NavigationBarProps> = ({ onFindClick }) => {
     width: '100%',
     maxWidth: '1200px',
     padding: '0.75rem 1rem',
-    backgroundColor: 'rgba(28, 28, 30, 0.7)',
+    backgroundColor: 'rgba(255, 255, 255, 0.82)',
     borderRadius: '1.5rem',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    border: '1px solid rgba(17, 24, 39, 0.08)',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     fontFamily: 'var(--font-paperlogy), sans-serif',
     backdropFilter: 'blur(10px)',
-    color: 'white',
+    WebkitBackdropFilter: 'blur(10px)',
+    boxShadow: '0 8px 24px rgba(17, 24, 39, 0.06)',
+    color: '#111827',
     gap: '0.75rem',
   };
 
@@ -28,7 +30,7 @@ const NavigationBar: React.FC<NavigationBarProps> = ({ onFindClick }) => {
     cursor: 'pointer',
     background: 'none',
     border: 'none',
-    color: 'white',
+    color: '#374151',
     padding: '0.5rem',
     display: 'flex',
     alignItems: 'center',
@@ -54,7 +56,7 @@ const NavigationBar: React.FC<NavigationBarProps> = ({ onFindClick }) => {
             fontFamily: 'var(--font-paperlogy), sans-serif',
             fontSize: '1rem',
             fontWeight: 800,
-            color: '#ffffff',
+            color: '#111827',
           }}
         >
           같이타
@@ -73,10 +75,11 @@ const NavigationBar: React.FC<NavigationBarProps> = ({ onFindClick }) => {
           loop={true}
           showCursor={true}
           cursorCharacter="_"
+          textColors={['#374151']}
           style={{
             fontFamily: 'var(--font-paperlogy), sans-serif',
             fontWeight: 500,
-            color: '#9CA3AF',
+            color: '#374151',
             fontSize: '0.9375rem',
             minWidth: 0,
             overflow: 'hidden',
@@ -89,7 +92,7 @@ const NavigationBar: React.FC<NavigationBarProps> = ({ onFindClick }) => {
       <button 
         onClick={onFindClick} 
         style={findButtonStyle}
-        onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'}
+        onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(17, 24, 39, 0.06)'}
         onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
       >
         <Search size={20} />

@@ -44,9 +44,11 @@ npm run dev
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+NEXT_PUBLIC_KAKAO_MAP_APP_KEY=your-kakao-javascript-key-here
 ```
 
 서버 전용 작업이 생기기 전까지 `SUPABASE_SERVICE_ROLE_KEY`는 로컬/배포 환경에 필수는 아닙니다. 클라이언트 코드에서 service role key를 절대 사용하지 않습니다.
+카카오맵은 Kakao Developers에서 발급한 JavaScript 키를 사용합니다. 개발/운영 도메인을 카카오 앱 플랫폼에 등록해야 실제 지도가 표시됩니다.
 
 ## Supabase 설정
 

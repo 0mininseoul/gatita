@@ -4,14 +4,16 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { User, LocationType, LOCATIONS, Favorite } from '@/lib/supabase'
+import { ChatRoom, User, LocationType, LOCATIONS, Favorite } from '@/lib/supabase'
+import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
 import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
-import { MapPin, ArrowRight, Star, Settings, LogOut } from 'lucide-react'
+import { MapPin, ArrowRight, Star, Settings, LogOut, SlidersHorizontal } from 'lucide-react'
+import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 
+import CampusRouteMap, { CampusMapRoom } from '@/components/CampusRouteMap'
 import SignupForm from '@/components/auth/SignupForm'
-import Hyperspeed from '@/components/Hyperspeed'
-import { hyperspeedPresets } from '@/components/presets'
+import Grainient from '@/components/Grainient'
 import SplitText from '@/components/SplitText'
 import NavigationBar from '@/components/NavigationBar'
 
@@ -35,12 +37,13 @@ export default function HomePage() {
   const [fromLocation, setFromLocation] = useState<LocationType | ''>('')
   const [toLocation, setToLocation] = useState<LocationType | ''>('')
   const [favorites, setFavorites] = useState<Favorite[]>([])
+  const [mapRooms, setMapRooms] = useState<CampusMapRoom[]>([])
+  const [isLoadingMapRooms, setIsLoadingMapRooms] = useState(false)
   const [isStartingGoogle, setIsStartingGoogle] = useState(false)
   const [hasEnteredApp, setHasEnteredApp] = useState(false)
   const [authNotice, setAuthNotice] = useState<string | null>(null)
   const lastAuthErrorAtRef = useRef(0)
   const router = useRouter()
-  const hyperspeedOptions = useMemo(() => ({ ...hyperspeedPresets.one }), [])
 
   const supabase = useMemo(() => {
     try {
@@ -91,6 +94,52 @@ export default function HomePage() {
     }
   }, [supabase])
 
+  const loadMapRooms = useCallback(async () => {
+    if (!supabase) {
+      return
+    }
+
+    setIsLoadingMapRooms(true)
+
+    try {
+      const today = format(new Date(), 'yyyy-MM-dd')
+      const currentTime = format(new Date(), 'HH:mm')
+      const { data } = await supabase
+        .from('chat_rooms')
+        .select(`
+          id,
+          from_location,
+          to_location,
+          departure_time,
+          max_participants,
+          participants:room_participants(id, user_id)
+        `)
+        .eq('departure_date', today)
+        .eq('status', 'active')
+        .order('departure_time', { ascending: true })
+
+      const upcomingRooms = ((data ?? []) as ChatRoom[])
+        .filter((room) => room.departure_time >= currentTime)
+        .map((room) => ({
+          id: room.id,
+          from_location: room.from_location,
+          to_location: room.to_location,
+          departure_time: room.departure_time,
+          max_participants: room.max_participants,
+          participants: room.participants?.map((participant) => ({
+            id: participant.id,
+            user_id: participant.user_id,
+          })),
+        }))
+
+      setMapRooms(upcomingRooms)
+    } catch (error) {
+      console.error('Load map rooms error:', error)
+    } finally {
+      setIsLoadingMapRooms(false)
+    }
+  }, [supabase])
+
   const checkAuth = useCallback(async (enterApp = false) => {
     if (!supabase) {
       setLoading(false)
@@ -127,6 +176,7 @@ export default function HomePage() {
           setAuthNotice(null)
           setUser(userData)
           await loadFavorites(userData.id)
+          await loadMapRooms()
           if (enterApp) setHasEnteredApp(true)
         } else {
           setAuthMode('signup')
@@ -137,7 +187,7 @@ export default function HomePage() {
     } finally {
       setLoading(false)
     }
-  }, [loadFavorites, rejectNonGachonAccount, supabase])
+  }, [loadFavorites, loadMapRooms, rejectNonGachonAccount, supabase])
 
   useEffect(() => {
     if (!supabase) {
@@ -174,6 +224,34 @@ export default function HomePage() {
     return () => subscription.unsubscribe()
   }, [checkAuth, supabase])
 
+  useEffect(() => {
+    if (!user || !hasEnteredApp) return
+
+    loadMapRooms()
+    const intervalId = window.setInterval(loadMapRooms, 30000)
+
+    return () => window.clearInterval(intervalId)
+  }, [hasEnteredApp, loadMapRooms, user])
+
+  const onlineDisplayCount = usePresenceDisplayCount(
+    supabase,
+    user && hasEnteredApp ? 'presence:gachon-map' : null,
+    user
+  )
+
+  // Lock page scroll while the full-screen landing hero is shown (the
+  // authenticated dashboard below still scrolls normally).
+  useEffect(() => {
+    const showHero = !loading && authMode !== 'signup' && (!user || !hasEnteredApp)
+    if (!showHero) return
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [loading, authMode, user, hasEnteredApp])
+
   const handleSearch = () => {
     if (!fromLocation || !toLocation) {
       toast.error('출발지와 도착지를 모두 선택해주세요')
@@ -186,6 +264,22 @@ export default function HomePage() {
     }
 
     router.push(`/rooms?from=${fromLocation}&to=${toLocation}`)
+  }
+
+  const handleFromLocationChange = (location: LocationType | '') => {
+    setFromLocation(location)
+    if (!location || location === toLocation) {
+      setToLocation('')
+    }
+  }
+
+  const handleToLocationChange = (location: LocationType | '') => {
+    if (location && location === fromLocation) {
+      toast.error('출발지와 도착지가 같을 수 없습니다')
+      return
+    }
+
+    setToLocation(location)
   }
 
   const handleFavoriteClick = (favorite: Favorite) => {
@@ -236,10 +330,10 @@ export default function HomePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-black">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mb-4"></div>
-        <p className="text-white text-lg">로딩 중...</p>
-        <p className="text-gray-400 text-sm mt-2">잠시만 기다려주세요</p>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4"></div>
+        <p className="text-gray-900 text-lg">로딩 중...</p>
+        <p className="text-gray-500 text-sm mt-2">잠시만 기다려주세요</p>
       </div>
     )
   }
@@ -259,12 +353,13 @@ export default function HomePage() {
   if (!user || !hasEnteredApp) {
     return (
       <main style={{
-        position: 'relative', width: '100vw', height: '100vh',
-        backgroundColor: '#000', color: 'white',
+        position: 'relative', width: '100vw', height: '100dvh',
+        background: 'linear-gradient(180deg, #b9b4ff 0%, #6f6ad8 100%)',
+        color: '#ffffff',
         overflow: 'hidden',
       }}>
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0 }}>
-          <Hyperspeed effectOptions={hyperspeedOptions} />
+          <Grainient color1="#9f9fff" color2="#2782ff" color3="#be97cf" timeSpeed={2} grainAmount={0.05} />
         </div>
 
         <div style={{
@@ -290,14 +385,15 @@ export default function HomePage() {
               to={{ opacity: 1, y: 0, scale: 1 }}
               duration={0.8}
               delay={80}
-              style={{ fontSize: '3rem', marginBottom: '1rem' }}
+              style={{ fontSize: '3rem', marginBottom: '1rem', textShadow: '0 2px 28px rgba(28, 22, 92, 0.45)' }}
             />
 
             <p style={{
               fontFamily: 'var(--font-paperlogy), sans-serif',
               fontWeight: 500,
               fontSize: '1.125rem', maxWidth: '600px',
-              marginBottom: '1rem', color: 'rgba(255, 255, 255, 0.8)'
+              marginBottom: '1rem', color: 'rgba(255, 255, 255, 0.92)',
+              textShadow: '0 1px 16px rgba(28, 22, 92, 0.4)'
             }}>
               가천대 학생들을 위한 통학길 동행 플랫폼
             </p>
@@ -307,7 +403,7 @@ export default function HomePage() {
               position: 'relative',
               width: '100%',
               maxWidth: '320px',
-              marginTop: user ? '1rem' : '2.75rem',
+              marginTop: user ? '1rem' : '6rem',
             }}>
               {!user && (
                 <span id="gachon-account-hint" className="cta-bubble">
@@ -326,8 +422,9 @@ export default function HomePage() {
                   fontWeight: 700,
                   color: '#111827',
                   backgroundColor: '#fff',
-                  border: 'none',
+                  border: '1px solid #e5e7eb',
                   borderRadius: '8px',
+                  boxShadow: '0 10px 28px rgba(17, 24, 39, 0.10)',
                   cursor: (!user && isStartingGoogle) ? 'not-allowed' : 'pointer',
                   transition: 'transform 0.2s, opacity 0.2s',
                   display: 'flex',
@@ -359,7 +456,7 @@ export default function HomePage() {
             display: 'flex',
             gap: '1rem',
             fontSize: '0.75rem',
-            color: 'rgba(255, 255, 255, 0.68)'
+            color: 'rgba(255, 255, 255, 0.82)'
           }}>
             <Link href="/privacy" style={{ color: 'inherit', textDecoration: 'underline' }}>
               개인정보처리방침
@@ -374,11 +471,11 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-100 px-4 py-4">
+    <div className="min-h-screen app-bg">
+      <header className="app-header px-4 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">같이타</h1>
+            <h1 className="text-xl font-extrabold text-gray-900">같이타</h1>
             <p className="text-sm text-gray-600">{user.nickname}님, 안녕하세요!</p>
           </div>
           <div className="flex items-center space-x-2">
@@ -398,19 +495,33 @@ export default function HomePage() {
       </header>
 
       <div className="container mx-auto px-4 py-6 space-y-6">
-        <div className="card p-6">
-          <h2 className="text-lg font-semibold mb-4">어느 경로로 통학하세요?</h2>
+        <CampusRouteMap
+          rooms={mapRooms}
+          onlineCount={onlineDisplayCount}
+          selectedFrom={fromLocation}
+          selectedTo={toLocation}
+          isLoading={isLoadingMapRooms}
+          onSelectFrom={handleFromLocationChange}
+          onSelectTo={handleToLocationChange}
+          onOpenRooms={handleSearch}
+        />
+
+        <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-[0_10px_30px_rgba(31,41,70,0.06)]">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-base font-extrabold text-gray-950">직접 경로 지정</h2>
+            <SlidersHorizontal className="h-5 w-5 text-gray-400" />
+          </div>
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">출발지</label>
-              <select value={fromLocation} onChange={(e) => setFromLocation(e.target.value as LocationType)} className="input-field">
+              <select value={fromLocation} onChange={(e) => handleFromLocationChange(e.target.value as LocationType | '')} className="input-field">
                 <option value="">출발지 선택</option>
                 {Object.entries(LOCATIONS).map(([key, value]) => ( <option key={key} value={key}>{value}</option> ))}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">도착지</label>
-              <select value={toLocation} onChange={(e) => setToLocation(e.target.value as LocationType)} className="input-field">
+              <select value={toLocation} onChange={(e) => handleToLocationChange(e.target.value as LocationType | '')} className="input-field">
                 <option value="">도착지 선택</option>
                 {Object.entries(LOCATIONS).map(([key, value]) => ( <option key={key} value={key}>{value}</option> ))}
               </select>

@@ -342,9 +342,9 @@ export default function ChatRoomPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen app-bg flex flex-col">
       {/* Header */}
-      <header className="bg-white border-b border-gray-100 px-4 py-4">
+      <header className="app-header px-4 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center">
             <button
@@ -485,7 +485,7 @@ export default function ChatRoomPage() {
       {/* 신고 모달 */}
       {showReportModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold">신고하기</h3>

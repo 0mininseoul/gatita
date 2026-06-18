@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import {
   ChatRoom,
+  getDepartureTimeOptions,
   LOCATIONS,
   LocationType,
   ROUTE_TOO_CLOSE_MESSAGE,
@@ -551,12 +552,18 @@ function CreateRoomModal({ fromLocation, toLocation, selectedDate, user, onClose
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 출발 시간
               </label>
-              <input
-                type="time"
+              <select
                 value={departureTime}
                 onChange={(e) => setDepartureTime(e.target.value)}
                 className="input-field"
-              />
+              >
+                <option value="">출발 시간 선택</option>
+                {getDepartureTimeOptions(new Date(), 5).map((time) => (
+                  <option key={time} value={time}>
+                    {time}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="bg-gray-50 p-3 rounded-lg">

@@ -14,3 +14,25 @@ export const getGoogleOAuthOptions = () => ({
     hd: GACHON_GOOGLE_DOMAIN,
   },
 })
+
+export function extractGachonProfileFromMetadata(metadata?: Record<string, unknown> | null) {
+  const displayName = [
+    metadata?.name,
+    metadata?.full_name,
+    metadata?.display_name,
+  ].find((value): value is string => typeof value === 'string' && value.trim().length > 0)
+
+  if (!displayName) {
+    return {
+      name: '',
+      department: '',
+    }
+  }
+
+  const [rawName, rawDepartment] = displayName.split('/').map((value) => value.trim())
+
+  return {
+    name: rawName || displayName.trim(),
+    department: rawDepartment || '',
+  }
+}

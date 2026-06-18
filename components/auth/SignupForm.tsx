@@ -3,9 +3,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
-import { DEPARTMENTS } from '@/lib/supabase'
-import { NON_GACHON_ACCOUNT_MESSAGE, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
-import { ChevronDown, Check, AlertCircle } from 'lucide-react'
+import { NON_GACHON_ACCOUNT_MESSAGE, extractGachonProfileFromMetadata, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
+import { getBankOption, isAccountNumberCompleteForBank } from '@/lib/banks'
+import { AccountNumberSegmentField, BankSelectField } from '@/components/BankAccountFields'
+import { ChevronDown, AlertCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 type SignupStep = {
@@ -16,33 +17,6 @@ type SignupStep = {
   required: boolean
   options?: string[]
   description?: string
-}
-
-type PhoneVerificationState = {
-  factorId: string
-  challengeId: string
-  verifiedPhone: string
-  verifiedAt: string
-  isSending: boolean
-  isVerifying: boolean
-}
-
-const INITIAL_PHONE_VERIFICATION: PhoneVerificationState = {
-  factorId: '',
-  challengeId: '',
-  verifiedPhone: '',
-  verifiedAt: '',
-  isSending: false,
-  isVerifying: false,
-}
-
-const normalizePhoneForSupabase = (phone: string) => {
-  const digits = phone.replace(/\D/g, '')
-  if (digits.length === 11 && digits.startsWith('010')) {
-    return `+82${digits.slice(1)}`
-  }
-
-  return phone
 }
 
 const SIGNUP_STEPS: SignupStep[] = [
@@ -60,7 +34,7 @@ const SIGNUP_STEPS: SignupStep[] = [
     placeholder: '010-1234-5678',
     type: 'text',
     required: true,
-    description: 'SMS 인증 후 변경할 수 없습니다'
+    description: '가입 후 설정에서 변경할 수 없습니다'
   },
   {
     id: 'bank_name',
@@ -93,15 +67,6 @@ const SIGNUP_STEPS: SignupStep[] = [
     type: 'text',
     required: true,
     description: '다른 사용자에게 보여질 이름입니다'
-  },
-  {
-    id: 'department',
-    label: '학과를 선택해주세요',
-    placeholder: '학과 선택',
-    type: 'select',
-    required: true,
-    options: DEPARTMENTS,
-    description: '가입 후 변경할 수 없습니다'
   }
 ]
 
@@ -118,8 +83,6 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
   const supabase = useMemo(() => createClient(), [])
   const [activatedSteps, setActivatedSteps] = useState<boolean[]>(Array(SIGNUP_STEPS.length).fill(false))
   const [googleEmail, setGoogleEmail] = useState<string>('')
-  const [phoneCode, setPhoneCode] = useState('')
-  const [phoneVerification, setPhoneVerification] = useState<PhoneVerificationState>(INITIAL_PHONE_VERIFICATION)
 
   const currentStepData = SIGNUP_STEPS[currentStep]
   const stepRefs = useRef<Record<string, HTMLDivElement | null>>({})
@@ -133,6 +96,7 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
         const email = session.user.email
         if (isGachonEmail(email)) {
           setGoogleEmail(email)
+          const googleProfile = extractGachonProfileFromMetadata(session.user.user_metadata)
 
           const { data: profile } = await supabase
             .from('users')
@@ -141,6 +105,11 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
             .maybeSingle()
 
           if (!profile) {
+            setFormData(prev => ({
+              ...prev,
+              name: prev.name || googleProfile.name,
+              department: prev.department || googleProfile.department || '학과 미확인',
+            }))
             setCurrentStep(0)
           } else {
             onSuccess()
@@ -174,105 +143,6 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
     }
   }
 
-  const handleSendPhoneCode = async () => {
-    const phone = formData.phone || ''
-    const phoneStep = SIGNUP_STEPS.find(step => step.id === 'phone')
-    const phoneRegex = /^010-\d{4}-\d{4}$/
-
-    if (!phoneStep || !phoneRegex.test(phone)) {
-      setErrors({ phone: '010-0000-0000 형식으로 입력해주세요' })
-      return
-    }
-
-    setPhoneVerification(prev => ({ ...prev, isSending: true }))
-    setErrors(prev => {
-      const next = { ...prev }
-      delete next.phone
-      return next
-    })
-
-    try {
-      const normalizedPhone = normalizePhoneForSupabase(phone)
-      const { data: enrolledFactor, error: enrollError } = await supabase.auth.mfa.enroll({
-        factorType: 'phone' as any,
-        phone: normalizedPhone,
-      } as any)
-
-      if (enrollError) throw enrollError
-
-      const factorId = enrolledFactor?.id
-      if (!factorId) {
-        throw new Error('전화번호 인증 정보를 만들지 못했습니다')
-      }
-
-      const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId })
-      if (challengeError) throw challengeError
-      if (!challenge?.id) {
-        throw new Error('인증번호 요청 정보를 만들지 못했습니다')
-      }
-
-      setPhoneVerification({
-        factorId,
-        challengeId: challenge.id,
-        verifiedPhone: '',
-        verifiedAt: '',
-        isSending: false,
-        isVerifying: false,
-      })
-      setPhoneCode('')
-      toast.success('인증번호를 보냈습니다')
-    } catch (error: any) {
-      console.error('Phone verification start error:', error)
-      setPhoneVerification(INITIAL_PHONE_VERIFICATION)
-      setErrors({
-        phone: error?.message?.includes('provider')
-          ? 'Supabase SMS 인증 provider 설정이 필요합니다'
-          : error?.message || '인증번호를 보낼 수 없습니다'
-      })
-      toast.error('전화번호 인증을 시작하지 못했습니다')
-    } finally {
-      setPhoneVerification(prev => ({ ...prev, isSending: false }))
-    }
-  }
-
-  const handleVerifyPhoneCode = async () => {
-    if (!phoneVerification.factorId || !phoneVerification.challengeId || !phoneCode.trim()) {
-      setErrors({ phone: '인증번호를 입력해주세요' })
-      return
-    }
-
-    setPhoneVerification(prev => ({ ...prev, isVerifying: true }))
-    setErrors(prev => {
-      const next = { ...prev }
-      delete next.phone
-      return next
-    })
-
-    try {
-      const { error } = await supabase.auth.mfa.verify({
-        factorId: phoneVerification.factorId,
-        challengeId: phoneVerification.challengeId,
-        code: phoneCode.trim(),
-      })
-
-      if (error) throw error
-
-      setPhoneVerification(prev => ({
-        ...prev,
-        verifiedPhone: formData.phone,
-        verifiedAt: new Date().toISOString(),
-        isVerifying: false,
-      }))
-      toast.success('전화번호 인증이 완료되었습니다')
-    } catch (error: any) {
-      console.error('Phone verification confirm error:', error)
-      setErrors({ phone: error?.message || '인증번호가 올바르지 않습니다' })
-      toast.error('인증번호를 확인하지 못했습니다')
-    } finally {
-      setPhoneVerification(prev => ({ ...prev, isVerifying: false }))
-    }
-  }
-
   const validateStep = (step: SignupStep, value: string): string | null => {
     if (!value.trim() && step.required) {
       return `${step.label}을(를) 입력해주세요`
@@ -284,18 +154,15 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
         if (!phoneRegex.test(value)) {
           return '010-0000-0000 형식으로 입력해주세요'
         }
-        if (phoneVerification.verifiedPhone !== value || !phoneVerification.verifiedAt) {
-          return '인증번호 확인을 완료해주세요'
-        }
         break
       case 'bank_name':
-        if (value.trim().length < 2) {
-          return '은행명을 2자 이상 입력해주세요'
+        if (!getBankOption(value)) {
+          return '은행을 선택해주세요'
         }
         break
       case 'account_number':
-        if (value.replace(/[^0-9]/g, '').length < 6) {
-          return '계좌번호를 정확히 입력해주세요'
+        if (!isAccountNumberCompleteForBank(formData.bank_name, value)) {
+          return '선택한 은행의 계좌번호 형식에 맞게 입력해주세요'
         }
         break
       case 'account_holder':
@@ -380,10 +247,8 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
           email: userEmail,
           name: formData.name.trim(),
           phone: formData.phone.trim(),
-          phone_verified_at: phoneVerification.verifiedAt,
-          phone_mfa_factor_id: phoneVerification.factorId,
           nickname: formData.nickname.trim(),
-          department: formData.department,
+          department: formData.department || '학과 미확인',
           status: 'active',
           is_admin: false
         })
@@ -418,11 +283,6 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
   }
 
   const handleInputChange = (fieldId: string, value: string) => {
-    if (fieldId === 'phone' && formData.phone !== value) {
-      setPhoneCode('')
-      setPhoneVerification(INITIAL_PHONE_VERIFICATION)
-    }
-
     setFormData(prev => ({
       ...prev,
       [fieldId]: value
@@ -455,8 +315,6 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
       setGoogleEmail('')
       setFormData({})
       setErrors({})
-      setPhoneCode('')
-      setPhoneVerification(INITIAL_PHONE_VERIFICATION)
       setCurrentStep(-1)
       return
     }
@@ -588,12 +446,17 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
 
               {/* Input */}
               <div className="mb-2">
-                {step.type === 'select' ? (
-                  <SelectField
-                    options={step.options || []}
+                {step.id === 'bank_name' ? (
+                  <BankSelectField
                     value={formData[step.id] || ''}
                     onChange={(v) => handleInputChange(step.id, v)}
-                    placeholder={step.placeholder}
+                    error={errors[step.id]}
+                  />
+                ) : step.id === 'account_number' ? (
+                  <AccountNumberSegmentField
+                    bankName={formData.bank_name || ''}
+                    value={formData[step.id] || ''}
+                    onChange={(v) => handleInputChange(step.id, v)}
                     error={errors[step.id]}
                   />
                 ) : (
@@ -609,49 +472,9 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
                 )}
               </div>
 
-              {step.id === 'phone' && (
-                <div className="mb-4 space-y-3">
-                  {phoneVerification.verifiedPhone === formData.phone && phoneVerification.verifiedAt ? (
-                    <div className="flex items-center rounded-xl border border-green-100 bg-green-50 px-3 py-2 text-sm font-medium text-green-700">
-                      <Check className="mr-2 h-4 w-4" />
-                      전화번호 인증 완료
-                    </div>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={handleSendPhoneCode}
-                        disabled={!formData.phone || phoneVerification.isSending || phoneVerification.isVerifying}
-                        className="w-full rounded-xl border border-primary-100 bg-primary-50 px-4 py-3 text-sm font-bold text-primary-700 transition hover:bg-primary-100 disabled:bg-gray-100 disabled:text-gray-400"
-                      >
-                        {phoneVerification.isSending ? '인증번호 발송 중...' : phoneVerification.factorId ? '인증번호 다시 받기' : '인증번호 받기'}
-                      </button>
-
-                      {phoneVerification.factorId && (
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={phoneCode}
-                            onChange={(event) => setPhoneCode(event.target.value)}
-                            placeholder="인증번호 입력"
-                            className="input-field min-w-0 flex-1"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleVerifyPhoneCode}
-                            disabled={!phoneCode.trim() || phoneVerification.isVerifying}
-                            className="shrink-0 rounded-xl bg-primary-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-primary-700 disabled:bg-gray-300"
-                          >
-                            {phoneVerification.isVerifying ? '확인 중' : '확인'}
-                          </button>
-                        </div>
-                      )}
-                      <p className="text-xs leading-5 text-gray-500">
-                        SMS 인증은 Supabase 전화 인증과 SMS provider 설정이 완료되어 있어야 발송됩니다.
-                      </p>
-                    </>
-                  )}
+              {step.id === 'name' && formData.department && (
+                <div className="mb-4 rounded-xl border border-primary-100 bg-primary-50 px-3 py-2 text-sm font-bold text-primary-700">
+                  학과는 Google 계정 정보에서 {formData.department}(으)로 자동 등록됩니다.
                 </div>
               )}
 
@@ -713,60 +536,6 @@ function InputField({
         autoFocus={autoFocus}
         className={`input-field ${error ? 'border-red-500' : ''}`}
       />
-      {error && (
-        <div className="flex items-center mt-2 text-red-500 text-sm">
-          <AlertCircle className="w-4 h-4 mr-1" />
-          {error}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// Select Field Component
-interface SelectFieldProps {
-  options: string[]
-  value: string
-  onChange: (value: string) => void
-  placeholder: string
-  error?: string
-}
-
-function SelectField({ options, value, onChange, placeholder, error }: SelectFieldProps) {
-  const [isOpen, setIsOpen] = useState(false)
-
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className={`input-field text-left flex items-center justify-between ${
-          error ? 'border-red-500' : ''
-        }`}
-      >
-        <span className={value ? 'text-gray-900' : 'text-gray-400'}>
-          {value || placeholder}
-        </span>
-        <ChevronDown className={`w-5 h-5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-
-      {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 max-h-60 overflow-y-auto">
-          {options.map((option) => (
-            <button
-              key={option}
-              onClick={() => {
-                onChange(option)
-                setIsOpen(false)
-              }}
-              className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center justify-between"
-            >
-              {option}
-              {value === option && <Check className="w-4 h-4 text-primary-600" />}
-            </button>
-          ))}
-        </div>
-      )}
-
       {error && (
         <div className="flex items-center mt-2 text-red-500 text-sm">
           <AlertCircle className="w-4 h-4 mr-1" />

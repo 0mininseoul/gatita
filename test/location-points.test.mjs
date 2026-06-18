@@ -109,6 +109,8 @@ test('route pairs that are too close are rejected in both directions', () => {
   assert.equal(isRestrictedRoutePair('가천대학교_정문', '가천대역_1번출구'), true)
   assert.equal(isRestrictedRoutePair('제2기숙사', 'AI공학관'), true)
   assert.equal(isRestrictedRoutePair('AI공학관', '제2기숙사'), true)
+  assert.equal(isRestrictedRoutePair('교육대학원', '중앙도서관'), true)
+  assert.equal(isRestrictedRoutePair('중앙도서관', '교육대학원'), true)
   assert.equal(isRestrictedRoutePair('중앙도서관', 'AI공학관'), false)
 })
 
@@ -121,6 +123,9 @@ test('destination options exclude the selected origin and too-close routes', () 
   const dormDestinations = getDestinationOptions('제2기숙사')
   assert.ok(!dormDestinations.includes('AI공학관'))
   assert.ok(dormDestinations.includes('교육대학원'))
+
+  const graduateSchoolDestinations = getDestinationOptions('교육대학원')
+  assert.ok(!graduateSchoolDestinations.includes('중앙도서관'))
 })
 
 test('departure time options use five minute intervals through 01:00', () => {
@@ -141,6 +146,13 @@ test('departure time options use five minute intervals through 01:00', () => {
   )
 })
 
+test('legacy rooms create modal also uses future departure time options', () => {
+  const source = readProjectFile('app/rooms/page.tsx')
+
+  assert.match(source, /getDepartureTimeOptions\(new Date\(\), 5\)/)
+  assert.doesNotMatch(source, /type="time"/)
+})
+
 test('departure date follows the selected post-midnight time', () => {
   const now = new Date('2026-06-18T20:48:00+09:00')
   assert.equal(getDepartureDateForTime(now, '21:00'), '2026-06-18')
@@ -154,4 +166,41 @@ test('campus map room times are displayed without seconds', () => {
   assert.match(source, /formatRoomTime\(selectedOriginStat\.nextTime\)/)
   assert.match(source, /formatRoomTime\(room\.departure_time\)/)
   assert.doesNotMatch(source, /<span>\{room\.departure_time\}<\/span>/)
+})
+
+test('map room loading keeps every active same-day room even after the time has passed', () => {
+  const source = readProjectFile('app/page.tsx')
+  const loadStart = source.indexOf('const loadMapRooms = useCallback')
+  const loadEnd = source.indexOf('\n  const checkAuth', loadStart)
+  const loadBlock = source.slice(loadStart, loadEnd)
+
+  assert.ok(loadStart > -1, 'loadMapRooms exists')
+  assert.ok(loadEnd > loadStart, 'loadMapRooms block can be inspected')
+  assert.match(loadBlock, /\.eq\('departure_date', today\)/)
+  assert.match(loadBlock, /\.eq\('status', 'active'\)/)
+  assert.doesNotMatch(loadBlock, /currentTime/, 'same-day room loading should not compare against the current time')
+  assert.doesNotMatch(loadBlock, /departure_time\s*>=/, 'same-day room loading should not remove passed rooms')
+})
+
+test('map header exposes my rooms list from the user membership query', () => {
+  const source = readProjectFile('app/page.tsx')
+
+  assert.match(source, /showMyRooms/, 'home map should track my rooms sheet state')
+  assert.match(source, /loadMyRooms/, 'home map should load my rooms on demand')
+  assert.match(source, /나의 방/, 'home map header should expose a my rooms action')
+  assert.match(source, /\.from\('room_participants'\)[\s\S]*\.eq\('user_id', user\.id\)/, 'my rooms should be based on memberships')
+  assert.match(source, /router\.push\(`\/rooms\/\$\{room\.id\}`\)/, 'my rooms list should navigate to the room')
+})
+
+test('landing and authenticated map use separate URL paths', () => {
+  const homeSource = readProjectFile('app/page.tsx')
+  const mapRouteSource = readProjectFile('app/map/page.tsx')
+  const settingsSource = readProjectFile('app/settings/page.tsx')
+  const chatSource = readProjectFile('app/rooms/[id]/page.tsx')
+
+  assert.match(mapRouteSource, /export \{ default \} from '\.\.\/page'/)
+  assert.match(homeSource, /window\.location\.pathname === '\/map'/)
+  assert.match(homeSource, /router\.push\('\/map'\)/)
+  assert.match(settingsSource, /router\.push\('\/map'\)/)
+  assert.match(chatSource, /router\.push\('\/map'\)/)
 })

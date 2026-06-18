@@ -30,6 +30,13 @@ test('settings contact card opens the user mail app without rendering the admin 
   assert.doesNotMatch(source, /ym5373@gachon\.ac\.kr 로 메일 주세요/)
 })
 
+test('settings back action returns to the authenticated map', () => {
+  const source = readProjectFile('app/settings/page.tsx')
+
+  assert.match(source, /router\.push\('\/map'\)/)
+  assert.doesNotMatch(source, /onClick=\{\(\) => router\.back\(\)\}/)
+})
+
 test('account deletion API verifies the session and deletes the auth user with the service role key', () => {
   const routePath = 'app/api/account/delete/route.ts'
 

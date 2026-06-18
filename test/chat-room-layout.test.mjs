@@ -139,3 +139,12 @@ test('map app and bottom sheet use the visual viewport and internal sheet scroll
   assert.match(sheetBlock, /max-height:\s*min\(72vh, calc\(var\(--app-viewport-height\) - 8\.75rem\)\);/)
   assert.match(sheetBlock, /bottom:\s*max\(1rem, env\(safe-area-inset-bottom\)\);/)
 })
+
+test('kakao map zoom control is offset below the app header', () => {
+  const mapSource = readProjectFile('components/CampusRouteMap.tsx')
+  const cssSource = readProjectFile('app/globals.css')
+
+  assert.match(mapSource, /gatita-zoom-control-offset/)
+  assert.match(cssSource, /\.gatita-kakao-map \.gatita-zoom-control-offset/)
+  assert.match(cssSource, /top:\s*8\.75rem !important;/)
+})

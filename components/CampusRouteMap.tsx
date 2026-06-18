@@ -224,10 +224,10 @@ export default function CampusRouteMap({
 
         const zoomControl = new kakao.maps.ZoomControl()
         map.addControl(zoomControl, kakao.maps.ControlPosition.RIGHT)
-        const zoomControlElement = mapContainerRef.current.querySelector('.zoom_control, .ZoomControl') as HTMLElement | null
-        if (zoomControlElement) {
-          zoomControlElement.style.marginTop = '7rem'
-        }
+        window.setTimeout(() => {
+          const zoomControlElement = mapContainerRef.current?.querySelector('.zoom_control, .ZoomControl, [class*="ZoomControl"], [class*="zoom_control"]') as HTMLElement | null
+          zoomControlElement?.classList.add('gatita-zoom-control-offset')
+        }, 0)
 
         kakao.maps.event.addListener(map, 'dragend', () => clampMapToCampus(map, kakao))
         kakao.maps.event.addListener(map, 'zoom_changed', () => clampMapToCampus(map, kakao))

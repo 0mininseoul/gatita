@@ -163,7 +163,9 @@ const restrictedRoutePairs = new Set([
   '가천대역_1번출구__가천대학교_정문',
   '가천대학교_정문__가천대역_1번출구',
   '제2기숙사__AI공학관',
-  'AI공학관__제2기숙사'
+  'AI공학관__제2기숙사',
+  '교육대학원__중앙도서관',
+  '중앙도서관__교육대학원'
 ])
 
 export function isRestrictedRoutePair(fromLocation: LocationType | '', toLocation: LocationType | '') {

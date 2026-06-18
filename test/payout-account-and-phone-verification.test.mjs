@@ -6,15 +6,17 @@ import assert from 'node:assert/strict'
 const root = process.cwd()
 const readProjectFile = (...parts) => readFileSync(join(root, ...parts), 'utf8')
 
-test('profile onboarding verifies phone with Supabase SMS MFA and stores payout account separately', () => {
+test('profile onboarding stores phone without SMS MFA and derives department from Google profile', () => {
   const signup = readProjectFile('components', 'auth', 'SignupForm.tsx')
+  const auth = readProjectFile('lib', 'auth.ts')
   const schema = readProjectFile('supabase_schema.sql')
   const types = readProjectFile('lib', 'supabase.ts')
 
-  assert.match(signup, /factorType:\s*['"]phone['"]/, 'signup should enroll a phone MFA factor')
-  assert.match(signup, /auth\.mfa\.challenge/, 'signup should send an SMS challenge')
-  assert.match(signup, /auth\.mfa\.verify/, 'signup should verify the SMS code')
-  assert.match(signup, /phone_verified_at/, 'signup should persist phone verification metadata')
+  assert.doesNotMatch(signup, /auth\.mfa/, 'signup should not use Supabase SMS MFA')
+  assert.doesNotMatch(signup, /인증번호/, 'signup should not render SMS code UI')
+  assert.doesNotMatch(signup, /id:\s*['"]department['"]/, 'department should not be a manual onboarding step')
+  assert.match(auth, /extractGachonProfileFromMetadata/, 'auth helpers should parse Google profile metadata')
+  assert.match(signup, /extractGachonProfileFromMetadata/, 'signup should use parsed Google profile metadata')
   assert.match(signup, /user_payout_accounts/, 'signup should store bank details outside users table')
   assert.match(signup, /bank_name/, 'signup should collect bank name')
   assert.match(signup, /account_number/, 'signup should collect account number')
@@ -27,10 +29,17 @@ test('profile onboarding verifies phone with Supabase SMS MFA and stores payout 
 
 test('settings lets users edit payout account while keeping phone immutable', () => {
   const settings = readProjectFile('app', 'settings', 'page.tsx')
+  const signup = readProjectFile('components', 'auth', 'SignupForm.tsx')
+  const bankFields = readProjectFile('components', 'BankAccountFields.tsx')
+  const banks = readProjectFile('lib', 'banks.ts')
 
   assert.match(settings, /user_payout_accounts/, 'settings should read and update payout accounts')
-  assert.match(settings, /bank_name/, 'settings should render bank name input')
-  assert.match(settings, /account_number/, 'settings should render account number input')
+  assert.match(settings, /BankSelectField/, 'settings should render bank dropdown')
+  assert.match(settings, /AccountNumberSegmentField/, 'settings should render segmented account number boxes')
+  assert.match(signup, /BankSelectField/, 'signup should use the same bank dropdown')
+  assert.match(signup, /AccountNumberSegmentField/, 'signup should use segmented account number boxes')
+  assert.match(bankFields, /BANK_OPTIONS/, 'bank fields should be driven by shared bank metadata')
+  assert.match(banks, /name:\s*'카카오뱅크'[\s\S]*segments:\s*\[4,\s*2,\s*7\]/, 'KakaoBank should use XXXX-XX-XXXXXXX')
   assert.match(settings, /account_holder/, 'settings should render account holder input')
   assert.match(settings, /disabled[\s\S]*value=\{(?:user|profile)\.phone\}|value=\{(?:user|profile)\.phone\}[\s\S]*disabled/, 'phone number should remain immutable in settings')
 })

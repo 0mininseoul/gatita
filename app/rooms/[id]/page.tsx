@@ -512,7 +512,7 @@ export default function ChatRoomPage() {
         toast.success('채팅방을 나갔습니다')
       }
 
-      router.push('/?auth=complete')
+      router.push('/map')
     } catch (error) {
       console.error('Leave room error:', error)
       toast.error('채팅방 나가기 중 오류가 발생했습니다')
@@ -566,7 +566,7 @@ export default function ChatRoomPage() {
           <div className="flex min-w-0 items-start">
             <button
               aria-label="지도로 돌아가기"
-              onClick={() => router.push('/?auth=complete')}
+              onClick={() => router.push('/map')}
               className="mr-2 shrink-0 rounded-lg p-2 hover:bg-gray-100"
             >
               <ArrowLeft className="w-5 h-5" />

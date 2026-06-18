@@ -16,7 +16,7 @@ import {
 } from '@/lib/supabase'
 import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
 import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
-import { Star, Settings, LogOut } from 'lucide-react'
+import { ArrowRight, Clock, MessageSquareText, Star, Settings, LogOut, Users, X } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 
@@ -27,6 +27,10 @@ import SplitText from '@/components/SplitText'
 import NavigationBar from '@/components/NavigationBar'
 
 type AuthMode = 'signup' | null
+
+type MyRoomSummary = CampusMapRoom & {
+  departure_date: string
+}
 
 function GoogleIcon({ className = 'w-5 h-5' }: { className?: string }) {
   return (
@@ -45,7 +49,10 @@ export default function HomePage() {
   const [authMode, setAuthMode] = useState<AuthMode>(null)
   const [fromLocation, setFromLocation] = useState<LocationType | ''>('')
   const [mapRooms, setMapRooms] = useState<CampusMapRoom[]>([])
+  const [myRooms, setMyRooms] = useState<MyRoomSummary[]>([])
   const [isLoadingMapRooms, setIsLoadingMapRooms] = useState(false)
+  const [isLoadingMyRooms, setIsLoadingMyRooms] = useState(false)
+  const [showMyRooms, setShowMyRooms] = useState(false)
   const [isCreatingMapRoom, setIsCreatingMapRoom] = useState(false)
   const [isStartingGoogle, setIsStartingGoogle] = useState(false)
   const [hasEnteredApp, setHasEnteredApp] = useState(false)
@@ -92,7 +99,6 @@ export default function HomePage() {
 
     try {
       const today = format(new Date(), 'yyyy-MM-dd')
-      const currentTime = format(new Date(), 'HH:mm')
       const { data } = await supabase
         .from('chat_rooms')
         .select(`
@@ -107,8 +113,7 @@ export default function HomePage() {
         .eq('status', 'active')
         .order('departure_time', { ascending: true })
 
-      const upcomingRooms = ((data ?? []) as ChatRoom[])
-        .filter((room) => room.departure_time >= currentTime)
+      const sameDayRooms = ((data ?? []) as ChatRoom[])
         .map((room) => ({
           id: room.id,
           from_location: room.from_location,
@@ -121,13 +126,74 @@ export default function HomePage() {
           })),
         }))
 
-      setMapRooms(upcomingRooms)
+      setMapRooms(sameDayRooms)
     } catch (error) {
       console.error('Load map rooms error:', error)
     } finally {
       setIsLoadingMapRooms(false)
     }
   }, [supabase])
+
+  const loadMyRooms = useCallback(async () => {
+    if (!supabase || !user) {
+      setMyRooms([])
+      return
+    }
+
+    setIsLoadingMyRooms(true)
+
+    try {
+      const { data: memberships, error: membershipsError } = await supabase
+        .from('room_participants')
+        .select('room_id')
+        .eq('user_id', user.id)
+
+      if (membershipsError) throw membershipsError
+
+      const roomIds = Array.from(new Set((memberships ?? []).map((membership) => membership.room_id)))
+
+      if (roomIds.length === 0) {
+        setMyRooms([])
+        return
+      }
+
+      const { data: rooms, error: roomsError } = await supabase
+        .from('chat_rooms')
+        .select(`
+          id,
+          from_location,
+          to_location,
+          departure_date,
+          departure_time,
+          max_participants,
+          participants:room_participants(id, user_id)
+        `)
+        .in('id', roomIds)
+        .eq('status', 'active')
+        .order('departure_date', { ascending: false })
+        .order('departure_time', { ascending: false })
+
+      if (roomsError) throw roomsError
+
+      setMyRooms(((rooms ?? []) as ChatRoom[]).map((room) => ({
+        id: room.id,
+        from_location: room.from_location,
+        to_location: room.to_location,
+        departure_date: room.departure_date,
+        departure_time: room.departure_time,
+        max_participants: room.max_participants,
+        participants: room.participants?.map((participant) => ({
+          id: participant.id,
+          user_id: participant.user_id,
+        })),
+      })))
+    } catch (error) {
+      console.error('Load my rooms error:', error)
+      toast.error('나의 방을 불러오지 못했습니다')
+    } finally {
+      setIsLoadingMyRooms(false)
+    }
+  }, [supabase, user])
 
   const checkAuth = useCallback(async (enterApp = false) => {
     if (!supabase) {
@@ -169,13 +235,15 @@ export default function HomePage() {
         } else {
           setAuthMode('signup')
         }
+      } else if (window.location.pathname === '/map') {
+        router.replace('/')
       }
     } catch (error) {
       console.error('Auth check error:', error)
     } finally {
       setLoading(false)
     }
-  }, [loadMapRooms, rejectNonGachonAccount, supabase])
+  }, [loadMapRooms, rejectNonGachonAccount, router, supabase])
 
   useEffect(() => {
     if (!supabase) {
@@ -186,7 +254,7 @@ export default function HomePage() {
     const params = new URLSearchParams(window.location.search)
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
     const authError = params.get('auth_error') || params.get('error_description') || hashParams.get('error_description')
-    const shouldEnterApp = params.get('auth') === 'complete'
+    const shouldEnterApp = params.get('auth') === 'complete' || window.location.pathname === '/map'
 
     if (authError) {
       const message = authError.replace(/\+/g, ' ')
@@ -478,6 +546,7 @@ export default function HomePage() {
     try {
       await supabase.auth.signOut()
       setUser(null)
+      router.push('/')
       toast.success('로그아웃되었습니다')
     } catch (error) {
       toast.error('로그아웃 중 오류가 발생했습니다')
@@ -507,6 +576,12 @@ export default function HomePage() {
 
   const handleEnterApp = () => {
     setHasEnteredApp(true)
+    router.push('/map')
+  }
+
+  const handleOpenMyRooms = () => {
+    setShowMyRooms(true)
+    loadMyRooms()
   }
 
   const handleFindClick = () => {
@@ -528,6 +603,7 @@ export default function HomePage() {
       <SignupForm
         onSuccess={() => {
           setAuthMode(null)
+          router.push('/map')
           checkAuth(true)
         }}
         onBackToLanding={() => setAuthMode(null)}
@@ -660,6 +736,70 @@ export default function HomePage() {
         onJoinRoom={handleJoinMapRoom}
       />
 
+      {showMyRooms && (
+        <div
+          className="absolute inset-0 z-50 flex items-start justify-end bg-gray-950/25 px-3 pt-24"
+          onClick={() => setShowMyRooms(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-lg border border-white/80 bg-white/95 p-4 shadow-[0_18px_48px_rgba(17,24,39,0.22)] backdrop-blur"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-black text-gray-950">나의 방</h2>
+                <p className="text-xs font-semibold text-gray-500">내가 참여 중인 채팅방</p>
+              </div>
+              <button
+                type="button"
+                aria-label="나의 방 닫기"
+                onClick={() => setShowMyRooms(false)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {isLoadingMyRooms ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="loading-spinner" />
+              </div>
+            ) : myRooms.length > 0 ? (
+              <div className="max-h-[54vh] space-y-2 overflow-y-auto pr-1">
+                {myRooms.map((room) => (
+                  <button
+                    key={room.id}
+                    type="button"
+                    onClick={() => router.push(`/rooms/${room.id}`)}
+                    className="w-full rounded-lg border border-gray-100 bg-gray-50 px-3 py-3 text-left transition hover:border-primary-100 hover:bg-primary-50"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 text-sm font-black text-gray-950">
+                        <Clock className="h-4 w-4 text-primary-600" />
+                        {room.departure_date.slice(5).replace('-', '/')} {room.departure_time.slice(0, 5)}
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-xs font-black text-gray-500">
+                        <Users className="h-3.5 w-3.5" />
+                        {room.participants?.length ?? 0}/{room.max_participants}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex min-w-0 items-center gap-1 text-xs font-bold text-gray-600">
+                      <span className="truncate">{LOCATIONS[room.from_location]}</span>
+                      <ArrowRight className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                      <span className="truncate">{LOCATIONS[room.to_location]}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-8 text-center text-sm font-bold text-gray-500">
+                참여 중인 방이 없습니다
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <header
         className="pointer-events-none absolute inset-x-0 top-0 z-40 px-3"
         style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
@@ -680,6 +820,14 @@ export default function HomePage() {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              aria-label="나의 방"
+              onClick={handleOpenMyRooms}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition hover:bg-gray-100 hover:text-gray-950"
+            >
+              <MessageSquareText className="h-5 w-5" />
+            </button>
             <button
               type="button"
               aria-label="설정"

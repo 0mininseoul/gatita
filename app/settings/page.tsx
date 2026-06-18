@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { PayoutAccount, User } from '@/lib/supabase'
+import { isAccountNumberCompleteForBank } from '@/lib/banks'
+import { AccountNumberSegmentField, BankSelectField } from '@/components/BankAccountFields'
 import { ArrowLeft, User as UserIcon, AlertCircle, Bug, Check, Mail, Trash2, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -191,6 +193,11 @@ export default function SettingsPage() {
       return
     }
 
+    if (!isAccountNumberCompleteForBank(nextAccount.bank_name, nextAccount.account_number)) {
+      setAccountError('선택한 은행의 계좌번호 형식에 맞게 입력해주세요')
+      return
+    }
+
     setIsSavingAccount(true)
     setAccountError('')
 
@@ -297,7 +304,7 @@ export default function SettingsPage() {
       <header className="app-header px-4 py-4">
         <div className="flex items-center">
           <button
-            onClick={() => router.back()}
+            onClick={() => router.push('/map')}
             className="p-2 mr-2 hover:bg-gray-100 rounded-lg"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -494,12 +501,9 @@ export default function SettingsPage() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 계좌은행명
               </label>
-              <input
-                type="text"
+              <BankSelectField
                 value={accountForm.bank_name}
-                onChange={(event) => handleAccountFieldChange('bank_name', event.target.value)}
-                className="input-field"
-                placeholder="은행명을 입력하세요"
+                onChange={(value) => handleAccountFieldChange('bank_name', value)}
                 disabled={isSavingAccount}
               />
             </div>
@@ -507,12 +511,10 @@ export default function SettingsPage() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 계좌번호
               </label>
-              <input
-                type="text"
+              <AccountNumberSegmentField
+                bankName={accountForm.bank_name}
                 value={accountForm.account_number}
-                onChange={(event) => handleAccountFieldChange('account_number', event.target.value)}
-                className="input-field"
-                placeholder="계좌번호를 입력하세요"
+                onChange={(value) => handleAccountFieldChange('account_number', value)}
                 disabled={isSavingAccount}
               />
             </div>

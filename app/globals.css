@@ -7,6 +7,7 @@
   --brand-mauve: #be97cf;
   /* Signature brand gradient, echoing the landing hero */
   --brand-gradient: linear-gradient(135deg, #2782ff 0%, #6a73e8 50%, #be97cf 100%);
+  --landing-viewport-height: 100vh;
 }
 
 @layer base {
@@ -22,6 +23,20 @@
 
   * {
     -webkit-tap-highlight-color: transparent;
+  }
+
+  html.landing-lock,
+  body.landing-lock {
+    overflow: hidden;
+    overscroll-behavior: none;
+    background: #2782ff;
+  }
+
+  body.landing-lock {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: var(--landing-viewport-height);
   }
 
   /* Input focus styles */
@@ -84,6 +99,69 @@
     line-height: 1.4;
     text-align: center;
     box-shadow: 0 10px 24px rgba(127, 29, 29, 0.16);
+  }
+
+  .landing-page {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    min-height: 100svh;
+    color: #ffffff;
+    overflow: hidden;
+    isolation: isolate;
+    background: linear-gradient(180deg, #b9b4ff 0%, #6f6ad8 100%);
+  }
+
+  @supports (height: 100lvh) {
+    .landing-page {
+      height: 100lvh;
+    }
+  }
+
+  .landing-background {
+    position: absolute;
+    inset: -1px 0;
+    z-index: 0;
+    width: 100%;
+    height: calc(100% + 2px);
+    min-height: 100vh;
+  }
+
+  @supports (height: 100lvh) {
+    .landing-background {
+      min-height: 100lvh;
+    }
+  }
+
+  .landing-content {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    width: 100%;
+    height: var(--landing-viewport-height);
+    flex-direction: column;
+    align-items: center;
+    overflow: hidden;
+    padding: max(2rem, env(safe-area-inset-top)) 1rem max(1.5rem, env(safe-area-inset-bottom));
+  }
+
+  .landing-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: clamp(7.25rem, 20vh, 11.5rem);
+    text-align: center;
+  }
+
+  .landing-footer {
+    position: absolute;
+    bottom: max(1.5rem, calc(env(safe-area-inset-bottom) + 1rem));
+    display: flex;
+    gap: 1rem;
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 0.75rem;
   }
 
   .btn-primary {

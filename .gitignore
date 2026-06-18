@@ -4,6 +4,7 @@ node_modules/
 # Next.js output
 .next/
 out/
+tsconfig.tsbuildinfo
 
 # Local environment
 .env*.local

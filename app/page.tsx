@@ -239,18 +239,41 @@ export default function HomePage() {
     user
   )
 
-  // Lock page scroll while the full-screen landing hero is shown (the
-  // authenticated dashboard below still scrolls normally).
-  useEffect(() => {
-    const showHero = !loading && authMode !== 'signup' && (!user || !hasEnteredApp)
-    if (!showHero) return
+  const showLanding = !loading && authMode !== 'signup' && (!user || !hasEnteredApp)
 
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = previousOverflow
+  // iOS Safari keeps scroll position across auth state changes and reports
+  // dynamic viewport units differently as the bottom bar expands/collapses.
+  // Keep the landing fixed to the visual viewport and reset stale scroll.
+  useEffect(() => {
+    if (!showLanding) return
+
+    const root = document.documentElement
+    const body = document.body
+    const setLandingViewportHeight = () => {
+      const visualHeight = window.visualViewport?.height ?? window.innerHeight
+      root.style.setProperty('--landing-viewport-height', `${Math.ceil(visualHeight)}px`)
     }
-  }, [loading, authMode, user, hasEnteredApp])
+
+    setLandingViewportHeight()
+    window.scrollTo(0, 0)
+    root.classList.add('landing-lock')
+    body.classList.add('landing-lock')
+
+    window.addEventListener('resize', setLandingViewportHeight)
+    window.visualViewport?.addEventListener('resize', setLandingViewportHeight)
+    window.visualViewport?.addEventListener('scroll', setLandingViewportHeight)
+
+    const frameId = window.requestAnimationFrame(() => window.scrollTo(0, 0))
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      window.removeEventListener('resize', setLandingViewportHeight)
+      window.visualViewport?.removeEventListener('resize', setLandingViewportHeight)
+      window.visualViewport?.removeEventListener('scroll', setLandingViewportHeight)
+      root.classList.remove('landing-lock')
+      body.classList.remove('landing-lock')
+    }
+  }, [showLanding])
 
   const handleSearch = () => {
     if (!fromLocation || !toLocation) {
@@ -352,31 +375,16 @@ export default function HomePage() {
 
   if (!user || !hasEnteredApp) {
     return (
-      <main style={{
-        position: 'relative', width: '100vw', height: '100dvh',
-        background: 'linear-gradient(180deg, #b9b4ff 0%, #6f6ad8 100%)',
-        color: '#ffffff',
-        overflow: 'hidden',
-      }}>
-        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0 }}>
+      <main className="landing-page">
+        <div className="landing-background">
           <Grainient color1="#9f9fff" color2="#2782ff" color3="#be97cf" timeSpeed={2} grainAmount={0.05} />
         </div>
 
-        <div style={{
-          position: 'relative', zIndex: 10, width: '100%', height: '100%',
-          display: 'flex', flexDirection: 'column', alignItems: 'center',
-          paddingTop: '2rem', paddingLeft: '1rem', paddingRight: '1rem',
-        }}>
+        <div className="landing-content">
 
           <NavigationBar onFindClick={user ? handleEnterApp : handleFindClick} />
 
-          <div style={{
-            marginTop: '20vh',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            textAlign: 'center',
-          }}>
+          <div className="landing-hero">
             <SplitText
               text="같이 탈래요?"
               tag="h1"
@@ -450,14 +458,7 @@ export default function HomePage() {
             )}
           </div>
 
-          <div style={{
-            position: 'absolute',
-            bottom: '1.5rem',
-            display: 'flex',
-            gap: '1rem',
-            fontSize: '0.75rem',
-            color: 'rgba(255, 255, 255, 0.82)'
-          }}>
+          <div className="landing-footer">
             <Link href="/privacy" style={{ color: 'inherit', textDecoration: 'underline' }}>
               개인정보처리방침
             </Link>

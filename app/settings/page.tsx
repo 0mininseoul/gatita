@@ -5,12 +5,16 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { User } from '@/lib/supabase'
-import { ArrowLeft, User as UserIcon, AlertCircle, Check, Trash2, X } from 'lucide-react'
+import { ArrowLeft, User as UserIcon, AlertCircle, Bug, Check, Mail, Trash2, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 type DeleteStep = 'idle' | 'overview' | 'confirm'
 
-const DELETE_CONFIRMATION_TEXT = '탈퇴합니다'
+const ADMIN_CONTACT_EMAIL = 'ym5373@gachon.ac.kr'
+const DELETE_CONFIRMATION_TEXT = '떠나지 말아주세요. 탈퇴하시는 이유를 여쭤봐도 될까요? 열심히 만들었어요 흑흑'
+
+const createMailHref = (subject: string, body: string) =>
+  `mailto:${ADMIN_CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -197,7 +201,15 @@ export default function SettingsPage() {
 
   const canChange = canChangeNickname(user.nickname_updated_at)
   const nextChangeDate = getNextChangeDate(user.nickname_updated_at)
-  const canDeleteAccount = deleteConfirmText.trim() === '탈퇴합니다' && deleteAcknowledged
+  const canDeleteAccount = deleteConfirmText.trim() === DELETE_CONFIRMATION_TEXT && deleteAcknowledged
+  const contactMailHref = createMailHref(
+    '[같이타] 문의하기',
+    '문의 내용을 적어주세요.\n\n',
+  )
+  const bugReportMailHref = createMailHref(
+    '[같이타] 버그 제보',
+    '발생한 문제와 사용 환경을 적어주세요.\n\n1. 어떤 화면에서 발생했나요?\n2. 어떤 동작을 했나요?\n3. 기대한 동작은 무엇인가요?\n',
+  )
 
   return (
     <div className="min-h-screen app-bg">
@@ -391,11 +403,24 @@ export default function SettingsPage() {
         {/* 관리자 문의 */}
         <div className="card p-6 mb-6">
           <h3 className="text-lg font-semibold mb-4">관리자 문의</h3>
-          <div className="text-center">
-            <p className="text-sm text-gray-600 mb-2">문의사항이 있으신가요?</p>
-            <p className="text-sm font-medium text-primary-600">
-              ym5373@gachon.ac.kr 로 메일 주세요
-            </p>
+          <div>
+            <p className="mb-4 text-sm text-gray-600">문의 유형을 선택하면 기본 메일 앱이 열립니다.</p>
+            <div className="grid grid-cols-2 gap-2">
+              <a
+                href={contactMailHref}
+                className="inline-flex items-center justify-center rounded-xl border border-primary-100 bg-primary-50 px-3 py-3 text-sm font-bold text-primary-700 transition hover:bg-primary-100"
+              >
+                <Mail className="mr-2 h-4 w-4" />
+                문의하기
+              </a>
+              <a
+                href={bugReportMailHref}
+                className="inline-flex items-center justify-center rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-bold text-gray-800 transition hover:bg-gray-50"
+              >
+                <Bug className="mr-2 h-4 w-4" />
+                버그 제보
+              </a>
+            </div>
           </div>
         </div>
 

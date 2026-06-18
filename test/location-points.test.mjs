@@ -230,6 +230,7 @@ test('map shows a one-time PWA home screen onboarding modal', () => {
 
 test('iOS PWA startup images are generated and registered for current iPhones', () => {
   const layout = readProjectFile('app/layout.tsx')
+  const splashScript = readProjectFile('scripts/generate-ios-splash.mjs')
   const expectedImages = [
     'iphone-17-pro-max.png',
     'iphone-17-air.png',
@@ -245,6 +246,12 @@ test('iOS PWA startup images are generated and registered for current iPhones', 
   assert.match(layout, /apple-touch-startup-image/)
   assert.match(layout, /device-width: 440px/)
   assert.match(layout, /device-height: 956px/)
+  assert.match(splashScript, /Google Chrome\.app/)
+  assert.match(splashScript, /Paperlogy-9Black\.woff2/)
+  assert.match(splashScript, /pageHtml/)
+  assert.match(splashScript, /--screenshot=/)
+  assert.doesNotMatch(splashScript, /<text/)
+  assert.doesNotMatch(splashScript, /sips/)
 
   expectedImages.forEach((imageName) => {
     assert.equal(

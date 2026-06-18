@@ -438,7 +438,7 @@
   }
 
   .gatita-map-stats {
-    top: max(9.25rem, calc(env(safe-area-inset-top) + 7.25rem));
+    top: max(7rem, calc(env(safe-area-inset-top) + 5rem));
   }
 
   .gatita-custom-zoom-control {

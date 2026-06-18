@@ -176,7 +176,8 @@ test('map stats are offset from the translucent PWA status bar and room joins di
 
   assert.match(mapSource, /gatita-map-stats/)
   assert.match(cssSource, /\.gatita-map-stats/)
-  assert.match(cssSource, /env\(safe-area-inset-top\) \+ 7\.25rem/)
+  assert.match(cssSource, /env\(safe-area-inset-top\) \+ 5rem/)
+  assert.doesNotMatch(cssSource, /9\.25rem/, 'map stat chips should not be pushed deep below the header')
   assert.match(mapSource, /isRoomJoinable/)
   assert.match(mapSource, /isPastDeparture/)
   assert.match(mapSource, /disabled=\{isFull \|\| isPastDeparture\}/)

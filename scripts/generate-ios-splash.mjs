@@ -1,15 +1,23 @@
-import { execFileSync } from 'node:child_process'
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const projectRoot = join(__dirname, '..')
 const logoPath = join(projectRoot, 'public', 'brand', 'gatita-logo.png')
+const fontPath = join(projectRoot, 'app', 'fonts', 'Paperlogy-9Black.woff2')
 const splashDir = join(projectRoot, 'public', 'splash')
 const tempDir = join(projectRoot, '.tmp-splash')
+const chromeProfileDir = join(tempDir, 'chrome-profile')
+const chromePath = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+
+if (!existsSync(chromePath)) {
+  throw new Error(`Chrome executable not found at ${chromePath}. Set CHROME_BIN to override.`)
+}
 
 const logoBase64 = readFileSync(logoPath).toString('base64')
+const fontBase64 = readFileSync(fontPath).toString('base64')
 
 const devices = [
   { file: 'iphone-17-pro-max.png', width: 1320, height: 2868 },
@@ -27,50 +35,114 @@ const devices = [
   { file: 'iphone-5.png', width: 640, height: 1136 },
 ]
 
-function splashSvg({ width, height }) {
-  const logoSize = Math.round(Math.min(width, height) * 0.26)
-  const logoX = Math.round((width - logoSize) / 2)
-  const logoY = Math.round(height * 0.41 - logoSize / 2)
-  const wordmarkY = Math.round(logoY + logoSize + height * 0.055)
-  const fontSize = Math.round(width * 0.145)
+function pageHtml({ width, height }) {
+  const logoSize = Math.round(Math.min(width * 0.32, height * 0.16))
+  const gap = Math.round(height * 0.022)
+  const wordmarkSize = Math.round(width * 0.148)
 
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-  <defs>
-    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0%" stop-color="#f7fbff"/>
-      <stop offset="52%" stop-color="#eef5ff"/>
-      <stop offset="100%" stop-color="#f6f0ff"/>
-    </linearGradient>
-    <radialGradient id="blue" cx="30%" cy="18%" r="70%">
-      <stop offset="0%" stop-color="#dceaff" stop-opacity="0.98"/>
-      <stop offset="100%" stop-color="#dceaff" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="mauve" cx="76%" cy="76%" r="64%">
-      <stop offset="0%" stop-color="#eadcf4" stop-opacity="0.92"/>
-      <stop offset="100%" stop-color="#eadcf4" stop-opacity="0"/>
-    </radialGradient>
-    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="${Math.round(height * 0.012)}" stdDeviation="${Math.round(width * 0.02)}" flood-color="#1f4ec8" flood-opacity="0.16"/>
-    </filter>
-  </defs>
-  <rect width="100%" height="100%" fill="url(#bg)"/>
-  <rect width="100%" height="100%" fill="url(#blue)"/>
-  <rect width="100%" height="100%" fill="url(#mauve)"/>
-  <image href="data:image/png;base64,${logoBase64}" x="${logoX}" y="${logoY}" width="${logoSize}" height="${logoSize}" filter="url(#softShadow)" preserveAspectRatio="xMidYMid meet"/>
-  <text x="50%" y="${wordmarkY}" text-anchor="middle" dominant-baseline="hanging" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="${fontSize}" font-weight="900" fill="#050b1d" letter-spacing="0">같이타</text>
-</svg>`
+  return `<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @font-face {
+        font-family: "Paperlogy Splash";
+        src: url("data:font/woff2;base64,${fontBase64}") format("woff2");
+        font-weight: 900;
+        font-style: normal;
+        font-display: block;
+      }
+
+      html,
+      body {
+        width: ${width}px;
+        height: ${height}px;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      body {
+        background:
+          radial-gradient(${Math.round(width * 0.95)}px ${Math.round(width * 0.86)}px at 18% 8%, rgba(219, 234, 255, 0.96), rgba(219, 234, 255, 0) 64%),
+          radial-gradient(${Math.round(width * 0.9)}px ${Math.round(width * 0.82)}px at 86% 80%, rgba(240, 223, 250, 0.9), rgba(240, 223, 250, 0) 66%),
+          linear-gradient(180deg, rgb(249, 252, 255) 0%, rgb(246, 249, 255) 58%, rgb(250, 247, 255) 100%);
+        color: rgb(5, 11, 29);
+      }
+
+      .brand {
+        position: absolute;
+        top: 46%;
+        left: 50%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: ${gap}px;
+        width: 100%;
+        transform: translate(-50%, -50%);
+      }
+
+      .logo {
+        width: ${logoSize}px;
+        height: ${logoSize}px;
+        object-fit: contain;
+        filter: drop-shadow(0 ${Math.round(height * 0.012)}px ${Math.round(width * 0.032)}px rgba(31, 78, 200, 0.18));
+      }
+
+      .wordmark {
+        font-family: "Paperlogy Splash", -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: ${wordmarkSize}px;
+        font-weight: 900;
+        line-height: 0.98;
+        letter-spacing: 0;
+        white-space: nowrap;
+        text-align: center;
+        text-rendering: geometricPrecision;
+        -webkit-font-smoothing: antialiased;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="brand" aria-label="같이타">
+      <img class="logo" src="data:image/png;base64,${logoBase64}" alt="" />
+      <div class="wordmark">같이타</div>
+    </main>
+  </body>
+</html>`
 }
 
 mkdirSync(splashDir, { recursive: true })
-mkdirSync(tempDir, { recursive: true })
+rmSync(tempDir, { recursive: true, force: true })
+mkdirSync(chromeProfileDir, { recursive: true })
 
 for (const device of devices) {
-  const tempSvgPath = join(tempDir, device.file.replace(/\.png$/, '.svg'))
+  const tempHtmlPath = join(tempDir, device.file.replace(/\.png$/, '.html'))
   const outputPath = join(splashDir, device.file)
 
-  writeFileSync(tempSvgPath, splashSvg(device), 'utf8')
-  execFileSync('sips', ['-s', 'format', 'png', tempSvgPath, '--out', outputPath], { stdio: 'ignore' })
+  writeFileSync(tempHtmlPath, pageHtml(device), 'utf8')
+  const result = spawnSync(chromePath, [
+    '--headless=new',
+    '--disable-gpu',
+    '--disable-background-networking',
+    '--disable-extensions',
+    '--hide-scrollbars',
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--run-all-compositor-stages-before-draw',
+    '--virtual-time-budget=1000',
+    `--user-data-dir=${chromeProfileDir}`,
+    '--force-device-scale-factor=1',
+    `--window-size=${device.width},${device.height}`,
+    `--screenshot=${outputPath}`,
+    pathToFileURL(tempHtmlPath).href,
+  ], { stdio: 'ignore', timeout: 12000 })
+
+  if (result.error && result.error.code !== 'ETIMEDOUT') {
+    throw result.error
+  }
+
+  if (!existsSync(outputPath)) {
+    throw new Error(`Failed to create ${outputPath}`)
+  }
 }
 
 rmSync(tempDir, { recursive: true, force: true })

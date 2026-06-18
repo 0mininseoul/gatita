@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { ChatRoom, User, Message, RoomParticipant, LOCATIONS } from '@/lib/supabase'
@@ -8,6 +8,8 @@ import { ArrowLeft, Users, Clock, Send, Flag, Check, X, LogOut } from 'lucide-re
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import toast from 'react-hot-toast'
+
+const MAX_TIMESTAMP_REVEAL = 68
 
 export default function ChatRoomPage() {
   const router = useRouter()
@@ -24,16 +26,56 @@ export default function ChatRoomPage() {
   const [showReportModal, setShowReportModal] = useState(false)
   const [reportReason, setReportReason] = useState('')
   const [reportTarget, setReportTarget] = useState<string>('')
+  const [timestampReveal, setTimestampReveal] = useState(0)
 
   const headerRef = useRef<HTMLElement>(null)
   const messagesScrollRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<HTMLDivElement>(null)
+  const timestampDragRef = useRef({
+    isTracking: false,
+    startX: 0,
+    startY: 0,
+  })
   const supabase = useMemo(() => createClient(), [])
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const scroller = messagesScrollRef.current
+
+    if (scroller) {
+      scroller.scrollTo({ top: scroller.scrollHeight, behavior })
+      return
+    }
+
     messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' })
   }, [])
+
+  const keepWindowPinned = useCallback(() => {
+    if (window.scrollY !== 0) {
+      window.scrollTo(0, 0)
+    }
+  }, [])
+
+  const syncChatChrome = useCallback(() => {
+    const root = document.documentElement
+    const visualViewport = window.visualViewport
+    const viewportOffsetTop = visualViewport?.offsetTop ?? 0
+    const keyboardInset = visualViewport
+      ? Math.max(0, window.innerHeight - visualViewport.height - viewportOffsetTop)
+      : 0
+    const headerHeight = headerRef.current?.getBoundingClientRect().height ?? 0
+    const composerHeight = composerRef.current?.getBoundingClientRect().height ?? 0
+
+    root.style.setProperty('--chat-viewport-offset-top', `${Math.ceil(viewportOffsetTop)}px`)
+    root.style.setProperty('--chat-header-height', `${Math.ceil(headerHeight)}px`)
+    root.style.setProperty('--chat-composer-height', `${Math.ceil(composerHeight)}px`)
+    root.style.setProperty('--chat-keyboard-inset', `${Math.ceil(keyboardInset)}px`)
+  }, [])
+
+  const syncAndPinChat = useCallback(() => {
+    syncChatChrome()
+    requestAnimationFrame(keepWindowPinned)
+  }, [keepWindowPinned, syncChatChrome])
 
   useEffect(() => {
     const root = document.documentElement
@@ -41,6 +83,7 @@ export default function ChatRoomPage() {
     const previousRootOverflow = root.style.overflow
     const previousBodyOverflow = body.style.overflow
     const previousBodyOverscrollBehavior = body.style.overscrollBehavior
+    const previousChatViewportOffsetTop = root.style.getPropertyValue('--chat-viewport-offset-top')
     const previousChatHeaderHeight = root.style.getPropertyValue('--chat-header-height')
     const previousChatComposerHeight = root.style.getPropertyValue('--chat-composer-height')
     const previousChatKeyboardInset = root.style.getPropertyValue('--chat-keyboard-inset')
@@ -51,33 +94,6 @@ export default function ChatRoomPage() {
       } else {
         root.style.removeProperty(property)
       }
-    }
-
-    const keepWindowPinned = () => {
-      if (window.scrollY !== 0) {
-        window.scrollTo(0, 0)
-      }
-    }
-
-    const syncChatChrome = () => {
-      const visualViewport = window.visualViewport
-      const keyboardInset = visualViewport
-        ? Math.max(0, window.innerHeight - visualViewport.height - visualViewport.offsetTop)
-        : 0
-      const headerHeight = headerRef.current?.getBoundingClientRect().height ?? 0
-      const composerHeight = composerRef.current?.getBoundingClientRect().height ?? 0
-
-      root.style.setProperty('--chat-header-height', `${Math.ceil(headerHeight)}px`)
-      root.style.setProperty('--chat-composer-height', `${Math.ceil(composerHeight)}px`)
-      root.style.setProperty('--chat-keyboard-inset', `${Math.ceil(keyboardInset)}px`)
-    }
-
-    const syncAndPinChat = () => {
-      syncChatChrome()
-      requestAnimationFrame(() => {
-        keepWindowPinned()
-        scrollToBottom('auto')
-      })
     }
 
     root.style.overflow = 'hidden'
@@ -102,6 +118,7 @@ export default function ChatRoomPage() {
       root.style.overflow = previousRootOverflow
       body.style.overflow = previousBodyOverflow
       body.style.overscrollBehavior = previousBodyOverscrollBehavior
+      restoreProperty('--chat-viewport-offset-top', previousChatViewportOffsetTop)
       restoreProperty('--chat-header-height', previousChatHeaderHeight)
       restoreProperty('--chat-composer-height', previousChatComposerHeight)
       restoreProperty('--chat-keyboard-inset', previousChatKeyboardInset)
@@ -112,18 +129,53 @@ export default function ChatRoomPage() {
       window.removeEventListener('orientationchange', syncAndPinChat)
       window.removeEventListener('scroll', keepWindowPinned)
     }
-  }, [scrollToBottom])
+  }, [keepWindowPinned, syncAndPinChat])
 
   useEffect(() => {
     scrollToBottom()
   }, [messages, scrollToBottom])
 
   const handleComposerFocus = useCallback(() => {
-    requestAnimationFrame(() => {
-      window.scrollTo(0, 0)
-      scrollToBottom('auto')
-    })
-  }, [scrollToBottom])
+    syncAndPinChat()
+    requestAnimationFrame(syncAndPinChat)
+    window.setTimeout(syncAndPinChat, 80)
+    window.setTimeout(syncAndPinChat, 180)
+  }, [syncAndPinChat])
+
+  const handleMessagesPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+
+    timestampDragRef.current = {
+      isTracking: true,
+      startX: event.clientX,
+      startY: event.clientY,
+    }
+  }, [])
+
+  const handleMessagesPointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = timestampDragRef.current
+    if (!drag.isTracking) return
+
+    const deltaX = event.clientX - drag.startX
+    const deltaY = event.clientY - drag.startY
+
+    if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 10) {
+      setTimestampReveal(0)
+      return
+    }
+
+    setTimestampReveal(Math.min(MAX_TIMESTAMP_REVEAL, Math.max(0, -deltaX)))
+  }, [])
+
+  const handleMessagesPointerEnd = useCallback(() => {
+    timestampDragRef.current.isTracking = false
+    setTimestampReveal(0)
+  }, [])
+
+  const timestampRevealStyle = useMemo(() => ({
+    '--timestamp-reveal': `${timestampReveal}px`,
+    '--timestamp-opacity': `${Math.min(1, timestampReveal / MAX_TIMESTAMP_REVEAL)}`,
+  }) as CSSProperties, [timestampReveal])
 
   const loadRoom = useCallback(async () => {
     try {
@@ -433,7 +485,7 @@ export default function ChatRoomPage() {
   return (
     <div className="chat-shell fixed inset-0 w-screen max-w-full overflow-hidden overscroll-none app-bg">
       {/* Header */}
-      <header ref={headerRef} className="chat-room-header fixed inset-x-0 top-0 z-30 overflow-hidden px-3 pb-2">
+      <header ref={headerRef} className="chat-room-header fixed inset-x-0 z-30 overflow-hidden px-3 pb-2">
         <div className="flex min-w-0 items-start justify-between gap-2">
           <div className="flex min-w-0 items-start">
             <button
@@ -516,13 +568,22 @@ export default function ChatRoomPage() {
       </header>
 
       {/* 채팅 메시지 영역 */}
-      <div ref={messagesScrollRef} className="chat-messages absolute inset-0 space-y-2 overflow-y-auto overflow-x-hidden px-3">
+      <div
+        ref={messagesScrollRef}
+        className="chat-messages absolute inset-0 space-y-2 overflow-y-auto overflow-x-hidden px-3"
+        style={timestampRevealStyle}
+        onPointerDown={handleMessagesPointerDown}
+        onPointerMove={handleMessagesPointerMove}
+        onPointerUp={handleMessagesPointerEnd}
+        onPointerCancel={handleMessagesPointerEnd}
+        onPointerLeave={handleMessagesPointerEnd}
+      >
         {messages.map((message) => (
           <div
             key={message.id}
-            className={`flex w-full min-w-0 ${message.user_id === user.id ? 'justify-end' : 'justify-start'}`}
+            className={`chat-message-row flex w-full min-w-0 ${message.user_id === user.id ? 'justify-end' : 'justify-start'}`}
           >
-            <div className={`min-w-0 max-w-[min(78vw,18rem)] ${message.user_id === user.id ? 'ml-7' : 'mr-7'}`}>
+            <div className={`chat-message-bubble-stack min-w-0 max-w-[min(78vw,18rem)] ${message.user_id === user.id ? 'ml-7' : 'mr-7'}`}>
               {message.user_id !== user.id && (
                 <p className="mb-0.5 truncate px-1 text-xs text-gray-500">
                   {message.user?.nickname} ({message.user?.department})
@@ -535,10 +596,10 @@ export default function ChatRoomPage() {
               >
                 {message.content}
               </div>
-              <p className="mt-0.5 px-1 text-xs text-gray-400">
-                {format(new Date(message.created_at), 'HH:mm')}
-              </p>
             </div>
+            <time className="chat-message-time" dateTime={message.created_at}>
+              {format(new Date(message.created_at), 'HH:mm')}
+            </time>
           </div>
         ))}
         <div ref={messagesEndRef} />

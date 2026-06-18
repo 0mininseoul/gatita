@@ -49,6 +49,40 @@ test('chat bubbles use compact mobile messenger spacing', () => {
   assert.doesNotMatch(block, /@apply\s+p-3/)
 })
 
+test('chat message timestamps are hidden until the message list is dragged left', () => {
+  const pageSource = readProjectFile('app/rooms/[id]/page.tsx')
+  const cssSource = readProjectFile('app/globals.css')
+  const rowBlock = cssBlock(cssSource, '.chat-message-row')
+  const stackBlock = cssBlock(cssSource, '.chat-message-bubble-stack')
+  const timeBlock = cssBlock(cssSource, '.chat-message-time')
+
+  assert.match(pageSource, /MAX_TIMESTAMP_REVEAL/)
+  assert.match(pageSource, /timestampReveal/)
+  assert.match(pageSource, /handleMessagesPointerDown/)
+  assert.match(pageSource, /onPointerMove=\{handleMessagesPointerMove\}/)
+  assert.match(pageSource, /className=\{`chat-message-row/)
+  assert.match(pageSource, /chat-message-bubble-stack/)
+  assert.match(pageSource, /<time className="chat-message-time"/)
+  assert.doesNotMatch(pageSource, /<p className="mt-0\.5 px-1 text-xs text-gray-400">/)
+  assert.match(rowBlock, /position:\s*relative;/)
+  assert.match(stackBlock, /transform:\s*translateX\(calc\(-1 \* var\(--timestamp-reveal\)\)\);/)
+  assert.match(timeBlock, /opacity:\s*var\(--timestamp-opacity\);/)
+  assert.match(timeBlock, /pointer-events:\s*none;/)
+})
+
+test('chat keyboard viewport sync does not animate the message list on every keyboard frame', () => {
+  const source = readProjectFile('app/rooms/[id]/page.tsx')
+  const syncStart = source.indexOf('const syncAndPinChat =')
+  const syncEnd = source.indexOf('\n    root.style.overflow', syncStart)
+  const syncBlock = source.slice(syncStart, syncEnd)
+
+  assert.ok(syncStart > -1, 'syncAndPinChat exists')
+  assert.ok(syncEnd > syncStart, 'syncAndPinChat block can be inspected')
+  assert.match(source, /const syncChatChrome = useCallback/)
+  assert.match(source, /window\.setTimeout\(syncAndPinChat, 180\)/)
+  assert.doesNotMatch(syncBlock, /scrollToBottom/)
+})
+
 test('map app and bottom sheet use the visual viewport and internal sheet scrolling', () => {
   const pageSource = readProjectFile('app/page.tsx')
   const mapSource = readProjectFile('components/CampusRouteMap.tsx')

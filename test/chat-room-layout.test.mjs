@@ -111,6 +111,19 @@ test('chat history loads message rows even if embedded author loading is unavail
   assert.doesNotMatch(loadBlock, /user:users\(nickname, department\)/)
 })
 
+test('chat room hides participant chips behind a participant sheet and shows creator payout account', () => {
+  const source = readProjectFile('app/rooms/[id]/page.tsx')
+
+  assert.doesNotMatch(source, /participant\.confirmed \? 'bg-green-100/, 'participant chips should not be publicly rendered inline')
+  assert.match(source, /showParticipants/, 'participants should be shown from an explicit header action')
+  assert.match(source, /참여자/, 'chat header should include participant list affordance')
+  assert.match(source, /href=\{`tel:\$\{participant\.user\?\.phone\}`\}/, 'participant list should allow direct phone calls')
+  assert.match(source, /user:users\(nickname, department, phone\)/, 'participant query should include phone numbers for the participant sheet')
+  assert.match(source, /user_payout_accounts/, 'chat room should load room creator payout account')
+  assert.match(source, /방장 계좌/, 'creator payout account should replace the old participant chip area')
+  assert.match(source, /account_number/, 'creator payout account should display the account number')
+})
+
 test('map app and bottom sheet use the visual viewport and internal sheet scrolling', () => {
   const pageSource = readProjectFile('app/page.tsx')
   const mapSource = readProjectFile('components/CampusRouteMap.tsx')

@@ -4,14 +4,20 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { User } from '@/lib/supabase'
+import { PayoutAccount, User } from '@/lib/supabase'
 import { ArrowLeft, User as UserIcon, AlertCircle, Bug, Check, Mail, Trash2, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 type DeleteStep = 'idle' | 'overview' | 'confirm'
+type PayoutAccountForm = Pick<PayoutAccount, 'bank_name' | 'account_number' | 'account_holder'>
 
 const ADMIN_CONTACT_EMAIL = 'ym5373@gachon.ac.kr'
 const DELETE_CONFIRMATION_TEXT = '떠나지 말아주세요. 탈퇴하시는 이유를 여쭤봐도 될까요? 열심히 만들었어요 흑흑'
+const EMPTY_PAYOUT_ACCOUNT_FORM: PayoutAccountForm = {
+  bank_name: '',
+  account_number: '',
+  account_holder: '',
+}
 
 const createMailHref = (subject: string, body: string) =>
   `mailto:${ADMIN_CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
@@ -24,6 +30,10 @@ export default function SettingsPage() {
   const [newNickname, setNewNickname] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [nicknameError, setNicknameError] = useState('')
+  const [payoutAccount, setPayoutAccount] = useState<PayoutAccount | null>(null)
+  const [accountForm, setAccountForm] = useState<PayoutAccountForm>(EMPTY_PAYOUT_ACCOUNT_FORM)
+  const [accountError, setAccountError] = useState('')
+  const [isSavingAccount, setIsSavingAccount] = useState(false)
   const [deleteStep, setDeleteStep] = useState<DeleteStep>('idle')
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
   const [deleteAcknowledged, setDeleteAcknowledged] = useState(false)
@@ -48,6 +58,24 @@ export default function SettingsPage() {
       if (userData) {
         setUser(userData)
         setNewNickname(userData.nickname)
+
+        const { data: payoutData } = await supabase
+          .from('user_payout_accounts')
+          .select('*')
+          .eq('user_id', authUser.id)
+          .maybeSingle()
+
+        if (payoutData) {
+          setPayoutAccount(payoutData)
+          setAccountForm({
+            bank_name: payoutData.bank_name,
+            account_number: payoutData.account_number,
+            account_holder: payoutData.account_holder,
+          })
+        } else {
+          setPayoutAccount(null)
+          setAccountForm(EMPTY_PAYOUT_ACCOUNT_FORM)
+        }
       } else {
         router.push('/')
       }
@@ -138,6 +166,58 @@ export default function SettingsPage() {
       toast.error('닉네임 변경 중 오류가 발생했습니다')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleAccountFieldChange = (field: keyof PayoutAccountForm, value: string) => {
+    setAccountForm(prev => ({
+      ...prev,
+      [field]: value,
+    }))
+    setAccountError('')
+  }
+
+  const handlePayoutAccountSave = async () => {
+    if (!user) return
+
+    const nextAccount = {
+      bank_name: accountForm.bank_name.trim(),
+      account_number: accountForm.account_number.trim(),
+      account_holder: accountForm.account_holder.trim(),
+    }
+
+    if (!nextAccount.bank_name || !nextAccount.account_number || !nextAccount.account_holder) {
+      setAccountError('은행명, 계좌번호, 계좌주 이름을 모두 입력해주세요')
+      return
+    }
+
+    setIsSavingAccount(true)
+    setAccountError('')
+
+    try {
+      const { data, error } = await supabase
+        .from('user_payout_accounts')
+        .upsert({
+          user_id: user.id,
+          ...nextAccount,
+        }, { onConflict: 'user_id' })
+        .select('*')
+        .single()
+
+      if (error) throw error
+
+      setPayoutAccount(data)
+      setAccountForm({
+        bank_name: data.bank_name,
+        account_number: data.account_number,
+        account_holder: data.account_holder,
+      })
+      toast.success('계좌 정보가 저장되었습니다')
+    } catch (error) {
+      console.error('Payout account save error:', error)
+      toast.error('계좌 정보 저장 중 오류가 발생했습니다')
+    } finally {
+      setIsSavingAccount(false)
     }
   }
 
@@ -397,6 +477,83 @@ export default function SettingsPage() {
                 학과는 가입 후 변경할 수 없습니다
               </p>
             </div>
+          </div>
+        </div>
+
+        {/* 계좌 정보 */}
+        <div className="card p-6 mb-6">
+          <div className="mb-5">
+            <h3 className="text-lg font-semibold text-gray-900">계좌 정보</h3>
+            <p className="mt-1 text-sm text-gray-600">
+              내가 만든 방에서는 방장 계좌로 참여자에게 공개됩니다.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                계좌은행명
+              </label>
+              <input
+                type="text"
+                value={accountForm.bank_name}
+                onChange={(event) => handleAccountFieldChange('bank_name', event.target.value)}
+                className="input-field"
+                placeholder="은행명을 입력하세요"
+                disabled={isSavingAccount}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                계좌번호
+              </label>
+              <input
+                type="text"
+                value={accountForm.account_number}
+                onChange={(event) => handleAccountFieldChange('account_number', event.target.value)}
+                className="input-field"
+                placeholder="계좌번호를 입력하세요"
+                disabled={isSavingAccount}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                계좌주 이름
+              </label>
+              <input
+                type="text"
+                value={accountForm.account_holder}
+                onChange={(event) => handleAccountFieldChange('account_holder', event.target.value)}
+                className="input-field"
+                placeholder="계좌주 이름을 입력하세요"
+                disabled={isSavingAccount}
+              />
+            </div>
+
+            {accountError && (
+              <div className="flex items-center text-sm text-red-500">
+                <AlertCircle className="w-4 h-4 mr-1" />
+                {accountError}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handlePayoutAccountSave}
+              disabled={isSavingAccount}
+              className="btn-primary w-full py-3 text-sm"
+            >
+              {isSavingAccount ? (
+                <span className="inline-flex items-center justify-center">
+                  <span className="loading-spinner mr-2" />
+                  저장 중...
+                </span>
+              ) : payoutAccount ? (
+                '계좌 정보 수정'
+              ) : (
+                '계좌 정보 저장'
+              )}
+            </button>
           </div>
         </div>
 

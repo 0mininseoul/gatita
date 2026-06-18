@@ -42,11 +42,22 @@ export type User = {
   email: string
   name: string
   phone: string
+  phone_verified_at?: string | null
+  phone_mfa_factor_id?: string | null
   nickname: string
   nickname_updated_at?: string
   department: string
   status: 'active' | 'suspended'
   is_admin: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type PayoutAccount = {
+  user_id: string
+  bank_name: string
+  account_number: string
+  account_holder: string
   created_at: string
   updated_at: string
 }
@@ -64,6 +75,7 @@ export type ChatRoom = {
   created_at: string
   participants?: RoomParticipant[]
   creator?: User
+  creatorPayoutAccount?: PayoutAccount | null
 }
 
 export type RoomParticipant = {

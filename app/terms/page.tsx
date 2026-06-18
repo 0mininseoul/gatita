@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   },
 }
 
-const updatedAt = '2026년 6월 17일'
+const updatedAt = '2026년 6월 19일'
 
 export default function TermsPage() {
   return (
@@ -36,7 +36,7 @@ export default function TermsPage() {
       <LegalSection title="3. 이용 자격 및 계정">
         <ul className="list-disc space-y-2 pl-5">
           <li>이용자는 가천대학교 이메일 주소(@gachon.ac.kr)를 사용하는 Google 계정으로 가입해야 합니다.</li>
-          <li>회원가입 시 이름, 휴대전화번호, 닉네임, 학과 등 정확한 정보를 입력해야 합니다.</li>
+          <li>회원가입 시 이름, 인증 가능한 휴대전화번호, 닉네임, 학과, 정산 계좌 등 정확한 정보를 입력해야 합니다.</li>
           <li>타인의 계정을 사용하거나 허위 정보를 입력해서는 안 됩니다.</li>
           <li>계정 관리 책임은 이용자에게 있으며, 계정 도용이 의심되는 경우 즉시 운영자에게 알려야 합니다.</li>
         </ul>
@@ -45,7 +45,7 @@ export default function TermsPage() {
       <LegalSection title="4. 서비스 이용">
         <ul className="list-disc space-y-2 pl-5">
           <li>이용자는 출발지, 도착지, 출발 날짜와 시각을 선택해 동행 채팅방을 만들거나 참여할 수 있습니다.</li>
-          <li>채팅방 참여자는 서비스 내에서 표시되는 닉네임, 학과, 채팅 메시지, 참여 여부를 확인할 수 있습니다.</li>
+          <li>채팅방 참여자는 서비스 내에서 표시되는 닉네임, 학과, 채팅 메시지, 참여 여부, 참여자 전화 연결, 방장 정산 계좌를 확인할 수 있습니다.</li>
           <li>같이타는 이용자 간 만남을 돕는 도구이며, 실제 이동 여부와 동행 과정의 안전 판단은 이용자 본인의 책임입니다.</li>
           <li>이용자는 필요 이상으로 개인정보를 채팅에 공개하지 않아야 하며, 사람이 많은 공개된 장소에서 만나는 것을 권장합니다.</li>
         </ul>

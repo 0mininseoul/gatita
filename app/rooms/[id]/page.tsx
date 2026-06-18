@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { ChatRoom, User, Message, RoomParticipant, LOCATIONS } from '@/lib/supabase'
-import { ArrowLeft, Users, Clock, Send, Flag, Check, X, LogOut } from 'lucide-react'
+import { ChatRoom, User, Message, RoomParticipant, PayoutAccount, LOCATIONS } from '@/lib/supabase'
+import { ArrowLeft, Users, Clock, Send, Flag, Check, X, LogOut, Phone, CreditCard } from 'lucide-react'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -20,10 +20,12 @@ export default function ChatRoomPage() {
   const [room, setRoom] = useState<ChatRoom | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [participants, setParticipants] = useState<RoomParticipant[]>([])
+  const [creatorPayoutAccount, setCreatorPayoutAccount] = useState<PayoutAccount | null>(null)
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const [isConfirmed, setIsConfirmed] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
+  const [showParticipants, setShowParticipants] = useState(false)
   const [reportReason, setReportReason] = useState('')
   const [reportTarget, setReportTarget] = useState<string>('')
   const [timestampReveal, setTimestampReveal] = useState(0)
@@ -231,6 +233,18 @@ export default function ChatRoomPage() {
 
       if (data) {
         setRoom(data as any)
+        const { data: payoutAccount, error: payoutError } = await supabase
+          .from('user_payout_accounts')
+          .select('user_id, bank_name, account_number, account_holder, created_at, updated_at')
+          .eq('user_id', data.created_by)
+          .maybeSingle()
+
+        if (payoutError) {
+          console.error('Load creator payout account error:', payoutError)
+          setCreatorPayoutAccount(null)
+        } else {
+          setCreatorPayoutAccount(payoutAccount)
+        }
       } else {
         router.push('/')
       }
@@ -286,7 +300,7 @@ export default function ChatRoomPage() {
         .from('room_participants')
         .select(`
           *,
-          user:users(nickname, department)
+          user:users(nickname, department, phone)
         `)
         .eq('room_id', roomId)
 
@@ -572,6 +586,19 @@ export default function ChatRoomPage() {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            {isParticipant && (
+              <button
+                type="button"
+                aria-label="참여자 보기"
+                onClick={() => setShowParticipants(true)}
+                className="relative rounded-lg p-2 text-gray-700 hover:bg-gray-100"
+              >
+                <Users className="h-5 w-5" />
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary-600 px-1 text-[10px] font-bold text-white">
+                  {participants.length}
+                </span>
+              </button>
+            )}
             <button
               type="button"
               aria-label="신고하기"
@@ -593,27 +620,21 @@ export default function ChatRoomPage() {
           </div>
         </div>
 
-        {/* 참여자 목록 */}
-        <div className="mt-2">
-          <div className="flex gap-1.5 overflow-x-auto pb-1">
-            {participants.map(participant => (
-              <div
-                key={participant.id}
-                className={`flex max-w-[11rem] shrink-0 items-center rounded-full px-2.5 py-1 text-xs ${
-                  participant.confirmed
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-gray-100 text-gray-600'
-                }`}
-              >
-                {participant.confirmed && <Check className="w-3 h-3 mr-1" />}
-                <span className="truncate">{participant.user?.nickname}</span>
-                <span className="ml-1 truncate">({participant.user?.department})</span>
-                {participant.user_id === room.created_by && (
-                  <span className="ml-1 shrink-0 font-medium">방장</span>
-                )}
-              </div>
-            ))}
+        {/* 방장 계좌 */}
+        <div className="mt-2 rounded-xl border border-primary-100 bg-primary-50/90 px-3 py-2">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-primary-700">
+            <CreditCard className="h-3.5 w-3.5" />
+            <span>방장 계좌</span>
           </div>
+          {creatorPayoutAccount ? (
+            <p className="mt-1 truncate text-xs font-semibold text-gray-900">
+              {creatorPayoutAccount.bank_name} {creatorPayoutAccount.account_number} {creatorPayoutAccount.account_holder}
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-gray-500">
+              방장 계좌 정보가 아직 등록되지 않았습니다.
+            </p>
+          )}
         </div>
 
         {/* 참여 확정 버튼 */}
@@ -695,6 +716,70 @@ export default function ChatRoomPage() {
           </p>
         )}
       </div>
+
+      {/* 참여자 시트 */}
+      {showParticipants && (
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-gray-950/35 px-3 pb-3 pt-16"
+          onClick={() => setShowParticipants(false)}
+        >
+          <div
+            className="w-full rounded-2xl bg-white p-4 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-extrabold text-gray-950">참여자</h2>
+                <p className="text-xs text-gray-500">{participants.length}/{room.max_participants}명 참여 중</p>
+              </div>
+              <button
+                type="button"
+                aria-label="참여자 목록 닫기"
+                onClick={() => setShowParticipants(false)}
+                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="max-h-[42vh] space-y-2 overflow-y-auto">
+              {participants.map(participant => (
+                <div
+                  key={participant.id}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <p className="truncate text-sm font-bold text-gray-950">{participant.user?.nickname}</p>
+                      {participant.user_id === room.created_by && (
+                        <span className="shrink-0 rounded-full bg-primary-100 px-2 py-0.5 text-[10px] font-bold text-primary-700">
+                          방장
+                        </span>
+                      )}
+                      {participant.confirmed && (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-green-600" />
+                      )}
+                    </div>
+                    <p className="mt-0.5 truncate text-xs text-gray-500">{participant.user?.department}</p>
+                  </div>
+                  <a
+                    href={`tel:${participant.user?.phone}`}
+                    aria-label={`${participant.user?.nickname ?? '참여자'}에게 전화하기`}
+                    aria-disabled={!participant.user?.phone}
+                    className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                      participant.user?.phone
+                        ? 'bg-primary-600 text-white hover:bg-primary-700'
+                        : 'pointer-events-none bg-gray-200 text-gray-400'
+                    }`}
+                  >
+                    <Phone className="h-5 w-5" />
+                  </a>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 신고 모달 */}
       {showReportModal && (

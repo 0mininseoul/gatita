@@ -18,6 +18,33 @@ type SignupStep = {
   description?: string
 }
 
+type PhoneVerificationState = {
+  factorId: string
+  challengeId: string
+  verifiedPhone: string
+  verifiedAt: string
+  isSending: boolean
+  isVerifying: boolean
+}
+
+const INITIAL_PHONE_VERIFICATION: PhoneVerificationState = {
+  factorId: '',
+  challengeId: '',
+  verifiedPhone: '',
+  verifiedAt: '',
+  isSending: false,
+  isVerifying: false,
+}
+
+const normalizePhoneForSupabase = (phone: string) => {
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length === 11 && digits.startsWith('010')) {
+    return `+82${digits.slice(1)}`
+  }
+
+  return phone
+}
+
 const SIGNUP_STEPS: SignupStep[] = [
   {
     id: 'name',
@@ -33,7 +60,31 @@ const SIGNUP_STEPS: SignupStep[] = [
     placeholder: '010-1234-5678',
     type: 'text',
     required: true,
-    description: '동행자에게 공개되지 않습니다'
+    description: 'SMS 인증 후 변경할 수 없습니다'
+  },
+  {
+    id: 'bank_name',
+    label: '정산 받을 은행을 입력해주세요',
+    placeholder: '토스뱅크',
+    type: 'text',
+    required: true,
+    description: '방장이 되면 같은 방 참여자에게 공개됩니다'
+  },
+  {
+    id: 'account_number',
+    label: '계좌번호를 입력해주세요',
+    placeholder: '1234-5678-9012',
+    type: 'text',
+    required: true,
+    description: '방장이 되면 같은 방 참여자에게 공개됩니다'
+  },
+  {
+    id: 'account_holder',
+    label: '계좌주 이름을 입력해주세요',
+    placeholder: '홍길동',
+    type: 'text',
+    required: true,
+    description: '방장이 되면 같은 방 참여자에게 공개됩니다'
   },
   {
     id: 'nickname',
@@ -67,6 +118,8 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
   const supabase = useMemo(() => createClient(), [])
   const [activatedSteps, setActivatedSteps] = useState<boolean[]>(Array(SIGNUP_STEPS.length).fill(false))
   const [googleEmail, setGoogleEmail] = useState<string>('')
+  const [phoneCode, setPhoneCode] = useState('')
+  const [phoneVerification, setPhoneVerification] = useState<PhoneVerificationState>(INITIAL_PHONE_VERIFICATION)
 
   const currentStepData = SIGNUP_STEPS[currentStep]
   const stepRefs = useRef<Record<string, HTMLDivElement | null>>({})
@@ -121,8 +174,107 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
     }
   }
 
+  const handleSendPhoneCode = async () => {
+    const phone = formData.phone || ''
+    const phoneStep = SIGNUP_STEPS.find(step => step.id === 'phone')
+    const phoneRegex = /^010-\d{4}-\d{4}$/
+
+    if (!phoneStep || !phoneRegex.test(phone)) {
+      setErrors({ phone: '010-0000-0000 형식으로 입력해주세요' })
+      return
+    }
+
+    setPhoneVerification(prev => ({ ...prev, isSending: true }))
+    setErrors(prev => {
+      const next = { ...prev }
+      delete next.phone
+      return next
+    })
+
+    try {
+      const normalizedPhone = normalizePhoneForSupabase(phone)
+      const { data: enrolledFactor, error: enrollError } = await supabase.auth.mfa.enroll({
+        factorType: 'phone' as any,
+        phone: normalizedPhone,
+      } as any)
+
+      if (enrollError) throw enrollError
+
+      const factorId = enrolledFactor?.id
+      if (!factorId) {
+        throw new Error('전화번호 인증 정보를 만들지 못했습니다')
+      }
+
+      const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId })
+      if (challengeError) throw challengeError
+      if (!challenge?.id) {
+        throw new Error('인증번호 요청 정보를 만들지 못했습니다')
+      }
+
+      setPhoneVerification({
+        factorId,
+        challengeId: challenge.id,
+        verifiedPhone: '',
+        verifiedAt: '',
+        isSending: false,
+        isVerifying: false,
+      })
+      setPhoneCode('')
+      toast.success('인증번호를 보냈습니다')
+    } catch (error: any) {
+      console.error('Phone verification start error:', error)
+      setPhoneVerification(INITIAL_PHONE_VERIFICATION)
+      setErrors({
+        phone: error?.message?.includes('provider')
+          ? 'Supabase SMS 인증 provider 설정이 필요합니다'
+          : error?.message || '인증번호를 보낼 수 없습니다'
+      })
+      toast.error('전화번호 인증을 시작하지 못했습니다')
+    } finally {
+      setPhoneVerification(prev => ({ ...prev, isSending: false }))
+    }
+  }
+
+  const handleVerifyPhoneCode = async () => {
+    if (!phoneVerification.factorId || !phoneVerification.challengeId || !phoneCode.trim()) {
+      setErrors({ phone: '인증번호를 입력해주세요' })
+      return
+    }
+
+    setPhoneVerification(prev => ({ ...prev, isVerifying: true }))
+    setErrors(prev => {
+      const next = { ...prev }
+      delete next.phone
+      return next
+    })
+
+    try {
+      const { error } = await supabase.auth.mfa.verify({
+        factorId: phoneVerification.factorId,
+        challengeId: phoneVerification.challengeId,
+        code: phoneCode.trim(),
+      })
+
+      if (error) throw error
+
+      setPhoneVerification(prev => ({
+        ...prev,
+        verifiedPhone: formData.phone,
+        verifiedAt: new Date().toISOString(),
+        isVerifying: false,
+      }))
+      toast.success('전화번호 인증이 완료되었습니다')
+    } catch (error: any) {
+      console.error('Phone verification confirm error:', error)
+      setErrors({ phone: error?.message || '인증번호가 올바르지 않습니다' })
+      toast.error('인증번호를 확인하지 못했습니다')
+    } finally {
+      setPhoneVerification(prev => ({ ...prev, isVerifying: false }))
+    }
+  }
+
   const validateStep = (step: SignupStep, value: string): string | null => {
-    if (!value && step.required) {
+    if (!value.trim() && step.required) {
       return `${step.label}을(를) 입력해주세요`
     }
 
@@ -131,6 +283,24 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
         const phoneRegex = /^010-\d{4}-\d{4}$/
         if (!phoneRegex.test(value)) {
           return '010-0000-0000 형식으로 입력해주세요'
+        }
+        if (phoneVerification.verifiedPhone !== value || !phoneVerification.verifiedAt) {
+          return '인증번호 확인을 완료해주세요'
+        }
+        break
+      case 'bank_name':
+        if (value.trim().length < 2) {
+          return '은행명을 2자 이상 입력해주세요'
+        }
+        break
+      case 'account_number':
+        if (value.replace(/[^0-9]/g, '').length < 6) {
+          return '계좌번호를 정확히 입력해주세요'
+        }
+        break
+      case 'account_holder':
+        if (value.trim().length < 2) {
+          return '계좌주 이름을 2자 이상 입력해주세요'
         }
         break
       case 'nickname':
@@ -208,9 +378,11 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
         .insert({
           id: userId,
           email: userEmail,
-          name: formData.name,
-          phone: formData.phone,
-          nickname: formData.nickname,
+          name: formData.name.trim(),
+          phone: formData.phone.trim(),
+          phone_verified_at: phoneVerification.verifiedAt,
+          phone_mfa_factor_id: phoneVerification.factorId,
+          nickname: formData.nickname.trim(),
           department: formData.department,
           status: 'active',
           is_admin: false
@@ -219,6 +391,20 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
       if (profileError) {
         console.error('Profile creation error:', profileError)
         throw profileError
+      }
+
+      const { error: payoutError } = await supabase
+        .from('user_payout_accounts')
+        .insert({
+          user_id: userId,
+          bank_name: formData.bank_name.trim(),
+          account_number: formData.account_number.trim(),
+          account_holder: formData.account_holder.trim(),
+        })
+
+      if (payoutError) {
+        console.error('Payout account creation error:', payoutError)
+        throw payoutError
       }
 
       toast.success('회원가입이 완료되었습니다!')
@@ -232,6 +418,11 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
   }
 
   const handleInputChange = (fieldId: string, value: string) => {
+    if (fieldId === 'phone' && formData.phone !== value) {
+      setPhoneCode('')
+      setPhoneVerification(INITIAL_PHONE_VERIFICATION)
+    }
+
     setFormData(prev => ({
       ...prev,
       [fieldId]: value
@@ -264,6 +455,8 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
       setGoogleEmail('')
       setFormData({})
       setErrors({})
+      setPhoneCode('')
+      setPhoneVerification(INITIAL_PHONE_VERIFICATION)
       setCurrentStep(-1)
       return
     }
@@ -415,6 +608,52 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
                   />
                 )}
               </div>
+
+              {step.id === 'phone' && (
+                <div className="mb-4 space-y-3">
+                  {phoneVerification.verifiedPhone === formData.phone && phoneVerification.verifiedAt ? (
+                    <div className="flex items-center rounded-xl border border-green-100 bg-green-50 px-3 py-2 text-sm font-medium text-green-700">
+                      <Check className="mr-2 h-4 w-4" />
+                      전화번호 인증 완료
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleSendPhoneCode}
+                        disabled={!formData.phone || phoneVerification.isSending || phoneVerification.isVerifying}
+                        className="w-full rounded-xl border border-primary-100 bg-primary-50 px-4 py-3 text-sm font-bold text-primary-700 transition hover:bg-primary-100 disabled:bg-gray-100 disabled:text-gray-400"
+                      >
+                        {phoneVerification.isSending ? '인증번호 발송 중...' : phoneVerification.factorId ? '인증번호 다시 받기' : '인증번호 받기'}
+                      </button>
+
+                      {phoneVerification.factorId && (
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={phoneCode}
+                            onChange={(event) => setPhoneCode(event.target.value)}
+                            placeholder="인증번호 입력"
+                            className="input-field min-w-0 flex-1"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleVerifyPhoneCode}
+                            disabled={!phoneCode.trim() || phoneVerification.isVerifying}
+                            className="shrink-0 rounded-xl bg-primary-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-primary-700 disabled:bg-gray-300"
+                          >
+                            {phoneVerification.isVerifying ? '확인 중' : '확인'}
+                          </button>
+                        </div>
+                      )}
+                      <p className="text-xs leading-5 text-gray-500">
+                        SMS 인증은 Supabase 전화 인증과 SMS provider 설정이 완료되어 있어야 발송됩니다.
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
 
               {/* Next button only at the current step */}
               {isCurrent && (

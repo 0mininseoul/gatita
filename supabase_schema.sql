@@ -18,11 +18,23 @@ create table public.users (
   email varchar(255) unique not null,
   name varchar(100) not null,
   phone varchar(20) not null,
+  phone_verified_at timestamp with time zone,
+  phone_mfa_factor_id uuid,
   nickname varchar(50) unique not null,
   nickname_updated_at timestamp with time zone,
   department varchar(100) not null,
   status varchar(20) default 'active' check (status in ('active', 'suspended')),
   is_admin boolean default false,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Payout accounts table
+create table public.user_payout_accounts (
+  user_id uuid references public.users(id) on delete cascade primary key,
+  bank_name varchar(50) not null,
+  account_number varchar(80) not null,
+  account_holder varchar(100) not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -83,6 +95,7 @@ create table public.favorites (
 
 -- Enable RLS (Row Level Security)
 alter table public.users enable row level security;
+alter table public.user_payout_accounts enable row level security;
 alter table public.chat_rooms enable row level security;
 alter table public.room_participants enable row level security;
 alter table public.messages enable row level security;
@@ -94,6 +107,7 @@ grant usage on schema public to authenticated;
 grant usage on type public.location_type to authenticated;
 
 grant select, insert, update on table public.users to authenticated;
+grant select, insert, update on table public.user_payout_accounts to authenticated;
 grant select, insert, update, delete on table public.chat_rooms to authenticated;
 grant select, insert, update, delete on table public.room_participants to authenticated;
 grant select, insert on table public.messages to authenticated;
@@ -105,6 +119,27 @@ grant select, insert, delete on table public.favorites to authenticated;
 create policy "Users can read all users" on public.users for select using (true);
 create policy "Users can update own profile" on public.users for update using (auth.uid() = id);
 create policy "Users can insert own profile" on public.users for insert with check (auth.uid() = id);
+
+-- Payout accounts: owners can manage their own account, room participants can read creator payout accounts
+create policy "Users can manage own payout account"
+  on public.user_payout_accounts
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "Room participants can read creator payout accounts"
+  on public.user_payout_accounts
+  for select
+  using (
+    exists (
+      select 1
+      from public.chat_rooms
+      join public.room_participants
+        on room_participants.room_id = chat_rooms.id
+      where chat_rooms.created_by = user_payout_accounts.user_id
+        and room_participants.user_id = auth.uid()
+    )
+  );
 
 -- Chat rooms: Everyone can read, authenticated users can create
 create policy "Anyone can read chat rooms" on public.chat_rooms for select using (true);
@@ -167,6 +202,9 @@ $$ language plpgsql;
 revoke all on function public.handle_updated_at() from public, anon, authenticated;
 
 create trigger handle_updated_at before update on public.users
+  for each row execute procedure public.handle_updated_at();
+
+create trigger handle_updated_at before update on public.user_payout_accounts
   for each row execute procedure public.handle_updated_at();
 
 -- Guard room capacity at the database level.

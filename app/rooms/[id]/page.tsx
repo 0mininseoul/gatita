@@ -342,30 +342,32 @@ export default function ChatRoomPage() {
   }
 
   return (
-    <div className="min-h-screen app-bg flex flex-col">
+    <div className="flex h-[100dvh] max-h-[100dvh] w-full max-w-full flex-col overflow-hidden app-bg">
       {/* Header */}
-      <header className="app-header px-4 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
+      <header className="app-header shrink-0 overflow-hidden px-3 py-3">
+        <div className="flex min-w-0 items-start justify-between gap-2">
+          <div className="flex min-w-0 items-start">
             <button
               onClick={() => router.back()}
-              className="p-2 mr-2 hover:bg-gray-100 rounded-lg"
+              className="mr-2 shrink-0 rounded-lg p-2 hover:bg-gray-100"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div>
-              <h1 className="font-semibold text-gray-900">
+            <div className="min-w-0">
+              <h1 className="truncate text-sm font-semibold text-gray-900">
                 {LOCATIONS[room.from_location]} → {LOCATIONS[room.to_location]}
               </h1>
-              <div className="flex items-center text-sm text-gray-600">
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600">
                 <Clock className="w-4 h-4 mr-1" />
-                {format(new Date(`${room.departure_date}T${room.departure_time}`), 'M월 d일 HH:mm', { locale: ko })}
-                <Users className="w-4 h-4 ml-3 mr-1" />
-                {participants.length}/{room.max_participants}
+                <span>{format(new Date(`${room.departure_date}T${room.departure_time}`), 'M월 d일 HH:mm', { locale: ko })}</span>
+                <span className="inline-flex items-center">
+                  <Users className="mr-1 h-4 w-4" />
+                  {participants.length}/{room.max_participants}
+                </span>
               </div>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex shrink-0 items-center">
             <button
               onClick={() => setShowReportModal(true)}
               className="p-2 hover:bg-gray-100 rounded-lg"
@@ -382,17 +384,17 @@ export default function ChatRoomPage() {
             {participants.map(participant => (
               <div
                 key={participant.id}
-                className={`px-3 py-1 rounded-full text-sm flex items-center ${
+                className={`flex max-w-full min-w-0 items-center rounded-full px-3 py-1 text-xs ${
                   participant.confirmed
                     ? 'bg-green-100 text-green-800'
                     : 'bg-gray-100 text-gray-600'
                 }`}
               >
                 {participant.confirmed && <Check className="w-3 h-3 mr-1" />}
-                {participant.user?.nickname}
-                <span className="ml-1 text-xs">({participant.user?.department})</span>
+                <span className="truncate">{participant.user?.nickname}</span>
+                <span className="ml-1 truncate">({participant.user?.department})</span>
                 {participant.user_id === room.created_by && (
-                  <span className="ml-1 text-xs font-medium">방장</span>
+                  <span className="ml-1 shrink-0 font-medium">방장</span>
                 )}
               </div>
             ))}
@@ -416,20 +418,20 @@ export default function ChatRoomPage() {
       </header>
 
       {/* 채팅 메시지 영역 */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-3 py-4">
         {messages.map((message) => (
           <div
             key={message.id}
-            className={`flex ${message.user_id === user.id ? 'justify-end' : 'justify-start'}`}
+            className={`flex w-full min-w-0 ${message.user_id === user.id ? 'justify-end' : 'justify-start'}`}
           >
-            <div className={`max-w-xs ${message.user_id === user.id ? 'ml-4' : 'mr-4'}`}>
+            <div className={`min-w-0 max-w-[min(82vw,20rem)] ${message.user_id === user.id ? 'ml-8' : 'mr-8'}`}>
               {message.user_id !== user.id && (
-                <p className="text-xs text-gray-500 mb-1 px-1">
+                <p className="mb-1 truncate px-1 text-xs text-gray-500">
                   {message.user?.nickname} ({message.user?.department})
                 </p>
               )}
               <div
-                className={`chat-message ${
+                className={`chat-message max-w-full ${
                   message.user_id === user.id ? 'chat-message-own' : 'chat-message-other'
                 }`}
               >
@@ -446,20 +448,23 @@ export default function ChatRoomPage() {
 
       {/* 메시지 입력 영역 */}
       {isParticipant ? (
-        <div className="bg-white border-t border-gray-100 p-4">
-          <div className="flex items-center space-x-2">
+        <div
+          className="shrink-0 border-t border-gray-100 bg-white px-3 pt-3"
+          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+        >
+          <div className="flex min-w-0 items-center gap-2">
             <input
               type="text"
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
               placeholder="메시지를 입력하세요..."
-              className="flex-1 px-4 py-2 border border-gray-200 rounded-full focus:border-primary-600 focus:ring-2 focus:ring-primary-100"
+              className="min-w-0 flex-1 rounded-full border border-gray-200 px-4 py-2 focus:border-primary-600 focus:ring-2 focus:ring-primary-100"
             />
             <button
               onClick={handleSendMessage}
               disabled={!newMessage.trim()}
-              className="p-2 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white rounded-full"
+              className="shrink-0 rounded-full bg-primary-600 p-2 text-white hover:bg-primary-700 disabled:bg-gray-300"
             >
               <Send className="w-5 h-5" />
             </button>
@@ -475,7 +480,10 @@ export default function ChatRoomPage() {
           </div>
         </div>
       ) : (
-        <div className="bg-white border-t border-gray-100 p-4 text-center">
+        <div
+          className="shrink-0 border-t border-gray-100 bg-white px-3 pt-3 text-center"
+          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+        >
           <p className="text-gray-600 text-sm">
             채팅방에 참여해야 메시지를 보낼 수 있습니다
           </p>

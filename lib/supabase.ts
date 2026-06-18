@@ -159,6 +159,32 @@ export function isRestrictedRoutePair(fromLocation: LocationType | '', toLocatio
   return restrictedRoutePairs.has(`${fromLocation}__${toLocation}`)
 }
 
+export function getDestinationOptions(fromLocation: LocationType | '') {
+  if (!fromLocation) return LOCATION_ORDER
+
+  return LOCATION_ORDER.filter(
+    (location) => location !== fromLocation && !isRestrictedRoutePair(fromLocation, location)
+  )
+}
+
+export function getDepartureTimeOptions(now = new Date(), intervalMinutes = 10, optionCount = 6) {
+  const options: string[] = []
+  const currentDate = now.getDate()
+  const nextTime = new Date(now)
+  const currentMinutes = nextTime.getMinutes()
+  const minutesUntilNextInterval = intervalMinutes - (currentMinutes % intervalMinutes)
+  nextTime.setMinutes(currentMinutes + minutesUntilNextInterval, 0, 0)
+
+  while (options.length < optionCount && nextTime.getDate() === currentDate) {
+    const hours = String(nextTime.getHours()).padStart(2, '0')
+    const minutes = String(nextTime.getMinutes()).padStart(2, '0')
+    options.push(`${hours}:${minutes}`)
+    nextTime.setMinutes(nextTime.getMinutes() + intervalMinutes)
+  }
+
+  return options
+}
+
 export const LOCATION_POINTS: Record<LocationType, LocationPoint> = {
   '가천대역_1번출구': {
     id: '가천대역_1번출구',

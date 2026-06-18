@@ -7,8 +7,6 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import {
   ChatRoom,
-  Favorite,
-  LOCATION_ORDER,
   LOCATIONS,
   LocationType,
   ROUTE_TOO_CLOSE_MESSAGE,
@@ -17,7 +15,7 @@ import {
 } from '@/lib/supabase'
 import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
 import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
-import { MapPin, ArrowRight, Star, Settings, LogOut, SlidersHorizontal, X } from 'lucide-react'
+import { Star, Settings, LogOut } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 
@@ -28,7 +26,6 @@ import SplitText from '@/components/SplitText'
 import NavigationBar from '@/components/NavigationBar'
 
 type AuthMode = 'signup' | null
-type RoutePanelMode = 'search' | 'create'
 
 function GoogleIcon({ className = 'w-5 h-5' }: { className?: string }) {
   return (
@@ -46,15 +43,12 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true)
   const [authMode, setAuthMode] = useState<AuthMode>(null)
   const [fromLocation, setFromLocation] = useState<LocationType | ''>('')
-  const [toLocation, setToLocation] = useState<LocationType | ''>('')
-  const [favorites, setFavorites] = useState<Favorite[]>([])
   const [mapRooms, setMapRooms] = useState<CampusMapRoom[]>([])
   const [isLoadingMapRooms, setIsLoadingMapRooms] = useState(false)
+  const [isCreatingMapRoom, setIsCreatingMapRoom] = useState(false)
   const [isStartingGoogle, setIsStartingGoogle] = useState(false)
   const [hasEnteredApp, setHasEnteredApp] = useState(false)
   const [authNotice, setAuthNotice] = useState<string | null>(null)
-  const [isDirectRouteOpen, setIsDirectRouteOpen] = useState(false)
-  const [routePanelMode, setRoutePanelMode] = useState<RoutePanelMode>('search')
   const lastAuthErrorAtRef = useRef(0)
   const router = useRouter()
 
@@ -80,34 +74,13 @@ export default function HomePage() {
   const rejectNonGachonAccount = useCallback(async () => {
     showAuthError(NON_GACHON_ACCOUNT_MESSAGE)
     setUser(null)
-    setFavorites([])
     setAuthMode(null)
     setHasEnteredApp(false)
-    setIsDirectRouteOpen(false)
-    setRoutePanelMode('search')
 
     if (supabase) {
       await supabase.auth.signOut()
     }
   }, [showAuthError, supabase])
-
-  const loadFavorites = useCallback(async (userId: string) => {
-    if (!supabase) {
-      return
-    }
-
-    try {
-      const { data } = await supabase
-        .from('favorites')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-
-      if (data) setFavorites(data)
-    } catch (error) {
-      console.error('Load favorites error:', error)
-    }
-  }, [supabase])
 
   const loadMapRooms = useCallback(async () => {
     if (!supabase) {
@@ -190,7 +163,6 @@ export default function HomePage() {
         if (userData) {
           setAuthNotice(null)
           setUser(userData)
-          await loadFavorites(userData.id)
           await loadMapRooms()
           if (enterApp) setHasEnteredApp(true)
         } else {
@@ -202,7 +174,7 @@ export default function HomePage() {
     } finally {
       setLoading(false)
     }
-  }, [loadFavorites, loadMapRooms, rejectNonGachonAccount, supabase])
+  }, [loadMapRooms, rejectNonGachonAccount, supabase])
 
   useEffect(() => {
     if (!supabase) {
@@ -230,11 +202,8 @@ export default function HomePage() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
         setUser(null)
-        setFavorites([])
         setAuthMode(null)
         setHasEnteredApp(false)
-        setIsDirectRouteOpen(false)
-        setRoutePanelMode('search')
       }
     })
 
@@ -336,59 +305,78 @@ export default function HomePage() {
     return true
   }
 
-  const handleSearch = () => {
-    if (!validateRouteSelection(fromLocation, toLocation)) return
-
-    router.push(`/rooms?from=${fromLocation}&to=${toLocation}`)
-  }
-
-  const handleCreateRoute = () => {
-    if (!validateRouteSelection(fromLocation, toLocation)) return
-
-    router.push(`/rooms?from=${fromLocation}&to=${toLocation}&create=1`)
-  }
-
   const handleFromLocationChange = (location: LocationType | '') => {
     setFromLocation(location)
+  }
 
-    if (!location || location === toLocation) {
-      setToLocation('')
+  const handleCreateMapRoom = async ({
+    fromLocation: roomFromLocation,
+    toLocation: roomToLocation,
+    departureTime,
+  }: {
+    fromLocation: LocationType
+    toLocation: LocationType
+    departureTime: string
+  }) => {
+    if (!user || !supabase) {
+      toast.error('로그인이 필요합니다')
       return
     }
 
-    if (isRestrictedRoutePair(location, toLocation)) {
-      setToLocation('')
-      toast.error(ROUTE_TOO_CLOSE_MESSAGE)
-    }
-  }
+    if (!validateRouteSelection(roomFromLocation, roomToLocation)) return
 
-  const handleToLocationChange = (location: LocationType | '') => {
-    if (location && location === fromLocation) {
-      toast.error('출발지와 도착지가 같을 수 없습니다')
+    if (!departureTime) {
+      toast.error('출발예정시간을 선택해주세요')
       return
     }
 
-    if (isRestrictedRoutePair(fromLocation, location)) {
-      toast.error(ROUTE_TOO_CLOSE_MESSAGE)
-      return
-    }
+    setIsCreatingMapRoom(true)
 
-    setToLocation(location)
-  }
+    try {
+      const today = format(new Date(), 'yyyy-MM-dd')
+      const title = `${departureTime} ${LOCATIONS[roomFromLocation]}→${LOCATIONS[roomToLocation]}`
 
-  const handleFavoriteClick = (favorite: Favorite) => {
-    if (!validateRouteSelection(favorite.from_location, favorite.to_location)) return
+      const { data: room, error } = await supabase
+        .from('chat_rooms')
+        .insert({
+          title,
+          from_location: roomFromLocation,
+          to_location: roomToLocation,
+          departure_date: today,
+          departure_time: departureTime,
+          max_participants: 4,
+          created_by: user.id,
+        })
+        .select()
+        .single()
 
-    router.push(`/rooms?from=${favorite.from_location}&to=${favorite.to_location}`)
-  }
+      if (error) throw error
 
-  const handleCreateRoomFromMap = (location: LocationType) => {
-    setFromLocation(location)
-    setRoutePanelMode('create')
-    setIsDirectRouteOpen(true)
+      const { error: participantError } = await supabase
+        .from('room_participants')
+        .insert({
+          room_id: room.id,
+          user_id: user.id,
+          confirmed: true,
+        })
 
-    if (toLocation === location || isRestrictedRoutePair(location, toLocation)) {
-      setToLocation('')
+      if (participantError) {
+        await supabase
+          .from('chat_rooms')
+          .delete()
+          .eq('id', room.id)
+          .eq('created_by', user.id)
+
+        throw participantError
+      }
+
+      toast.success('채팅방이 생성되었습니다!')
+      router.push(`/rooms/${room.id}`)
+    } catch (error) {
+      console.error('Create map room error:', error)
+      toast.error('채팅방 생성 중 오류가 발생했습니다')
+    } finally {
+      setIsCreatingMapRoom(false)
     }
   }
 
@@ -446,9 +434,6 @@ export default function HomePage() {
     try {
       await supabase.auth.signOut()
       setUser(null)
-      setFavorites([])
-      setIsDirectRouteOpen(false)
-      setRoutePanelMode('search')
       toast.success('로그아웃되었습니다')
     } catch (error) {
       toast.error('로그아웃 중 오류가 발생했습니다')
@@ -611,23 +596,16 @@ export default function HomePage() {
     )
   }
 
-  const hasMapSelectionSheet = Boolean(fromLocation)
-  const routeButtonBottom = hasMapSelectionSheet
-    ? 'calc(env(safe-area-inset-bottom) + 11rem)'
-    : 'calc(env(safe-area-inset-bottom) + 1rem)'
-  const routePanelBottom = hasMapSelectionSheet
-    ? 'calc(env(safe-area-inset-bottom) + 15.75rem)'
-    : 'calc(env(safe-area-inset-bottom) + 5.75rem)'
-
   return (
     <main className="relative h-[100dvh] min-h-screen w-screen overflow-hidden bg-[#e7edf4]">
       <CampusRouteMap
         rooms={mapRooms}
         onlineCount={onlineDisplayCount}
         selectedFrom={fromLocation}
+        isCreatingRoom={isCreatingMapRoom}
         isLoading={isLoadingMapRooms}
         onSelectFrom={handleFromLocationChange}
-        onCreateRoom={handleCreateRoomFromMap}
+        onCreateRoom={handleCreateMapRoom}
         onJoinRoom={handleJoinMapRoom}
       />
 
@@ -680,109 +658,6 @@ export default function HomePage() {
           </div>
         </div>
       </header>
-
-      {isDirectRouteOpen && (
-        <div
-          className="absolute right-3 z-50 w-[calc(100vw_-_1.5rem)] max-w-sm overflow-y-auto rounded-lg border border-white/80 bg-white/95 p-4 shadow-[0_18px_48px_rgba(17,24,39,0.22)] backdrop-blur"
-          style={{ bottom: routePanelBottom, maxHeight: 'min(70vh, 28rem)' }}
-        >
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <h2 className="text-base font-black text-gray-950">
-                {routePanelMode === 'create' ? '방 생성하기' : '직접 경로 지정'}
-              </h2>
-            </div>
-            <button
-              type="button"
-              aria-label="직접 경로 지정 닫기"
-              onClick={() => setIsDirectRouteOpen(false)}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-          <div className="space-y-4">
-            <div>
-              <label className="mb-2 block text-sm font-bold text-gray-700">출발지</label>
-              <select
-                value={fromLocation}
-                onChange={(e) => handleFromLocationChange(e.target.value as LocationType | '')}
-                className="input-field"
-              >
-                <option value="">출발지 선택</option>
-                {LOCATION_ORDER.map((key) => (
-                  <option key={key} value={key}>{LOCATIONS[key]}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-bold text-gray-700">도착지</label>
-              <select
-                value={toLocation}
-                onChange={(e) => handleToLocationChange(e.target.value as LocationType | '')}
-                className="input-field"
-              >
-                <option value="">도착지 선택</option>
-                {LOCATION_ORDER.map((key) => (
-                  <option key={key} value={key}>{LOCATIONS[key]}</option>
-                ))}
-              </select>
-            </div>
-            <button
-              type="button"
-              onClick={routePanelMode === 'create' ? handleCreateRoute : handleSearch}
-              disabled={!fromLocation || !toLocation}
-              className="btn-primary flex w-full items-center justify-center"
-            >
-              {routePanelMode === 'create' ? '방 생성하기' : '동행자 찾기'}
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </button>
-          </div>
-
-          {favorites.length > 0 && (
-            <div className="mt-4 border-t border-gray-100 pt-4">
-              <div className="mb-2 flex items-center gap-2 text-sm font-black text-gray-900">
-                <Star className="h-4 w-4 text-yellow-500" />
-                <span>즐겨찾기 경로</span>
-              </div>
-              <div className="space-y-2">
-                {favorites.map((favorite) => (
-                  <button
-                    key={favorite.id}
-                    type="button"
-                    onClick={() => {
-                      setIsDirectRouteOpen(false)
-                      handleFavoriteClick(favorite)
-                    }}
-                    className="flex w-full items-center justify-between gap-3 rounded-lg bg-gray-50 p-3 text-left transition hover:bg-gray-100"
-                  >
-                    <div className="flex min-w-0 items-center">
-                      <MapPin className="mr-2 h-4 w-4 shrink-0 text-gray-500" />
-                      <span className="truncate text-sm font-bold text-gray-800">
-                        {LOCATIONS[favorite.from_location]} → {LOCATIONS[favorite.to_location]}
-                      </span>
-                    </div>
-                    <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      <button
-        type="button"
-        aria-label="직접 경로 지정"
-        onClick={() => {
-          setRoutePanelMode('search')
-          setIsDirectRouteOpen((isOpen) => !isOpen)
-        }}
-        className="fab absolute right-4 z-40 h-14 w-14"
-        style={{ bottom: routeButtonBottom }}
-      >
-        <SlidersHorizontal className="h-6 w-6" />
-      </button>
     </main>
   )
 }

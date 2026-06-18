@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowRight, Clock, Compass, Plus, Users, X } from 'lucide-react'
 import {
+  getDepartureTimeOptions,
+  getDestinationOptions,
   GACHON_GLOBAL_CAMPUS_BOUNDS,
   GACHON_GLOBAL_CAMPUS_CENTER,
   LOCATION_ORDER,
@@ -32,9 +34,14 @@ type CampusRouteMapProps = {
   rooms: CampusMapRoom[]
   onlineCount: number
   selectedFrom: LocationType | ''
+  isCreatingRoom?: boolean
   isLoading?: boolean
   onSelectFrom: (location: LocationType | '') => void
-  onCreateRoom: (location: LocationType) => void
+  onCreateRoom: (room: {
+    fromLocation: LocationType
+    toLocation: LocationType
+    departureTime: string
+  }) => void | Promise<void>
   onJoinRoom: (roomId: string) => void
 }
 
@@ -140,6 +147,7 @@ export default function CampusRouteMap({
   rooms,
   onlineCount,
   selectedFrom,
+  isCreatingRoom = false,
   isLoading = false,
   onSelectFrom,
   onCreateRoom,
@@ -152,8 +160,16 @@ export default function CampusRouteMap({
   const overlayRefs = useRef<any[]>([])
   const [mapStatus, setMapStatus] = useState<'loading' | 'ready' | 'missing-key' | 'error'>('loading')
   const [focusedLocation, setFocusedLocation] = useState<LocationType | null>(selectedFrom || null)
+  const [isCreateMode, setIsCreateMode] = useState(false)
+  const [draftDestination, setDraftDestination] = useState<LocationType | ''>('')
+  const [draftDepartureTime, setDraftDepartureTime] = useState('')
 
   const { originStats } = useMemo(() => buildStats(rooms), [rooms])
+  const destinationOptions = useMemo(() => getDestinationOptions(selectedFrom), [selectedFrom])
+  const departureTimeOptions = useMemo(
+    () => isCreateMode ? getDepartureTimeOptions(new Date(), 10, 18) : [],
+    [isCreateMode]
+  )
   const selectedOriginRooms = useMemo(
     () => selectedFrom
       ? rooms
@@ -167,6 +183,14 @@ export default function CampusRouteMap({
   const handleLocationSelect = useCallback((location: LocationType) => {
     setFocusedLocation(location)
     onSelectFrom(location)
+  }, [onSelectFrom])
+
+  const closeSheet = useCallback(() => {
+    onSelectFrom('')
+    setFocusedLocation(null)
+    setIsCreateMode(false)
+    setDraftDestination('')
+    setDraftDepartureTime('')
   }, [onSelectFrom])
 
   useEffect(() => {
@@ -275,13 +299,36 @@ export default function CampusRouteMap({
   useEffect(() => {
     if (!selectedFrom) {
       setFocusedLocation(null)
+      setIsCreateMode(false)
+      setDraftDestination('')
+      setDraftDepartureTime('')
     }
   }, [selectedFrom])
+
+  useEffect(() => {
+    if (!selectedFrom) return
+
+    setIsCreateMode(false)
+    setDraftDestination('')
+    setDraftDepartureTime('')
+  }, [selectedFrom])
+
+  useEffect(() => {
+    if (draftDestination && !destinationOptions.includes(draftDestination)) {
+      setDraftDestination('')
+    }
+  }, [destinationOptions, draftDestination])
+
+  useEffect(() => {
+    if (isCreateMode && !draftDepartureTime && departureTimeOptions.length > 0) {
+      setDraftDepartureTime(departureTimeOptions[0])
+    }
+  }, [departureTimeOptions, draftDepartureTime, isCreateMode])
 
   const selectedOriginStat = selectedFrom
     ? originStats.get(selectedFrom) ?? emptyStat()
     : emptyStat()
-  const isSheetOpen = Boolean(selectedFrom || focusedLocation)
+  const isSheetOpen = Boolean(selectedFrom)
 
   return (
     <section className="relative h-full min-h-[100dvh] w-full overflow-hidden bg-[#e7edf4]">
@@ -347,6 +394,15 @@ export default function CampusRouteMap({
       )}
 
       {isSheetOpen && (
+        <button
+          type="button"
+          aria-label="지도 선택 닫기"
+          onClick={closeSheet}
+          className="absolute inset-0 z-20 cursor-default bg-transparent"
+        />
+      )}
+
+      {isSheetOpen && (
         <div
           className="absolute inset-x-3 bottom-3 z-30 mx-auto max-w-2xl rounded-lg border border-white/80 bg-white/95 px-4 pt-4 shadow-[0_18px_48px_rgba(17,24,39,0.22)] backdrop-blur"
           style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
@@ -354,10 +410,7 @@ export default function CampusRouteMap({
           <button
             type="button"
             aria-label="선택 닫기"
-            onClick={() => {
-              onSelectFrom('')
-              setFocusedLocation(null)
-            }}
+            onClick={closeSheet}
             className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
           >
             <X className="h-5 w-5" />
@@ -422,12 +475,67 @@ export default function CampusRouteMap({
 
               <button
                 type="button"
-                onClick={() => onCreateRoom(selectedFrom)}
-                className="mt-3 inline-flex w-full items-center justify-center rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-black text-white transition hover:bg-primary-700"
+                onClick={() => setIsCreateMode(true)}
+                className={`${isCreateMode ? 'hidden' : 'mt-3 inline-flex'} w-full items-center justify-center rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-black text-white transition hover:bg-primary-700`}
               >
                 <Plus className="mr-2 h-4 w-4" />
                 방 생성하기
               </button>
+
+              {isCreateMode && (
+                <div className="mt-3 rounded-lg border border-primary-100 bg-primary-50/70 p-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1.5 block text-xs font-black text-gray-700">도착지</label>
+                      <select
+                        value={draftDestination}
+                        onChange={(event) => setDraftDestination(event.target.value as LocationType | '')}
+                        className="input-field bg-white py-2.5 text-sm font-bold"
+                      >
+                        <option value="">도착지 선택</option>
+                        {destinationOptions.map((location) => (
+                          <option key={location} value={location}>
+                            {LOCATIONS[location]}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-black text-gray-700">출발예정시간</label>
+                      <select
+                        value={draftDepartureTime}
+                        onChange={(event) => setDraftDepartureTime(event.target.value)}
+                        className="input-field bg-white py-2.5 text-sm font-bold"
+                      >
+                        {departureTimeOptions.length > 0 ? (
+                          departureTimeOptions.map((time) => (
+                            <option key={time} value={time}>
+                              {time}
+                            </option>
+                          ))
+                        ) : (
+                          <option value="">오늘 선택 가능한 시간이 없습니다</option>
+                        )}
+                      </select>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!draftDestination || !draftDepartureTime) return
+                      onCreateRoom({
+                        fromLocation: selectedFrom,
+                        toLocation: draftDestination,
+                        departureTime: draftDepartureTime,
+                      })
+                    }}
+                    disabled={!draftDestination || !draftDepartureTime || isCreatingRoom}
+                    className="mt-3 inline-flex w-full items-center justify-center rounded-lg bg-gray-950 px-4 py-2.5 text-sm font-black text-white transition hover:bg-gray-800 disabled:bg-gray-300"
+                  >
+                    {isCreatingRoom ? '만드는 중...' : '만들기'}
+                  </button>
+                </div>
+              )}
             </div>
           ) : null}
         </div>

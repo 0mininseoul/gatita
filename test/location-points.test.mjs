@@ -27,6 +27,8 @@ function loadSupabaseExports() {
 }
 
 const {
+  getDepartureTimeOptions,
+  getDestinationOptions,
   GACHON_GLOBAL_CAMPUS_BOUNDS,
   isRestrictedRoutePair,
   LOCATION_ORDER,
@@ -103,4 +105,26 @@ test('route pairs that are too close are rejected in both directions', () => {
   assert.equal(isRestrictedRoutePair('제2기숙사', 'AI공학관'), true)
   assert.equal(isRestrictedRoutePair('AI공학관', '제2기숙사'), true)
   assert.equal(isRestrictedRoutePair('중앙도서관', 'AI공학관'), false)
+})
+
+test('destination options exclude the selected origin and too-close routes', () => {
+  const stationDestinations = getDestinationOptions('가천대역_1번출구')
+  assert.ok(!stationDestinations.includes('가천대역_1번출구'))
+  assert.ok(!stationDestinations.includes('가천대학교_정문'))
+  assert.ok(stationDestinations.includes('중앙도서관'))
+
+  const dormDestinations = getDestinationOptions('제2기숙사')
+  assert.ok(!dormDestinations.includes('AI공학관'))
+  assert.ok(dormDestinations.includes('교육대학원'))
+})
+
+test('departure time options start at the next interval and stay on the same day', () => {
+  assert.deepEqual(
+    getDepartureTimeOptions(new Date('2026-06-18T17:03:00+09:00'), 10),
+    ['17:10', '17:20', '17:30', '17:40', '17:50', '18:00']
+  )
+  assert.deepEqual(
+    getDepartureTimeOptions(new Date('2026-06-18T23:56:00+09:00'), 10),
+    []
+  )
 })

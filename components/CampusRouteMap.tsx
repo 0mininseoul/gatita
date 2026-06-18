@@ -349,7 +349,7 @@ export default function CampusRouteMap({
   const isSheetOpen = Boolean(selectedFrom)
 
   return (
-    <section className="relative h-full min-h-[100dvh] w-full overflow-hidden bg-[#e7edf4]">
+    <section className="relative h-full w-full overflow-hidden bg-[#e7edf4]">
       <div ref={mapContainerRef} className="gatita-kakao-map absolute inset-0 h-full w-full" />
 
       <div className="pointer-events-none absolute left-3 top-24 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap gap-2 sm:left-4">
@@ -418,7 +418,7 @@ export default function CampusRouteMap({
 
       {isSheetOpen && (
         <div
-          className="absolute inset-x-3 bottom-3 z-30 mx-auto max-w-2xl rounded-lg border border-white/80 bg-white/95 px-4 pt-4 shadow-[0_18px_48px_rgba(17,24,39,0.22)] backdrop-blur"
+          className="gatita-bottom-sheet absolute inset-x-3 z-30 mx-auto max-w-2xl rounded-lg border border-white/80 bg-white/95 px-4 pt-4 shadow-[0_18px_48px_rgba(17,24,39,0.22)] backdrop-blur"
           style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
         >
           <button
@@ -431,7 +431,7 @@ export default function CampusRouteMap({
           </button>
 
           {selectedFrom ? (
-            <div className="pr-8">
+            <div className="gatita-bottom-sheet-body">
               <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">출발 지점</p>
               <div className="mt-1 flex min-w-0 items-center gap-2 text-base font-extrabold text-gray-950">
                 <Compass className="h-4 w-4 shrink-0 text-primary-600" />
@@ -443,7 +443,7 @@ export default function CampusRouteMap({
               </p>
 
               {selectedOriginRooms.length > 0 ? (
-                <div className="mt-3 max-h-[34vh] space-y-2 overflow-y-auto pr-1">
+                <div className="mt-3 space-y-2">
                   {selectedOriginRooms.map((room) => {
                     const participantCount = room.participants?.length ?? 0
                     const isFull = participantCount >= room.max_participants

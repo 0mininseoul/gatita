@@ -25,69 +25,105 @@ export default function ChatRoomPage() {
   const [reportReason, setReportReason] = useState('')
   const [reportTarget, setReportTarget] = useState<string>('')
 
+  const headerRef = useRef<HTMLElement>(null)
+  const messagesScrollRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const composerRef = useRef<HTMLDivElement>(null)
   const supabase = useMemo(() => createClient(), [])
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' })
+  }, [])
 
   useEffect(() => {
     const root = document.documentElement
     const body = document.body
     const previousRootOverflow = root.style.overflow
     const previousBodyOverflow = body.style.overflow
-    const previousBodyPosition = body.style.position
-    const previousBodyInset = body.style.inset
-    const previousBodyWidth = body.style.width
-    const previousBodyHeight = body.style.height
     const previousBodyOverscrollBehavior = body.style.overscrollBehavior
-    const previousChatViewportHeight = root.style.getPropertyValue('--chat-viewport-height')
+    const previousChatHeaderHeight = root.style.getPropertyValue('--chat-header-height')
+    const previousChatComposerHeight = root.style.getPropertyValue('--chat-composer-height')
+    const previousChatKeyboardInset = root.style.getPropertyValue('--chat-keyboard-inset')
 
-    const updateChatViewport = () => {
+    const restoreProperty = (property: string, value: string) => {
+      if (value) {
+        root.style.setProperty(property, value)
+      } else {
+        root.style.removeProperty(property)
+      }
+    }
+
+    const keepWindowPinned = () => {
+      if (window.scrollY !== 0) {
+        window.scrollTo(0, 0)
+      }
+    }
+
+    const syncChatChrome = () => {
       const visualViewport = window.visualViewport
-      const viewportHeight = visualViewport?.height ?? window.innerHeight
+      const keyboardInset = visualViewport
+        ? Math.max(0, window.innerHeight - visualViewport.height - visualViewport.offsetTop)
+        : 0
+      const headerHeight = headerRef.current?.getBoundingClientRect().height ?? 0
+      const composerHeight = composerRef.current?.getBoundingClientRect().height ?? 0
 
-      root.style.setProperty('--chat-viewport-height', `${Math.ceil(viewportHeight)}px`)
+      root.style.setProperty('--chat-header-height', `${Math.ceil(headerHeight)}px`)
+      root.style.setProperty('--chat-composer-height', `${Math.ceil(composerHeight)}px`)
+      root.style.setProperty('--chat-keyboard-inset', `${Math.ceil(keyboardInset)}px`)
+    }
+
+    const syncAndPinChat = () => {
+      syncChatChrome()
       requestAnimationFrame(() => {
-        messagesEndRef.current?.scrollIntoView({ block: 'end' })
+        keepWindowPinned()
+        scrollToBottom('auto')
       })
     }
 
     root.style.overflow = 'hidden'
     body.style.overflow = 'hidden'
-    body.style.position = 'fixed'
-    body.style.inset = '0'
-    body.style.width = '100%'
-    body.style.height = '100%'
     body.style.overscrollBehavior = 'none'
-    updateChatViewport()
-    window.visualViewport?.addEventListener('resize', updateChatViewport)
-    window.visualViewport?.addEventListener('scroll', updateChatViewport)
-    window.addEventListener('resize', updateChatViewport)
+    syncAndPinChat()
+
+    const resizeObserver = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(syncAndPinChat)
+      : null
+
+    if (headerRef.current) resizeObserver?.observe(headerRef.current)
+    if (composerRef.current) resizeObserver?.observe(composerRef.current)
+
+    window.visualViewport?.addEventListener('resize', syncAndPinChat)
+    window.visualViewport?.addEventListener('scroll', syncAndPinChat)
+    window.addEventListener('resize', syncAndPinChat)
+    window.addEventListener('orientationchange', syncAndPinChat)
+    window.addEventListener('scroll', keepWindowPinned, { passive: true })
 
     return () => {
       root.style.overflow = previousRootOverflow
       body.style.overflow = previousBodyOverflow
-      body.style.position = previousBodyPosition
-      body.style.inset = previousBodyInset
-      body.style.width = previousBodyWidth
-      body.style.height = previousBodyHeight
       body.style.overscrollBehavior = previousBodyOverscrollBehavior
-      if (previousChatViewportHeight) {
-        root.style.setProperty('--chat-viewport-height', previousChatViewportHeight)
-      } else {
-        root.style.removeProperty('--chat-viewport-height')
-      }
-      window.visualViewport?.removeEventListener('resize', updateChatViewport)
-      window.visualViewport?.removeEventListener('scroll', updateChatViewport)
-      window.removeEventListener('resize', updateChatViewport)
+      restoreProperty('--chat-header-height', previousChatHeaderHeight)
+      restoreProperty('--chat-composer-height', previousChatComposerHeight)
+      restoreProperty('--chat-keyboard-inset', previousChatKeyboardInset)
+      resizeObserver?.disconnect()
+      window.visualViewport?.removeEventListener('resize', syncAndPinChat)
+      window.visualViewport?.removeEventListener('scroll', syncAndPinChat)
+      window.removeEventListener('resize', syncAndPinChat)
+      window.removeEventListener('orientationchange', syncAndPinChat)
+      window.removeEventListener('scroll', keepWindowPinned)
     }
-  }, [])
-
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [])
+  }, [scrollToBottom])
 
   useEffect(() => {
     scrollToBottom()
   }, [messages, scrollToBottom])
+
+  const handleComposerFocus = useCallback(() => {
+    requestAnimationFrame(() => {
+      window.scrollTo(0, 0)
+      scrollToBottom('auto')
+    })
+  }, [scrollToBottom])
 
   const loadRoom = useCallback(async () => {
     try {
@@ -395,12 +431,9 @@ export default function ChatRoomPage() {
   }
 
   return (
-    <div
-      className="fixed inset-x-0 top-0 flex w-screen max-w-full flex-col overflow-hidden overscroll-none app-bg"
-      style={{ height: 'var(--chat-viewport-height)' }}
-    >
+    <div className="chat-shell fixed inset-0 w-screen max-w-full overflow-hidden overscroll-none app-bg">
       {/* Header */}
-      <header className="app-header shrink-0 overflow-hidden px-3 py-3">
+      <header ref={headerRef} className="chat-room-header fixed inset-x-0 top-0 z-30 overflow-hidden px-3 pb-2">
         <div className="flex min-w-0 items-start justify-between gap-2">
           <div className="flex min-w-0 items-start">
             <button
@@ -447,13 +480,12 @@ export default function ChatRoomPage() {
         </div>
 
         {/* 참여자 목록 */}
-        <div className="mt-4">
-          <h3 className="text-sm font-medium text-gray-700 mb-2">참여자</h3>
-          <div className="flex flex-wrap gap-2">
+        <div className="mt-2">
+          <div className="flex gap-1.5 overflow-x-auto pb-1">
             {participants.map(participant => (
               <div
                 key={participant.id}
-                className={`flex max-w-full min-w-0 items-center rounded-full px-3 py-1 text-xs ${
+                className={`flex max-w-[11rem] shrink-0 items-center rounded-full px-2.5 py-1 text-xs ${
                   participant.confirmed
                     ? 'bg-green-100 text-green-800'
                     : 'bg-gray-100 text-gray-600'
@@ -472,22 +504,19 @@ export default function ChatRoomPage() {
 
         {/* 참여 확정 버튼 */}
         {isParticipant && !isConfirmed && (
-          <div className="mt-4">
+          <div className="mt-2">
             <button
               onClick={handleConfirmParticipation}
-              className="btn-primary w-full text-sm py-2"
+              className="btn-primary w-full py-2 text-sm"
             >
               참여 확정하기
             </button>
-            <p className="text-xs text-gray-500 mt-1 text-center">
-              동행 의사를 확실히 하기 위해 참여를 확정해주세요
-            </p>
           </div>
         )}
       </header>
 
       {/* 채팅 메시지 영역 */}
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overflow-x-hidden px-3 py-3">
+      <div ref={messagesScrollRef} className="chat-messages absolute inset-0 space-y-2 overflow-y-auto overflow-x-hidden px-3">
         {messages.map((message) => (
           <div
             key={message.id}
@@ -516,17 +545,15 @@ export default function ChatRoomPage() {
       </div>
 
       {/* 메시지 입력 영역 */}
-      {isParticipant ? (
-        <div
-          className="shrink-0 border-t border-gray-100 bg-white px-3 pt-3"
-          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
-        >
+      <div ref={composerRef} className="chat-composer fixed inset-x-0 z-30 border-t border-gray-100 bg-white px-3 pt-3">
+        {isParticipant ? (
           <div className="flex min-w-0 items-center gap-2">
             <input
               type="text"
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+              onFocus={handleComposerFocus}
               placeholder="메시지를 입력하세요..."
               className="min-w-0 flex-1 rounded-full border border-gray-200 px-4 py-2 focus:border-primary-600 focus:ring-2 focus:ring-primary-100"
             />
@@ -538,17 +565,12 @@ export default function ChatRoomPage() {
               <Send className="w-5 h-5" />
             </button>
           </div>
-        </div>
-      ) : (
-        <div
-          className="shrink-0 border-t border-gray-100 bg-white px-3 pt-3 text-center"
-          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
-        >
+        ) : (
           <p className="text-gray-600 text-sm">
             채팅방에 참여해야 메시지를 보낼 수 있습니다
           </p>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* 신고 모달 */}
       {showReportModal && (

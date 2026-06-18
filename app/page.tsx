@@ -287,6 +287,49 @@ export default function HomePage() {
     }
   }, [showLanding])
 
+  useEffect(() => {
+    if (!user || !hasEnteredApp) return
+
+    const root = document.documentElement
+    const body = document.body
+    const previousAppViewportHeight = root.style.getPropertyValue('--app-viewport-height')
+    const previousRootOverflow = root.style.overflow
+    const previousBodyOverflow = body.style.overflow
+    const previousBodyOverscrollBehavior = body.style.overscrollBehavior
+
+    const setAppViewport = () => {
+      const visualHeight = window.visualViewport?.height ?? window.innerHeight
+
+      root.style.setProperty('--app-viewport-height', `${Math.ceil(visualHeight)}px`)
+    }
+
+    setAppViewport()
+    window.scrollTo(0, 0)
+    root.style.overflow = 'hidden'
+    body.style.overflow = 'hidden'
+    body.style.overscrollBehavior = 'none'
+
+    window.addEventListener('resize', setAppViewport)
+    window.addEventListener('orientationchange', setAppViewport)
+    window.visualViewport?.addEventListener('resize', setAppViewport)
+    window.visualViewport?.addEventListener('scroll', setAppViewport)
+
+    return () => {
+      if (previousAppViewportHeight) {
+        root.style.setProperty('--app-viewport-height', previousAppViewportHeight)
+      } else {
+        root.style.removeProperty('--app-viewport-height')
+      }
+      root.style.overflow = previousRootOverflow
+      body.style.overflow = previousBodyOverflow
+      body.style.overscrollBehavior = previousBodyOverscrollBehavior
+      window.removeEventListener('resize', setAppViewport)
+      window.removeEventListener('orientationchange', setAppViewport)
+      window.visualViewport?.removeEventListener('resize', setAppViewport)
+      window.visualViewport?.removeEventListener('scroll', setAppViewport)
+    }
+  }, [hasEnteredApp, user])
+
   const validateRouteSelection = (from: LocationType | '', to: LocationType | '') => {
     if (!from || !to) {
       toast.error('출발지와 도착지를 모두 선택해주세요')
@@ -519,7 +562,11 @@ export default function HomePage() {
               to={{ opacity: 1, y: 0, scale: 1 }}
               duration={0.8}
               delay={80}
-              style={{ fontSize: '3rem', marginBottom: '1rem', textShadow: '0 2px 28px rgba(28, 22, 92, 0.45)' }}
+              style={{
+                fontSize: '3rem',
+                marginBottom: '1rem',
+                textShadow: '0 3px 14px rgba(21, 28, 72, 0.30), 0 1px 2px rgba(21, 28, 72, 0.18)',
+              }}
             />
 
             <p style={{
@@ -598,7 +645,10 @@ export default function HomePage() {
   }
 
   return (
-    <main className="relative h-[100dvh] min-h-screen w-screen overflow-hidden bg-[#e7edf4]">
+    <main
+      className="relative w-screen overflow-hidden bg-[#e7edf4]"
+      style={{ height: 'var(--app-viewport-height)' }}
+    >
       <CampusRouteMap
         rooms={mapRooms}
         onlineCount={onlineDisplayCount}

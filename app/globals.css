@@ -9,7 +9,10 @@
   --brand-gradient: linear-gradient(135deg, #2782ff 0%, #6a73e8 50%, #be97cf 100%);
   --landing-viewport-height: 100vh;
   --landing-background-height: 100vh;
-  --chat-viewport-height: 100dvh;
+  --app-viewport-height: 100dvh;
+  --chat-header-height: 0px;
+  --chat-composer-height: 0px;
+  --chat-keyboard-inset: 0px;
 }
 
 @layer base {
@@ -206,6 +209,11 @@
     @apply w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-primary-600 focus:ring-2 focus:ring-primary-100 transition-all duration-200;
   }
 
+  .legal-shell {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 0.8125rem;
+  }
+
   .card {
     @apply bg-white rounded-2xl border border-gray-100;
     box-shadow: 0 10px 30px rgba(31, 41, 70, 0.06);
@@ -225,6 +233,31 @@
 
   .chat-message-other {
     @apply bg-white border border-gray-200 text-gray-900;
+  }
+
+  .chat-shell {
+    height: 100dvh;
+    min-height: 100svh;
+  }
+
+  .chat-room-header {
+    padding-top: max(0.75rem, env(safe-area-inset-top));
+    background: rgba(248, 250, 255, 0.96);
+    border-bottom: 1px solid rgba(31, 41, 55, 0.08);
+    box-shadow: 0 8px 24px rgba(31, 78, 200, 0.06);
+  }
+
+  .chat-messages {
+    padding-top: calc(var(--chat-header-height) + 0.75rem);
+    padding-bottom: calc(var(--chat-composer-height) + var(--chat-keyboard-inset) + 0.75rem);
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .chat-composer {
+    bottom: var(--chat-keyboard-inset);
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    box-shadow: 0 -10px 24px rgba(31, 78, 200, 0.05);
   }
 
   .loading-spinner {
@@ -360,6 +393,20 @@
   .gatita-kakao-map .zoom_control,
   .gatita-kakao-map .ZoomControl {
     top: 7.25rem !important;
+  }
+
+  .gatita-bottom-sheet {
+    bottom: max(1rem, env(safe-area-inset-bottom));
+    display: flex;
+    max-height: min(72vh, calc(var(--app-viewport-height) - 8.75rem));
+    flex-direction: column;
+  }
+
+  .gatita-bottom-sheet-body {
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 2rem;
+    -webkit-overflow-scrolling: touch;
   }
 }
 

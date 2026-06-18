@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   title: '같이타 - 가천대 통학 동행 플랫폼',
   description: '가천대학교 학생들을 위한 통학 경로 동행자 매칭 서비스입니다. 가천대역에서 AI공학관까지 안전하고 편리하게 함께 이동하세요.',
   keywords: '가천대, 통학, 동행, 플랫폼, 가천대역, AI공학관, 가천대학교',
-  authors: [{ name: '박영민' }],
+  authors: [{ name: '같이타' }],
   creator: '같이타',
   icons: {
     icon: '/favicon.png',

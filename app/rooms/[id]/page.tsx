@@ -56,6 +56,16 @@ export default function ChatRoomPage() {
     }
   }, [])
 
+  const pinLatestMessageIfScrollable = useCallback(() => {
+    const scroller = messagesScrollRef.current
+    if (!scroller) return
+
+    const hasScrollableMessages = scroller.scrollHeight > scroller.clientHeight + 1
+    if (!hasScrollableMessages) return
+
+    scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'auto' })
+  }, [])
+
   const syncChatChrome = useCallback(() => {
     const root = document.documentElement
     const visualViewport = window.visualViewport
@@ -66,7 +76,6 @@ export default function ChatRoomPage() {
     const headerHeight = headerRef.current?.getBoundingClientRect().height ?? 0
     const composerHeight = composerRef.current?.getBoundingClientRect().height ?? 0
 
-    root.style.setProperty('--chat-viewport-offset-top', `${Math.ceil(viewportOffsetTop)}px`)
     root.style.setProperty('--chat-header-height', `${Math.ceil(headerHeight)}px`)
     root.style.setProperty('--chat-composer-height', `${Math.ceil(composerHeight)}px`)
     root.style.setProperty('--chat-keyboard-inset', `${Math.ceil(keyboardInset)}px`)
@@ -83,7 +92,6 @@ export default function ChatRoomPage() {
     const previousRootOverflow = root.style.overflow
     const previousBodyOverflow = body.style.overflow
     const previousBodyOverscrollBehavior = body.style.overscrollBehavior
-    const previousChatViewportOffsetTop = root.style.getPropertyValue('--chat-viewport-offset-top')
     const previousChatHeaderHeight = root.style.getPropertyValue('--chat-header-height')
     const previousChatComposerHeight = root.style.getPropertyValue('--chat-composer-height')
     const previousChatKeyboardInset = root.style.getPropertyValue('--chat-keyboard-inset')
@@ -118,7 +126,6 @@ export default function ChatRoomPage() {
       root.style.overflow = previousRootOverflow
       body.style.overflow = previousBodyOverflow
       body.style.overscrollBehavior = previousBodyOverscrollBehavior
-      restoreProperty('--chat-viewport-offset-top', previousChatViewportOffsetTop)
       restoreProperty('--chat-header-height', previousChatHeaderHeight)
       restoreProperty('--chat-composer-height', previousChatComposerHeight)
       restoreProperty('--chat-keyboard-inset', previousChatKeyboardInset)
@@ -136,11 +143,17 @@ export default function ChatRoomPage() {
   }, [messages, scrollToBottom])
 
   const handleComposerFocus = useCallback(() => {
-    syncAndPinChat()
-    requestAnimationFrame(syncAndPinChat)
-    window.setTimeout(syncAndPinChat, 80)
-    window.setTimeout(syncAndPinChat, 180)
-  }, [syncAndPinChat])
+    const syncKeyboardViewport = () => {
+      syncAndPinChat()
+      pinLatestMessageIfScrollable()
+    }
+
+    syncKeyboardViewport()
+    requestAnimationFrame(syncKeyboardViewport)
+    window.setTimeout(syncKeyboardViewport, 80)
+    window.setTimeout(syncKeyboardViewport, 160)
+    window.setTimeout(syncKeyboardViewport, 240)
+  }, [pinLatestMessageIfScrollable, syncAndPinChat])
 
   const handleMessagesPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return
@@ -570,7 +583,7 @@ export default function ChatRoomPage() {
       {/* 채팅 메시지 영역 */}
       <div
         ref={messagesScrollRef}
-        className="chat-messages absolute inset-0 space-y-2 overflow-y-auto overflow-x-hidden px-3"
+        className="chat-messages absolute left-0 right-0 top-0 space-y-2 overflow-y-auto overflow-x-hidden px-3"
         style={timestampRevealStyle}
         onPointerDown={handleMessagesPointerDown}
         onPointerMove={handleMessagesPointerMove}

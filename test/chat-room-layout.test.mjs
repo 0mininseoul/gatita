@@ -29,13 +29,20 @@ test('chat room uses fixed messenger chrome without locking the body position', 
   assert.doesNotMatch(source, /translateY\(calc\(-1 \* var\(--chat-keyboard-offset\)\)\)/)
 })
 
-test('chat room CSS reserves header, composer, and keyboard space inside the message scroller', () => {
+test('chat room CSS keeps the header fixed while the keyboard only moves the lower chrome', () => {
   const source = readProjectFile('app/globals.css')
+  const shellBlock = cssBlock(source, '.chat-shell')
+  const headerBlock = cssBlock(source, '.chat-room-header')
   const messagesBlock = cssBlock(source, '.chat-messages')
   const composerBlock = cssBlock(source, '.chat-composer')
 
+  assert.match(shellBlock, /height:\s*100svh;/)
+  assert.doesNotMatch(shellBlock, /height:\s*100dvh;/)
+  assert.match(headerBlock, /top:\s*0;/)
   assert.match(messagesBlock, /padding-top:\s*calc\(var\(--chat-header-height\) \+ 0\.75rem\);/)
-  assert.match(messagesBlock, /padding-bottom:\s*calc\(var\(--chat-composer-height\) \+ var\(--chat-keyboard-inset\) \+ 0\.75rem\);/)
+  assert.match(messagesBlock, /bottom:\s*calc\(var\(--chat-composer-height\) \+ var\(--chat-keyboard-inset\)\);/)
+  assert.match(messagesBlock, /padding-bottom:\s*0\.75rem;/)
+  assert.doesNotMatch(messagesBlock, /padding-bottom:[^;]*--chat-keyboard-inset/)
   assert.match(composerBlock, /bottom:\s*var\(--chat-keyboard-inset\);/)
 })
 
@@ -73,14 +80,16 @@ test('chat message timestamps are hidden until the message list is dragged left'
 test('chat keyboard viewport sync does not animate the message list on every keyboard frame', () => {
   const source = readProjectFile('app/rooms/[id]/page.tsx')
   const syncStart = source.indexOf('const syncAndPinChat =')
-  const syncEnd = source.indexOf('\n    root.style.overflow', syncStart)
+  const syncEnd = source.indexOf('\n  useEffect', syncStart)
   const syncBlock = source.slice(syncStart, syncEnd)
 
   assert.ok(syncStart > -1, 'syncAndPinChat exists')
   assert.ok(syncEnd > syncStart, 'syncAndPinChat block can be inspected')
   assert.match(source, /const syncChatChrome = useCallback/)
-  assert.match(source, /window\.setTimeout\(syncAndPinChat, 180\)/)
+  assert.match(source, /pinLatestMessageIfScrollable/)
+  assert.match(source, /window\.setTimeout\(syncKeyboardViewport, 240\)/)
   assert.doesNotMatch(syncBlock, /scrollToBottom/)
+  assert.doesNotMatch(source, /setProperty\('--chat-viewport-offset-top'/)
 })
 
 test('map app and bottom sheet use the visual viewport and internal sheet scrolling', () => {

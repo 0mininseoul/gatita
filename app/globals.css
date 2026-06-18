@@ -10,7 +10,6 @@
   --landing-viewport-height: 100vh;
   --landing-background-height: 100vh;
   --app-viewport-height: 100dvh;
-  --chat-viewport-offset-top: 0px;
   --chat-header-height: 0px;
   --chat-composer-height: 0px;
   --chat-keyboard-inset: 0px;
@@ -239,12 +238,12 @@
   }
 
   .chat-shell {
-    height: 100dvh;
+    height: 100svh;
     min-height: 100svh;
   }
 
   .chat-room-header {
-    top: var(--chat-viewport-offset-top);
+    top: 0;
     padding-top: max(0.75rem, env(safe-area-inset-top));
     background: rgba(248, 250, 255, 0.96);
     border-bottom: 1px solid rgba(31, 41, 55, 0.08);
@@ -252,8 +251,9 @@
   }
 
   .chat-messages {
+    bottom: calc(var(--chat-composer-height) + var(--chat-keyboard-inset));
     padding-top: calc(var(--chat-header-height) + 0.75rem);
-    padding-bottom: calc(var(--chat-composer-height) + var(--chat-keyboard-inset) + 0.75rem);
+    padding-bottom: 0.75rem;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;

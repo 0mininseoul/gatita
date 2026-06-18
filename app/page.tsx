@@ -12,6 +12,8 @@ import {
   LocationType,
   ROUTE_TOO_CLOSE_MESSAGE,
   User,
+  isRoomJoinable,
+  isRoomVisibleOnMap,
   isRestrictedRoutePair,
 } from '@/lib/supabase'
 import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
@@ -110,6 +112,7 @@ export default function HomePage() {
           id,
           from_location,
           to_location,
+          departure_date,
           departure_time,
           max_participants,
           participants:room_participants(id, user_id)
@@ -119,10 +122,12 @@ export default function HomePage() {
         .order('departure_time', { ascending: true })
 
       const sameDayRooms = ((data ?? []) as ChatRoom[])
+        .filter((room) => isRoomVisibleOnMap(room.departure_date, room.departure_time))
         .map((room) => ({
           id: room.id,
           from_location: room.from_location,
           to_location: room.to_location,
+          departure_date: room.departure_date,
           departure_time: room.departure_time,
           max_participants: room.max_participants,
           participants: room.participants?.map((participant) => ({
@@ -518,6 +523,11 @@ export default function HomePage() {
       const room = mapRooms.find((mapRoom) => mapRoom.id === roomId)
       if (!room) return
 
+      if (!isRoomJoinable(room.departure_date, room.departure_time)) {
+        toast.error('이미 지난 출발 시간입니다')
+        return
+      }
+
       if (room.participants?.some((participant) => participant.user_id === user.id)) {
         router.push(`/rooms/${roomId}`)
         return
@@ -669,14 +679,14 @@ export default function HomePage() {
             <SplitText
               text="같이 탈래요?"
               tag="h1"
-              className="font-bold"
-              from={{ opacity: 0, y: 50, scale: 0.9 }}
-              to={{ opacity: 1, y: 0, scale: 1 }}
-              duration={0.8}
-              delay={80}
+              splitType="words, chars"
+              className="landing-headline font-bold"
+              from={{ opacity: 0, y: 62, scale: 0.82, rotateX: -72, filter: 'blur(10px)' }}
+              to={{ opacity: 1, y: 0, scale: 1, rotateX: 0, filter: 'blur(0px)' }}
+              duration={0.95}
+              delay={45}
+              ease="back.out(1.65)"
               style={{
-                fontSize: '3rem',
-                marginBottom: '1rem',
                 textShadow: '0 3px 14px rgba(21, 28, 72, 0.30), 0 1px 2px rgba(21, 28, 72, 0.18)',
               }}
             />

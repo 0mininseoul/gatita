@@ -95,6 +95,15 @@ test('chat keyboard viewport sync does not animate the message list on every key
   assert.doesNotMatch(source, /visualViewport\.height - viewportOffsetTop/)
 })
 
+test('chat room syncs chrome and scrolls history immediately after initial render', () => {
+  const source = readProjectFile('app/rooms/[id]/page.tsx')
+
+  assert.match(source, /useLayoutEffect/)
+  assert.match(source, /syncInitialChatViewport/)
+  assert.match(source, /if \(loading \|\| !room \|\| !user\) return/)
+  assert.match(source, /scrollToBottom\('auto'\)/)
+})
+
 test('chat history loads message rows even if embedded author loading is unavailable', () => {
   const source = readProjectFile('app/rooms/[id]/page.tsx')
   const loadStart = source.indexOf('const loadMessages = useCallback')
@@ -115,6 +124,7 @@ test('chat room hides participant chips behind a participant sheet and shows cre
   const source = readProjectFile('app/rooms/[id]/page.tsx')
 
   assert.doesNotMatch(source, /participant\.confirmed \? 'bg-green-100/, 'participant chips should not be publicly rendered inline')
+  assert.doesNotMatch(source, /absolute -right-0\.5 -top-0\.5/, 'participant header action should not show a numeric badge')
   assert.match(source, /showParticipants/, 'participants should be shown from an explicit header action')
   assert.match(source, /참여자/, 'chat header should include participant list affordance')
   assert.match(source, /href=\{`tel:\$\{participant\.user\?\.phone\}`\}/, 'participant list should allow direct phone calls')
@@ -158,4 +168,16 @@ test('kakao map zoom control is offset below the app header', () => {
   assert.match(mapSource, /handleZoomOut/)
   assert.match(cssSource, /\.gatita-custom-zoom-control/)
   assert.match(cssSource, /top:\s*12\.75rem;/)
+})
+
+test('map stats are offset from the translucent PWA status bar and room joins disable after departure', () => {
+  const mapSource = readProjectFile('components/CampusRouteMap.tsx')
+  const cssSource = readProjectFile('app/globals.css')
+
+  assert.match(mapSource, /gatita-map-stats/)
+  assert.match(cssSource, /\.gatita-map-stats/)
+  assert.match(cssSource, /env\(safe-area-inset-top\) \+ 7\.25rem/)
+  assert.match(mapSource, /isRoomJoinable/)
+  assert.match(mapSource, /isPastDeparture/)
+  assert.match(mapSource, /disabled=\{isFull \|\| isPastDeparture\}/)
 })

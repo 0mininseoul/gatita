@@ -99,7 +99,7 @@ const SplitText: React.FC<SplitTextProps> = ({
   };
 
   return (
-    <Tag ref={ref} className={className} style={combinedStyle}>
+    <Tag ref={ref} className={className} style={combinedStyle} aria-label={text}>
       {text}
     </Tag>
   );

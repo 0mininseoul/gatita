@@ -223,6 +223,26 @@ export function getDepartureDateForTime(now: Date, departureTime: string) {
   return formatLocalDate(departureDate)
 }
 
+export const ROOM_MAP_VISIBILITY_WINDOW_MINUTES = 30
+
+export function getRoomDepartureDateTime(departureDate: string, departureTime: string) {
+  const [year, month, day] = departureDate.split('-').map(Number)
+  const [hours, minutes] = departureTime.slice(0, 5).split(':').map(Number)
+
+  return new Date(year, month - 1, day, hours, minutes, 0, 0)
+}
+
+export function isRoomJoinable(departureDate: string, departureTime: string, now = new Date()) {
+  return getRoomDepartureDateTime(departureDate, departureTime).getTime() >= now.getTime()
+}
+
+export function isRoomVisibleOnMap(departureDate: string, departureTime: string, now = new Date()) {
+  const visibleUntil = getRoomDepartureDateTime(departureDate, departureTime).getTime()
+    + ROOM_MAP_VISIBILITY_WINDOW_MINUTES * 60 * 1000
+
+  return visibleUntil >= now.getTime()
+}
+
 export const LOCATION_POINTS: Record<LocationType, LocationPoint> = {
   '가천대역_1번출구': {
     id: '가천대역_1번출구',

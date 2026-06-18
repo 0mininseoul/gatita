@@ -7,6 +7,7 @@ import {
   getDestinationOptions,
   GACHON_GLOBAL_CAMPUS_BOUNDS,
   GACHON_GLOBAL_CAMPUS_CENTER,
+  isRoomJoinable,
   LOCATION_ORDER,
   LOCATION_POINTS,
   LOCATIONS,
@@ -17,6 +18,7 @@ export type CampusMapRoom = {
   id: string
   from_location: LocationType
   to_location: LocationType
+  departure_date: string
   departure_time: string
   max_participants: number
   participants?: Array<{
@@ -364,7 +366,7 @@ export default function CampusRouteMap({
     <section className="relative h-full w-full overflow-hidden bg-[#e7edf4]">
       <div ref={mapContainerRef} className="gatita-kakao-map absolute inset-0 h-full w-full" />
 
-      <div className="pointer-events-none absolute left-3 top-24 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap gap-2 sm:left-4">
+      <div className="gatita-map-stats pointer-events-none absolute left-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap gap-2 sm:left-4">
         <div className="inline-flex items-center gap-2 rounded-lg border border-white/75 bg-white/90 px-3 py-2 text-xs font-extrabold text-gray-950 shadow-[0_10px_28px_rgba(17,24,39,0.12)] backdrop-blur">
           <Compass className="h-4 w-4 text-primary-600" />
           <span>오늘 예정 방 {rooms.length}개</span>
@@ -481,6 +483,7 @@ export default function CampusRouteMap({
                   {selectedOriginRooms.map((room) => {
                     const participantCount = room.participants?.length ?? 0
                     const isFull = participantCount >= room.max_participants
+                    const isPastDeparture = !isRoomJoinable(room.departure_date, room.departure_time)
 
                     return (
                       <div
@@ -505,10 +508,10 @@ export default function CampusRouteMap({
                           <button
                             type="button"
                             onClick={() => onJoinRoom(room.id)}
-                            disabled={isFull}
+                            disabled={isFull || isPastDeparture}
                             className="rounded-md bg-gray-950 px-3 py-1.5 text-xs font-black text-white transition hover:bg-gray-800 disabled:bg-gray-300"
                           >
-                            {isFull ? '마감' : '입장'}
+                            {isPastDeparture ? '지난 방' : isFull ? '마감' : '입장'}
                           </button>
                         </div>
                       </div>

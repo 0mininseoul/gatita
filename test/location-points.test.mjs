@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import ts from 'typescript'
@@ -35,6 +35,8 @@ const {
   getDepartureTimeOptions,
   getDestinationOptions,
   GACHON_GLOBAL_CAMPUS_BOUNDS,
+  isRoomJoinable,
+  isRoomVisibleOnMap,
   isRestrictedRoutePair,
   LOCATION_ORDER,
   LOCATION_POINTS,
@@ -168,7 +170,7 @@ test('campus map room times are displayed without seconds', () => {
   assert.doesNotMatch(source, /<span>\{room\.departure_time\}<\/span>/)
 })
 
-test('map room loading keeps every active same-day room even after the time has passed', () => {
+test('map room loading keeps only rooms within the visible map window', () => {
   const source = readProjectFile('app/page.tsx')
   const loadStart = source.indexOf('const loadMapRooms = useCallback')
   const loadEnd = source.indexOf('\n  const checkAuth', loadStart)
@@ -178,8 +180,16 @@ test('map room loading keeps every active same-day room even after the time has 
   assert.ok(loadEnd > loadStart, 'loadMapRooms block can be inspected')
   assert.match(loadBlock, /\.eq\('departure_date', today\)/)
   assert.match(loadBlock, /\.eq\('status', 'active'\)/)
-  assert.doesNotMatch(loadBlock, /currentTime/, 'same-day room loading should not compare against the current time')
-  assert.doesNotMatch(loadBlock, /departure_time\s*>=/, 'same-day room loading should not remove passed rooms')
+  assert.match(loadBlock, /isRoomVisibleOnMap/, 'map should hide rooms more than 30 minutes after departure')
+  assert.doesNotMatch(loadBlock, /departure_time\s*>=/, 'same-day room loading should not use fragile string comparisons')
+})
+
+test('room visibility and joinability follow departure time rules', () => {
+  assert.equal(isRoomJoinable('2026-06-19', '12:00', new Date('2026-06-19T11:59:00+09:00')), true)
+  assert.equal(isRoomJoinable('2026-06-19', '12:00', new Date('2026-06-19T12:00:00+09:00')), true)
+  assert.equal(isRoomJoinable('2026-06-19', '12:00', new Date('2026-06-19T12:01:00+09:00')), false)
+  assert.equal(isRoomVisibleOnMap('2026-06-19', '12:00', new Date('2026-06-19T12:29:00+09:00')), true)
+  assert.equal(isRoomVisibleOnMap('2026-06-19', '12:00', new Date('2026-06-19T12:31:00+09:00')), false)
 })
 
 test('map header exposes my rooms list from the user membership query', () => {
@@ -216,4 +226,31 @@ test('map shows a one-time PWA home screen onboarding modal', () => {
   assert.match(source, /isInstalled\(\)/)
   assert.match(manifest, /"display":\s*"standalone"/)
   assert.match(manifest, /"start_url":\s*"\/map"/)
+})
+
+test('iOS PWA startup images are generated and registered for current iPhones', () => {
+  const layout = readProjectFile('app/layout.tsx')
+  const expectedImages = [
+    'iphone-17-pro-max.png',
+    'iphone-17-air.png',
+    'iphone-17-pro.png',
+    'iphone-16-pro-max.png',
+    'iphone-16-pro.png',
+    'iphone-15-pro-max.png',
+    'iphone-14.png',
+    'iphone-se.png',
+  ]
+
+  assert.match(layout, /startupImage/)
+  assert.match(layout, /apple-touch-startup-image/)
+  assert.match(layout, /device-width: 440px/)
+  assert.match(layout, /device-height: 956px/)
+
+  expectedImages.forEach((imageName) => {
+    assert.equal(
+      existsSync(join(process.cwd(), 'public', 'splash', imageName)),
+      true,
+      `${imageName} should exist`,
+    )
+  })
 })

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { ChatRoom, User, Message, RoomParticipant, PayoutAccount, LOCATIONS } from '@/lib/supabase'
@@ -164,6 +164,24 @@ export default function ChatRoomPage() {
   useEffect(() => {
     scrollToBottom()
   }, [messages, scrollToBottom])
+
+  useLayoutEffect(() => {
+    if (loading || !room || !user) return
+
+    const syncInitialChatViewport = () => {
+      syncAndPinChat()
+      scrollToBottom('auto')
+    }
+
+    syncInitialChatViewport()
+    const frameId = window.requestAnimationFrame(syncInitialChatViewport)
+    const timeoutId = window.setTimeout(syncInitialChatViewport, 80)
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      window.clearTimeout(timeoutId)
+    }
+  }, [loading, messages.length, room, scrollToBottom, syncAndPinChat, user])
 
   const handleComposerFocus = useCallback(() => {
     const syncKeyboardViewport = () => {
@@ -612,9 +630,6 @@ export default function ChatRoomPage() {
                 className="relative rounded-lg p-2 text-gray-700 hover:bg-gray-100"
               >
                 <Users className="h-5 w-5" />
-                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary-600 px-1 text-[10px] font-bold text-white">
-                  {participants.length}
-                </span>
               </button>
             )}
             <button

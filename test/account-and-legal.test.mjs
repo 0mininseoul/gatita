@@ -81,3 +81,15 @@ test('landing headline shadow is tighter and more natural', () => {
   assert.doesNotMatch(source, /0 2px 28px rgba\(28, 22, 92, 0\.45\)/)
   assert.match(source, /0 3px 14px rgba\(21, 28, 72, 0\.30\)/)
 })
+
+test('landing headline uses a more expressive React Bits split text entrance', () => {
+  const pageSource = readProjectFile('app/page.tsx')
+  const splitTextSource = readProjectFile('components/SplitText.tsx')
+
+  assert.match(pageSource, /SplitText/)
+  assert.match(pageSource, /splitType="words, chars"/)
+  assert.match(pageSource, /className="landing-headline/)
+  assert.match(pageSource, /rotateX/)
+  assert.match(splitTextSource, /GSAPSplitText/)
+  assert.match(splitTextSource, /aria-label=\{text\}/)
+})

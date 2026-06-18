@@ -28,7 +28,7 @@
 
   html.landing-lock,
   body.landing-lock {
-    overflow: hidden;
+    overflow-x: hidden;
     overscroll-behavior: none;
     background:
       radial-gradient(900px 680px at 16% 4%, #b9b4ff 0%, rgba(185, 180, 255, 0) 64%),
@@ -105,8 +105,7 @@
   }
 
   .landing-page {
-    position: fixed;
-    inset: 0;
+    position: relative;
     width: 100vw;
     height: var(--landing-background-height);
     min-height: 100vh;
@@ -126,7 +125,7 @@
   }
 
   .landing-background {
-    position: fixed;
+    position: absolute;
     top: 0;
     left: 0;
     z-index: 0;
@@ -144,7 +143,7 @@
   }
 
   .landing-background .grainient-container.landing-grainient {
-    position: fixed;
+    position: absolute;
     top: 0;
     left: 0;
     width: 100vw;

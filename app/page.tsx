@@ -249,6 +249,7 @@ export default function HomePage() {
 
     const root = document.documentElement
     const body = document.body
+    const scrollOffset = 1
     const setLandingViewport = () => {
       const visualHeight = window.visualViewport?.height ?? window.innerHeight
       const backgroundHeight = Math.max(
@@ -258,11 +259,19 @@ export default function HomePage() {
       )
 
       root.style.setProperty('--landing-viewport-height', `${Math.ceil(visualHeight)}px`)
-      root.style.setProperty('--landing-background-height', `${Math.ceil(backgroundHeight)}px`)
+      root.style.setProperty('--landing-background-height', `${Math.ceil(backgroundHeight + scrollOffset)}px`)
+    }
+    const keepSafariComposited = () => {
+      if (Math.abs(window.scrollY - scrollOffset) > 0.5) {
+        window.scrollTo(0, scrollOffset)
+      }
+    }
+    const blockUserScroll = (event: TouchEvent | WheelEvent) => {
+      event.preventDefault()
     }
 
     setLandingViewport()
-    window.scrollTo(0, 0)
+    window.scrollTo(0, scrollOffset)
     root.classList.add('landing-lock')
     body.classList.add('landing-lock')
 
@@ -270,8 +279,11 @@ export default function HomePage() {
     window.addEventListener('orientationchange', setLandingViewport)
     window.visualViewport?.addEventListener('resize', setLandingViewport)
     window.visualViewport?.addEventListener('scroll', setLandingViewport)
+    window.addEventListener('scroll', keepSafariComposited, { passive: true })
+    document.addEventListener('touchmove', blockUserScroll, { passive: false })
+    document.addEventListener('wheel', blockUserScroll, { passive: false })
 
-    const frameId = window.requestAnimationFrame(() => window.scrollTo(0, 0))
+    const frameId = window.requestAnimationFrame(keepSafariComposited)
 
     return () => {
       window.cancelAnimationFrame(frameId)
@@ -279,8 +291,12 @@ export default function HomePage() {
       window.removeEventListener('orientationchange', setLandingViewport)
       window.visualViewport?.removeEventListener('resize', setLandingViewport)
       window.visualViewport?.removeEventListener('scroll', setLandingViewport)
+      window.removeEventListener('scroll', keepSafariComposited)
+      document.removeEventListener('touchmove', blockUserScroll)
+      document.removeEventListener('wheel', blockUserScroll)
       root.classList.remove('landing-lock')
       body.classList.remove('landing-lock')
+      window.scrollTo(0, 0)
     }
   }, [showLanding])
 

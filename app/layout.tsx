@@ -124,6 +124,7 @@ export const metadata: Metadata = {
   other: {
     'color-scheme': 'only light',
     'supported-color-schemes': 'light',
+    'format-detection': 'telephone=no, date=no, address=no, email=no',
   },
 }
 

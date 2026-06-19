@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase'
 import {
   ChatRoom,
   getDepartureDateForTime,
+  getMapRoomDateRange,
   LOCATIONS,
   LocationType,
   ROUTE_TOO_CLOSE_MESSAGE,
@@ -19,9 +20,8 @@ import {
 import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
 import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, extractGachonProfileFromMetadata, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
 import { isInstalled } from '@/lib/pwa'
-import { identifyAnalyticsUser, trackEvent } from '@/lib/analytics/client'
+import { identifyAnalyticsUser, shouldSuppressAnalyticsForUser, suppressAnalyticsForCurrentDevice, trackEvent } from '@/lib/analytics/client'
 import { ArrowRight, Clock, MessageSquareText, Share2, Star, Settings, LogOut, Users, X } from 'lucide-react'
-import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 
 import CampusRouteMap, { CampusMapRoom } from '@/components/CampusRouteMap'
@@ -37,6 +37,34 @@ type MyRoomSummary = CampusMapRoom & {
 }
 
 const PWA_ONBOARDING_STORAGE_KEY = 'gatita:pwa-onboarding-dismissed'
+const ANALYTICS_PENDING_LOGIN_KEY = 'gatita:analytics-pending-login'
+
+function rememberPendingLogin(method: string) {
+  if (typeof window === 'undefined') return
+
+  window.sessionStorage.setItem(ANALYTICS_PENDING_LOGIN_KEY, JSON.stringify({
+    method,
+    startedAt: Date.now(),
+  }))
+}
+
+function consumePendingLogin() {
+  if (typeof window === 'undefined') return null
+
+  const raw = window.sessionStorage.getItem(ANALYTICS_PENDING_LOGIN_KEY)
+  if (!raw) return null
+
+  window.sessionStorage.removeItem(ANALYTICS_PENDING_LOGIN_KEY)
+
+  try {
+    const parsed = JSON.parse(raw) as { method?: string; startedAt?: number }
+    if (!parsed.method || !parsed.startedAt) return null
+    if (Date.now() - parsed.startedAt > 10 * 60 * 1000) return null
+    return parsed.method
+  } catch {
+    return null
+  }
+}
 
 function GoogleIcon({ className = 'w-5 h-5' }: { className?: string }) {
   return (
@@ -129,7 +157,7 @@ export default function HomePage() {
     setIsLoadingMapRooms(true)
 
     try {
-      const today = format(new Date(), 'yyyy-MM-dd')
+      const visibleDates = getMapRoomDateRange(new Date())
       const { data } = await supabase
         .from('chat_rooms')
         .select(`
@@ -141,8 +169,9 @@ export default function HomePage() {
           max_participants,
           participants:room_participants(id, user_id)
         `)
-        .eq('departure_date', today)
+        .in('departure_date', visibleDates)
         .eq('status', 'active')
+        .order('departure_date', { ascending: true })
         .order('departure_time', { ascending: true })
 
       const sameDayRooms = ((data ?? []) as ChatRoom[])
@@ -262,6 +291,7 @@ export default function HomePage() {
           await rejectNonGachonAccount()
           return
         }
+        const pendingLoginMethod = consumePendingLogin()
 
         setHasAuthenticatedSession(true)
         setPendingProfileEmail(email ?? '')
@@ -276,15 +306,31 @@ export default function HomePage() {
         if (userData) {
           setAuthNotice(null)
           setUser(userData)
-          identifyAnalyticsUser(userData.id, {
-            profile_completed: true,
-            is_admin: userData.is_admin,
-            account_status: userData.status,
-            department: userData.department,
+          const shouldSuppressAnalytics = shouldSuppressAnalyticsForUser({
+            userId: userData.id,
+            email: userData.email,
+            isAdmin: userData.is_admin,
           })
-          trackEvent('auth_session_loaded', {
-            profile_completed: true,
-          })
+
+          if (shouldSuppressAnalytics) {
+            suppressAnalyticsForCurrentDevice()
+          } else {
+            identifyAnalyticsUser(userData.id, {
+              profile_completed: true,
+              is_admin: userData.is_admin,
+              account_status: userData.status,
+              department: userData.department,
+            })
+            trackEvent('auth_session_loaded', {
+              profile_completed: true,
+            })
+            if (pendingLoginMethod) {
+              trackEvent('login_succeeded', {
+                method: pendingLoginMethod,
+                profile_completed: true,
+              })
+            }
+          }
           await loadMapRooms()
           enterMap()
         } else {
@@ -296,6 +342,12 @@ export default function HomePage() {
           trackEvent('auth_session_loaded', {
             profile_completed: false,
           })
+          if (pendingLoginMethod) {
+            trackEvent('login_succeeded', {
+              method: pendingLoginMethod,
+              profile_completed: false,
+            })
+          }
           await loadMapRooms()
           enterMap()
         }
@@ -838,6 +890,7 @@ export default function HomePage() {
     trackEvent('login_started', {
       method: 'google',
     })
+    rememberPendingLogin('google')
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -847,6 +900,7 @@ export default function HomePage() {
     } catch (error) {
       console.error('Google login error:', error)
       toast.error('구글 로그인 중 오류가 발생했습니다')
+      window.sessionStorage.removeItem(ANALYTICS_PENDING_LOGIN_KEY)
       setIsStartingGoogle(false)
     }
   }

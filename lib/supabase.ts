@@ -223,6 +223,14 @@ export function getDepartureDateForTime(now: Date, departureTime: string) {
   return formatLocalDate(departureDate)
 }
 
+export function getMapRoomDateRange(now = new Date()) {
+  const today = new Date(now)
+  const tomorrow = new Date(now)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+
+  return [formatLocalDate(today), formatLocalDate(tomorrow)]
+}
+
 export const ROOM_MAP_VISIBILITY_WINDOW_MINUTES = 30
 
 export function getRoomDepartureDateTime(departureDate: string, departureTime: string) {

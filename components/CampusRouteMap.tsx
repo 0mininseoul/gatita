@@ -31,6 +31,7 @@ export type CampusMapRoom = {
 type Stat = {
   roomCount: number
   nextTime: string | null
+  nextSortKey: string | null
 }
 
 type CampusRouteMapProps = {
@@ -62,7 +63,12 @@ const MIN_MAP_LEVEL = 1
 const emptyStat = (): Stat => ({
   roomCount: 0,
   nextTime: null,
+  nextSortKey: null,
 })
+
+function getRoomSortKey(room: Pick<CampusMapRoom, 'departure_date' | 'departure_time'>) {
+  return `${room.departure_date}T${room.departure_time.slice(0, 5)}`
+}
 
 function loadKakaoMaps(appKey: string) {
   if (window.kakao?.maps) {
@@ -134,12 +140,17 @@ function buildStats(rooms: CampusMapRoom[]) {
 
   rooms.forEach((room) => {
     const currentOriginStat = originStats.get(room.from_location) ?? emptyStat()
+    const roomSortKey = getRoomSortKey(room)
 
     currentOriginStat.roomCount += 1
     currentOriginStat.nextTime =
-      !currentOriginStat.nextTime || room.departure_time < currentOriginStat.nextTime
+      !currentOriginStat.nextSortKey || roomSortKey < currentOriginStat.nextSortKey
         ? room.departure_time
         : currentOriginStat.nextTime
+    currentOriginStat.nextSortKey =
+      !currentOriginStat.nextSortKey || roomSortKey < currentOriginStat.nextSortKey
+        ? roomSortKey
+        : currentOriginStat.nextSortKey
     originStats.set(room.from_location, currentOriginStat)
   })
 
@@ -183,7 +194,7 @@ export default function CampusRouteMap({
       ? rooms
           .filter((room) => room.from_location === selectedFrom)
           .slice()
-          .sort((a, b) => a.departure_time.localeCompare(b.departure_time))
+          .sort((a, b) => getRoomSortKey(a).localeCompare(getRoomSortKey(b)))
       : [],
     [rooms, selectedFrom]
   )

@@ -34,6 +34,7 @@ const {
   getDepartureDateForTime,
   getDepartureTimeOptions,
   getDestinationOptions,
+  getMapRoomDateRange,
   GACHON_GLOBAL_CAMPUS_BOUNDS,
   isRoomJoinable,
   isRoomVisibleOnMap,
@@ -162,6 +163,13 @@ test('departure date follows the selected post-midnight time', () => {
   assert.equal(getDepartureDateForTime(now, '00:30'), '2026-06-19')
 })
 
+test('map room date range includes the next day for post-midnight departures', () => {
+  assert.deepEqual(
+    getMapRoomDateRange(new Date('2026-06-18T20:48:00+09:00')),
+    ['2026-06-18', '2026-06-19'],
+  )
+})
+
 test('campus map room times are displayed without seconds', () => {
   const source = readProjectFile('components/CampusRouteMap.tsx')
 
@@ -193,7 +201,8 @@ test('map room loading keeps only rooms within the visible map window', () => {
 
   assert.ok(loadStart > -1, 'loadMapRooms exists')
   assert.ok(loadEnd > loadStart, 'loadMapRooms block can be inspected')
-  assert.match(loadBlock, /\.eq\('departure_date', today\)/)
+  assert.match(loadBlock, /getMapRoomDateRange\(new Date\(\)\)/)
+  assert.match(loadBlock, /\.in\('departure_date', visibleDates\)/)
   assert.match(loadBlock, /\.eq\('status', 'active'\)/)
   assert.match(loadBlock, /isRoomVisibleOnMap/, 'map should hide rooms more than 30 minutes after departure')
   assert.doesNotMatch(loadBlock, /departure_time\s*>=/, 'same-day room loading should not use fragile string comparisons')

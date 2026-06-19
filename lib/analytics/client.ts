@@ -7,8 +7,27 @@ type AnalyticsValue = string | number | boolean | null | undefined
 type AnalyticsProperties = Record<string, AnalyticsValue>
 type SanitizedAnalyticsProperties = Record<string, string | number | boolean>
 
+const INTERNAL_DEVICE_STORAGE_KEY = 'gatita:analytics-internal-device'
+
 let initialized = false
 let unavailable = false
+
+function parseEnvList(value: string | undefined) {
+  return (value ?? '')
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean)
+}
+
+function isCurrentDeviceSuppressed() {
+  if (typeof window === 'undefined') return false
+  return window.localStorage.getItem(INTERNAL_DEVICE_STORAGE_KEY) === 'true'
+}
+
+function syncOptOutState() {
+  if (!initialized) return
+  amplitude.setOptOut(isCurrentDeviceSuppressed())
+}
 
 function getDisplayMode() {
   if (typeof window === 'undefined') return 'server'
@@ -56,11 +75,13 @@ export function initAnalytics() {
   })
 
   initialized = true
+  syncOptOutState()
   return true
 }
 
 export function trackEvent(eventName: string, properties: AnalyticsProperties = {}) {
   if (!initAnalytics()) return
+  if (isCurrentDeviceSuppressed()) return
 
   amplitude.track(eventName, sanitizeProperties({
     ...commonProperties(),
@@ -68,11 +89,47 @@ export function trackEvent(eventName: string, properties: AnalyticsProperties = 
   }))
 }
 
+export function suppressAnalyticsForCurrentDevice() {
+  if (typeof window === 'undefined') return
+
+  window.localStorage.setItem(INTERNAL_DEVICE_STORAGE_KEY, 'true')
+  if (initAnalytics()) {
+    amplitude.setOptOut(true)
+  }
+}
+
+export function shouldSuppressAnalyticsForUser(user: {
+  userId?: string | null
+  email?: string | null
+  isAdmin?: boolean | null
+}) {
+  if (user.isAdmin) return true
+
+  const excludedUserIds = parseEnvList(process.env.NEXT_PUBLIC_ANALYTICS_EXCLUDED_USER_IDS)
+  const excludedEmails = parseEnvList([
+    process.env.NEXT_PUBLIC_ADMIN_EMAIL,
+    process.env.NEXT_PUBLIC_ANALYTICS_EXCLUDED_EMAILS,
+  ].filter(Boolean).join(','))
+
+  const userId = user.userId?.trim().toLowerCase()
+  const email = user.email?.trim().toLowerCase()
+
+  return Boolean(
+    (userId && excludedUserIds.includes(userId))
+    || (email && excludedEmails.includes(email)),
+  )
+}
+
 export function identifyAnalyticsUser(
   userId: string | null | undefined,
   properties: AnalyticsProperties = {},
 ) {
   if (!initAnalytics()) return
+
+  if (properties.is_admin === true || isCurrentDeviceSuppressed()) {
+    suppressAnalyticsForCurrentDevice()
+    return
+  }
 
   if (!userId) {
     amplitude.reset()

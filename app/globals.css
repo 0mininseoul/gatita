@@ -275,15 +275,17 @@
   }
 
   .chat-payout-account {
-    text-decoration: none;
-    -webkit-text-decoration-line: none;
-    text-decoration-line: none;
+    text-decoration: none !important;
+    -webkit-text-decoration-line: none !important;
+    text-decoration-line: none !important;
     -webkit-touch-callout: none;
   }
 
   .chat-payout-account a,
-  .chat-payout-account a[x-apple-data-detectors] {
+  .chat-payout-account a[x-apple-data-detectors],
+  .chat-payout-account [x-apple-data-detectors] {
     color: inherit !important;
+    font: inherit !important;
     text-decoration: none !important;
     -webkit-text-decoration-line: none !important;
     text-decoration-line: none !important;

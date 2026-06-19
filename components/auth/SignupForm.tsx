@@ -110,13 +110,14 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
           setGoogleEmail(email)
           const googleProfile = extractGachonProfileFromMetadata(session.user.user_metadata)
 
-          const { data: profile } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', session.user.id)
-            .maybeSingle()
+          const profileResponse = await fetch('/api/profile/me')
+          const profileResult = await profileResponse.json().catch(() => null) as { profileCompleted?: boolean } | null
 
-          if (!profile) {
+          if (!profileResponse.ok) {
+            throw new Error(profileResult && 'error' in profileResult ? String(profileResult.error) : '프로필 확인 중 오류가 발생했습니다')
+          }
+
+          if (!profileResult?.profileCompleted) {
             setFormData(prev => ({
               ...prev,
               name: prev.name || googleProfile.name,
@@ -266,37 +267,25 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
       }
 
       const userId = sessionData.session.user.id
-      const userEmail = sessionData.session.user.email || googleEmail
 
-      // 사용자 프로필 생성
-      const { error: profileError } = await supabase
-        .from('users')
-        .insert({
-          id: userId,
-          email: userEmail,
+      const response = await fetch('/api/profile/complete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           name: formData.name.trim(),
           phone: formData.phone.trim(),
           nickname: formData.nickname.trim(),
-          department: formData.department || '학과 미확인',
-        })
-
-      if (profileError) {
-        console.error('Profile creation error:', profileError)
-        throw profileError
-      }
-
-      const { error: payoutError } = await supabase
-        .from('user_payout_accounts')
-        .insert({
-          user_id: userId,
           bank_name: formData.bank_name.trim(),
           account_number: formData.account_number.trim(),
           account_holder: formData.account_holder.trim(),
-        })
+        }),
+      })
+      const result = await response.json().catch(() => null)
 
-      if (payoutError) {
-        console.error('Payout account creation error:', payoutError)
-        throw payoutError
+      if (!response.ok) {
+        throw new Error(result?.error ?? '회원가입 중 오류가 발생했습니다')
       }
 
       toast.success('회원가입이 완료되었습니다!')

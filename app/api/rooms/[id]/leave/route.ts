@@ -1,6 +1,6 @@
-import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { withAxiomRoute } from '@/lib/axiom/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 
 type LeaveRoomPayload = {
@@ -11,16 +11,7 @@ async function leaveRoom(
   request: Request,
   { params }: { params: { id: string } },
 ) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const roomId = params.id
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    return NextResponse.json(
-      { error: '채팅방 나가기 설정이 아직 연결되지 않았습니다' },
-      { status: 500 },
-    )
-  }
 
   let payload: LeaveRoomPayload = {}
 
@@ -39,12 +30,7 @@ async function leaveRoom(
     return NextResponse.json({ error: '로그인이 필요합니다' }, { status: 401 })
   }
 
-  const admin = createAdminClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
+  const admin = createAdminSupabase()
 
   const { data: room, error: roomError } = await admin
     .from('chat_rooms')

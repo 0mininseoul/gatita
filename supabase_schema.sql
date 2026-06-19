@@ -15,19 +15,26 @@ create type location_type as enum (
 -- Users table
 create table public.users (
   id uuid references auth.users on delete cascade primary key,
+  nickname varchar(50) unique not null,
+  nickname_updated_at timestamp with time zone,
+  department varchar(100) not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Private profiles table. Never expose this table broadly to browser clients.
+create table public.user_private_profiles (
+  user_id uuid references public.users(id) on delete cascade primary key,
   email varchar(255) unique not null,
   name varchar(100) not null,
   phone varchar(20) not null,
   phone_verified_at timestamp with time zone,
   phone_mfa_factor_id uuid,
-  nickname varchar(50) unique not null,
-  nickname_updated_at timestamp with time zone,
-  department varchar(100) not null,
-  status varchar(20) default 'active' check (status in ('active', 'suspended')),
+  status varchar(20) not null default 'active' check (status in ('active', 'suspended')),
   suspended_until timestamp with time zone,
   suspension_reason text,
   moderation_updated_at timestamp with time zone,
-  is_admin boolean default false,
+  is_admin boolean not null default false,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -122,6 +129,7 @@ create table public.favorites (
 
 -- Enable RLS (Row Level Security)
 alter table public.users enable row level security;
+alter table public.user_private_profiles enable row level security;
 alter table public.user_payout_accounts enable row level security;
 alter table public.chat_rooms enable row level security;
 alter table public.room_participants enable row level security;
@@ -134,50 +142,55 @@ alter table public.favorites enable row level security;
 grant usage on schema public to authenticated;
 grant usage on type public.location_type to authenticated;
 
-grant select on table public.users to authenticated;
-grant insert (id, email, name, phone, nickname, department) on table public.users to authenticated;
+grant select (id, nickname, nickname_updated_at, department, created_at, updated_at)
+  on table public.users to authenticated;
 grant update (nickname, nickname_updated_at) on table public.users to authenticated;
+grant select on table public.user_private_profiles to authenticated;
 grant select, insert, update on table public.user_payout_accounts to authenticated;
 grant select, insert, update, delete on table public.chat_rooms to authenticated;
-grant select, insert, update, delete on table public.room_participants to authenticated;
+grant select, insert on table public.room_participants to authenticated;
+grant all on table public.room_participants to service_role;
 grant select, insert on table public.messages to authenticated;
 grant select, insert, update on table public.reports to authenticated;
 grant select, insert on table public.user_moderation_actions to authenticated;
 grant select, insert, delete on table public.favorites to authenticated;
 
 -- RLS Policies
--- Users: Users can read all users but only update themselves
-create policy "Users can read all users" on public.users for select using (true);
-create policy "Users can update own profile"
+-- Users: public profile fields only. Private fields live in user_private_profiles.
+create policy "Authenticated users can read public profiles"
+  on public.users for select to authenticated using (true);
+create policy "Users can update own public profile"
   on public.users for update
   to authenticated
   using ((select auth.uid()) = id)
   with check ((select auth.uid()) = id);
-create policy "Users can insert own profile"
-  on public.users for insert
+
+create policy "Users can read own private profile"
+  on public.user_private_profiles
+  for select
   to authenticated
-  with check ((select auth.uid()) = id);
+  using ((select auth.uid()) = user_id);
 
--- Payout accounts: owners can manage their own account, room participants can read creator payout accounts
-create policy "Users can manage own payout account"
-  on public.user_payout_accounts
-  for all
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
-
-create policy "Room participants can read creator payout accounts"
+-- Payout accounts: browser clients can manage only their own payout account.
+-- Room creator payout account display is served through a room-scoped server API.
+create policy "Users can read own payout account"
   on public.user_payout_accounts
   for select
-  using (
-    exists (
-      select 1
-      from public.chat_rooms
-      join public.room_participants
-        on room_participants.room_id = chat_rooms.id
-      where chat_rooms.created_by = user_payout_accounts.user_id
-        and room_participants.user_id = auth.uid()
-    )
-  );
+  to authenticated
+  using ((select auth.uid()) = user_id);
+
+create policy "Users can insert own payout account"
+  on public.user_payout_accounts
+  for insert
+  to authenticated
+  with check ((select auth.uid()) = user_id);
+
+create policy "Users can update own payout account"
+  on public.user_payout_accounts
+  for update
+  to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
 -- Chat rooms: Everyone can read, authenticated active users can create
 create policy "Anyone can read chat rooms" on public.chat_rooms for select using (true);
@@ -189,9 +202,9 @@ create policy "Authenticated active users can create chat rooms"
     (select auth.uid()) = created_by
     and exists (
       select 1
-      from public.users
-      where users.id = (select auth.uid())
-        and users.status = 'active'
+      from public.user_private_profiles
+      where user_private_profiles.user_id = (select auth.uid())
+        and user_private_profiles.status = 'active'
     )
   );
 create policy "Room creators can transfer active rooms to participants"
@@ -214,29 +227,35 @@ create policy "Authenticated users can lock active rooms for capacity checks"
   with check (false);
 create policy "Room creators can delete their rooms" on public.chat_rooms for delete using (auth.uid() = created_by);
 
--- Room participants: Everyone can read, active users can join, participants can leave
-create policy "Anyone can read participants" on public.room_participants for select using (true);
-create policy "Active users can join rooms"
+-- Room participants: browser clients can read participants and only add themselves
+-- as the creator's initial participant row. Joins, leaves, and confirmation use server APIs.
+create policy "Authenticated users can read participants"
+  on public.room_participants
+  for select
+  to authenticated
+  using (true);
+
+create policy "Room creators can add themselves as participant"
   on public.room_participants
   for insert
   to authenticated
   with check (
     (select auth.uid()) = user_id
+    and confirmed = true
     and exists (
       select 1
-      from public.users
-      where users.id = (select auth.uid())
-        and users.status = 'active'
+      from public.chat_rooms
+      where chat_rooms.id = room_participants.room_id
+        and chat_rooms.created_by = (select auth.uid())
+        and chat_rooms.status = 'active'
     )
   );
-create policy "Users can leave rooms" on public.room_participants for delete using (auth.uid() = user_id);
-create policy "Users can update their participation" on public.room_participants for update using (auth.uid() = user_id);
 
 -- Messages: Room participants can read/send messages
-create policy "Room participants can read messages" on public.messages 
+create policy "Room participants can read messages" on public.messages
   for select using (
     exists (
-      select 1 from public.room_participants 
+      select 1 from public.room_participants
       where room_id = messages.room_id and user_id = auth.uid()
     )
   );
@@ -247,9 +266,9 @@ create policy "Active room participants can send messages" on public.messages
     (select auth.uid()) = user_id
     and exists (
       select 1
-      from public.users
-      where users.id = (select auth.uid())
-        and users.status = 'active'
+      from public.user_private_profiles
+      where user_private_profiles.user_id = (select auth.uid())
+        and user_private_profiles.status = 'active'
     )
     and
     exists (
@@ -262,20 +281,20 @@ create policy "Active room participants can send messages" on public.messages
 create policy "Users can create reports" on public.reports for insert with check (auth.uid() = reporter_id);
 create policy "Admins can read all reports" on public.reports for select using (
   exists (
-    select 1 from public.users 
-    where id = auth.uid() and is_admin = true and status = 'active'
+    select 1 from public.user_private_profiles
+    where user_id = auth.uid() and is_admin = true and status = 'active'
   )
 );
 create policy "Admins can update reports" on public.reports for update using (
   exists (
-    select 1 from public.users
-    where id = auth.uid() and is_admin = true and status = 'active'
+    select 1 from public.user_private_profiles
+    where user_id = auth.uid() and is_admin = true and status = 'active'
   )
 )
 with check (
   exists (
-    select 1 from public.users
-    where id = auth.uid() and is_admin = true and status = 'active'
+    select 1 from public.user_private_profiles
+    where user_id = auth.uid() and is_admin = true and status = 'active'
   )
 );
 
@@ -285,8 +304,8 @@ create policy "Admins can read moderation actions"
   for select
   using (
     exists (
-      select 1 from public.users
-      where id = auth.uid()
+      select 1 from public.user_private_profiles
+      where user_id = auth.uid()
         and is_admin = true
         and status = 'active'
     )
@@ -298,8 +317,8 @@ create policy "Admins can insert moderation actions"
   with check (
     admin_id = (select auth.uid())
     and exists (
-      select 1 from public.users
-      where id = auth.uid()
+      select 1 from public.user_private_profiles
+      where user_id = auth.uid()
         and is_admin = true
         and status = 'active'
     )
@@ -322,6 +341,9 @@ $$ language plpgsql;
 revoke all on function public.handle_updated_at() from public, anon, authenticated;
 
 create trigger handle_updated_at before update on public.users
+  for each row execute procedure public.handle_updated_at();
+
+create trigger handle_updated_at before update on public.user_private_profiles
   for each row execute procedure public.handle_updated_at();
 
 create trigger handle_updated_at before update on public.user_payout_accounts
@@ -383,6 +405,11 @@ create index reports_reported_id_idx on public.reports (reported_id);
 create index reports_status_idx on public.reports (status);
 create index reports_resolution_action_idx on public.reports (resolution_action);
 create index reports_resolved_at_idx on public.reports (resolved_at desc);
+create index user_private_profiles_email_idx on public.user_private_profiles (email);
+create index user_private_profiles_status_idx on public.user_private_profiles (status);
+create index user_private_profiles_is_admin_idx
+  on public.user_private_profiles (is_admin)
+  where is_admin = true;
 create index user_moderation_actions_user_id_idx on public.user_moderation_actions (user_id, created_at desc);
 create index user_moderation_actions_report_id_idx on public.user_moderation_actions (report_id);
 create index user_moderation_actions_created_at_idx on public.user_moderation_actions (created_at desc);

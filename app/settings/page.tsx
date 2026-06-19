@@ -52,13 +52,21 @@ export default function SettingsPage() {
         return
       }
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', authUser.id)
-        .maybeSingle()
+      const profileResponse = await fetch('/api/profile/me')
+      const profileResult = await profileResponse.json().catch(() => null) as {
+        profileCompleted?: boolean
+        user?: User | null
+        payoutAccount?: PayoutAccount | null
+        error?: string
+      } | null
       
-      if (userData) {
+      if (!profileResponse.ok) {
+        throw new Error(profileResult?.error ?? '프로필을 불러오지 못했습니다')
+      }
+
+      const userData = profileResult?.user
+
+      if (profileResult?.profileCompleted && userData) {
         setUser(userData)
         identifyAnalyticsUser(userData.id, {
           profile_completed: true,
@@ -68,11 +76,7 @@ export default function SettingsPage() {
         })
         setNewNickname(userData.nickname)
 
-        const { data: payoutData } = await supabase
-          .from('user_payout_accounts')
-          .select('*')
-          .eq('user_id', authUser.id)
-          .maybeSingle()
+        const payoutData = profileResult.payoutAccount
 
         if (payoutData) {
           setPayoutAccount(payoutData)
@@ -219,7 +223,7 @@ export default function SettingsPage() {
           user_id: user.id,
           ...nextAccount,
         }, { onConflict: 'user_id' })
-        .select('*')
+        .select('user_id, bank_name, account_number, account_holder, created_at, updated_at')
         .single()
 
       if (error) throw error
@@ -311,8 +315,9 @@ export default function SettingsPage() {
 
   if (!user) return null
 
-  const canChange = canChangeNickname(user.nickname_updated_at)
-  const nextChangeDate = getNextChangeDate(user.nickname_updated_at)
+  const nicknameUpdatedAt = user.nickname_updated_at ?? undefined
+  const canChange = canChangeNickname(nicknameUpdatedAt)
+  const nextChangeDate = getNextChangeDate(nicknameUpdatedAt)
   const canDeleteAccount = deleteConfirmText.trim() === DELETE_CONFIRMATION_TEXT && deleteAcknowledged
   const contactMailHref = createMailHref(
     '[같이타] 문의하기',

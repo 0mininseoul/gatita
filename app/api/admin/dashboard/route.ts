@@ -1,6 +1,6 @@
-import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { withAxiomRoute } from '@/lib/axiom/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 
 type ModerationAction = 'warning' | 'suspend_7d' | 'suspend_30d' | 'suspend_permanent' | 'release'
@@ -55,34 +55,9 @@ function getSuspensionUntil(action: ModerationAction) {
   return suspendedUntil.toISOString()
 }
 
-function isMissingModerationColumn(error: { code?: string; message?: string } | null) {
-  if (!error) return false
-  return (
-    error.code === '42703'
-    || error.code === 'PGRST204'
-    || /suspended_until|suspension_reason|moderation_updated_at/.test(error.message ?? '')
-  )
-}
-
 function isMissingModerationTable(error: { code?: string; message?: string } | null) {
   if (!error) return false
   return error.code === '42P01' || error.code === 'PGRST205' || /user_moderation_actions/.test(error.message ?? '')
-}
-
-function createAdminSupabase() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error('관리자 설정이 아직 연결되지 않았습니다')
-  }
-
-  return createAdminClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
 }
 
 async function requireAdmin() {
@@ -99,13 +74,20 @@ async function requireAdmin() {
   }
 
   const admin = createAdminSupabase()
-  const { data: profile, error: profileError } = await admin
+  const [publicProfileResult, privateProfileResult] = await Promise.all([
+    admin
     .from('users')
-    .select('id, email, nickname, department, is_admin, status')
+      .select('id, nickname, department')
     .eq('id', authUser.id)
-    .maybeSingle()
+      .maybeSingle(),
+    admin
+      .from('user_private_profiles')
+      .select('user_id, email, is_admin, status')
+      .eq('user_id', authUser.id)
+      .maybeSingle(),
+  ])
 
-  if (profileError) {
+  if (publicProfileResult.error || privateProfileResult.error) {
     return {
       error: NextResponse.json({ error: '관리자 권한을 확인하지 못했습니다' }, { status: 500 }),
       admin: null,
@@ -113,7 +95,10 @@ async function requireAdmin() {
     }
   }
 
-  if (!profile?.is_admin || profile.status !== 'active') {
+  const publicProfile = publicProfileResult.data
+  const privateProfile = privateProfileResult.data
+
+  if (!publicProfile || !privateProfile?.is_admin || privateProfile.status !== 'active') {
     return {
       error: NextResponse.json({ error: '관리자만 접근할 수 있습니다' }, { status: 403 }),
       admin: null,
@@ -121,7 +106,17 @@ async function requireAdmin() {
     }
   }
 
-  return { error: null, admin, authUser, profile }
+  return {
+    error: null,
+    admin,
+    authUser,
+    profile: {
+      ...publicProfile,
+      email: privateProfile.email,
+      is_admin: privateProfile.is_admin,
+      status: privateProfile.status,
+    },
+  }
 }
 
 async function getDashboard(request: Request) {
@@ -143,6 +138,7 @@ async function getDashboard(request: Request) {
 
   const [
     usersResult,
+    privateProfilesResult,
     reportsResult,
     roomsResult,
     messagesResult,
@@ -150,7 +146,11 @@ async function getDashboard(request: Request) {
   ] = await Promise.all([
     admin
       .from('users')
-      .select('id, email, name, phone, nickname, department, status, suspended_until, suspension_reason, moderation_updated_at, is_admin, created_at, updated_at')
+      .select('id, nickname, nickname_updated_at, department, created_at, updated_at')
+      .order('created_at', { ascending: false }),
+    admin
+      .from('user_private_profiles')
+      .select('user_id, email, name, phone, status, suspended_until, suspension_reason, moderation_updated_at, is_admin, created_at, updated_at')
       .order('created_at', { ascending: false }),
     admin
       .from('reports')
@@ -166,9 +166,9 @@ async function getDashboard(request: Request) {
         resolved_by,
         resolved_at,
         created_at,
-        reporter:reporter_id(nickname, email, department),
-        reported:reported_id(nickname, email, department),
-        resolver:resolved_by(nickname, email, department),
+        reporter:reporter_id(nickname, department),
+        reported:reported_id(nickname, department),
+        resolver:resolved_by(nickname, department),
         room:room_id(title, from_location, to_location, departure_date, departure_time)
       `)
       .order('created_at', { ascending: false }),
@@ -221,13 +221,13 @@ async function getDashboard(request: Request) {
         suspended_until,
         acknowledged_at,
         created_at,
-        admin:admin_id(nickname, email, department)
+        admin:admin_id(nickname, department)
       `)
       .order('created_at', { ascending: false })
       .limit(500),
   ])
 
-  const firstError = usersResult.error || reportsResult.error || roomsResult.error || messagesResult.error || moderationActionsResult.error
+  const firstError = usersResult.error || privateProfilesResult.error || reportsResult.error || roomsResult.error || messagesResult.error || moderationActionsResult.error
 
   if (firstError) {
     console.error('Admin dashboard load error:', firstError)
@@ -257,16 +257,43 @@ async function getDashboard(request: Request) {
     })
   }
 
+  const privateProfilesByUserId = new Map(
+    (privateProfilesResult.data ?? []).map((privateProfile) => [privateProfile.user_id, privateProfile])
+  )
+  const getPrivateProfile = (userId?: string | null) => (
+    userId ? privateProfilesByUserId.get(userId) ?? null : null
+  )
+  const attachPrivateEmail = (profileLike: unknown, userId?: string | null) => {
+    if (!profileLike || typeof profileLike !== 'object') return profileLike
+    const privateProfile = getPrivateProfile(userId)
+    return {
+      ...(profileLike as Record<string, unknown>),
+      email: privateProfile?.email ?? null,
+    }
+  }
+
   return NextResponse.json({
     adminUser: profile,
-    users: usersResult.data ?? [],
-    reports: reportsResult.data ?? [],
+    users: (usersResult.data ?? []).map((publicProfile) => ({
+      ...publicProfile,
+      ...(getPrivateProfile(publicProfile.id) ?? {}),
+      id: publicProfile.id,
+    })),
+    reports: (reportsResult.data ?? []).map((report) => ({
+      ...report,
+      reporter: attachPrivateEmail(report.reporter, report.reporter_id),
+      reported: attachPrivateEmail(report.reported, report.reported_id),
+      resolver: attachPrivateEmail(report.resolver, report.resolved_by),
+    })),
     rooms: (roomsResult.data ?? []).map((room) => ({
       ...room,
       creatorPayoutAccount: payoutAccountsByUserId.get(room.created_by) ?? null,
     })),
     messages: messagesResult.data ?? [],
-    moderationActions: moderationActionsResult.data ?? [],
+    moderationActions: (moderationActionsResult.data ?? []).map((action) => ({
+      ...action,
+      admin: attachPrivateEmail(action.admin, action.admin_id),
+    })),
   })
 }
 
@@ -292,9 +319,9 @@ async function applyModerationAction({
   }
 
   const { data: targetUser, error: targetError } = await admin
-    .from('users')
-    .select('id, status, is_admin')
-    .eq('id', userId)
+    .from('user_private_profiles')
+    .select('user_id, status, is_admin')
+    .eq('user_id', userId)
     .maybeSingle()
 
   if (targetError) {
@@ -335,30 +362,12 @@ async function applyModerationAction({
     }
 
     const { error: extendedUpdateError } = await admin
-      .from('users')
+      .from('user_private_profiles')
       .update(extendedUpdate)
-      .eq('id', userId)
+      .eq('user_id', userId)
 
     if (extendedUpdateError) {
-      if (
-        isMissingModerationColumn(extendedUpdateError)
-        && (action === 'suspend_7d' || action === 'suspend_30d')
-      ) {
-        return { error: NextResponse.json({ error: '기간 정지 DB 마이그레이션이 필요합니다' }, { status: 500 }) }
-      }
-
-      if (!isMissingModerationColumn(extendedUpdateError)) {
-        return { error: NextResponse.json({ error: '사용자 운영 상태를 변경하지 못했습니다' }, { status: 500 }) }
-      }
-
-      const { error: fallbackUpdateError } = await admin
-        .from('users')
-        .update({ status: nextStatus })
-        .eq('id', userId)
-
-      if (fallbackUpdateError) {
-        return { error: NextResponse.json({ error: '사용자 운영 상태를 변경하지 못했습니다' }, { status: 500 }) }
-      }
+      return { error: NextResponse.json({ error: '사용자 운영 상태를 변경하지 못했습니다' }, { status: 500 }) }
     }
   }
 
@@ -406,9 +415,9 @@ async function updateDashboard(request: Request) {
 
   if (payload.type === 'user-status') {
     const { error } = await admin
-      .from('users')
+      .from('user_private_profiles')
       .update({ status: payload.status })
-      .eq('id', payload.userId)
+      .eq('user_id', payload.userId)
 
     if (error) {
       return NextResponse.json({ error: '사용자 상태를 변경하지 못했습니다' }, { status: 500 })

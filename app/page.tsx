@@ -49,6 +49,13 @@ type ModerationStatusPayload = {
   warning: ModerationWarning | null
 }
 
+type MyProfilePayload = {
+  profileCompleted: boolean
+  user: User | null
+  payoutAccount?: unknown
+  error?: string
+}
+
 const PWA_ONBOARDING_STORAGE_KEY = 'gatita:pwa-onboarding-dismissed'
 const PWA_INSTALLED_DETECTED_STORAGE_KEY = 'gatita:pwa-installed-detected'
 const ANALYTICS_PENDING_LOGIN_KEY = 'gatita:analytics-pending-login'
@@ -357,13 +364,16 @@ export default function HomePage() {
         setPendingProfileEmail(email ?? '')
         setPendingProfileName(getGoogleAccountName(email, session.user.user_metadata))
 
-        const { data: userData } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .maybeSingle()
+        const profileResponse = await fetch('/api/profile/me')
+        const profileResult = await profileResponse.json().catch(() => null) as MyProfilePayload | null
 
-        if (userData) {
+        if (!profileResponse.ok) {
+          throw new Error(profileResult?.error ?? '프로필을 확인하지 못했습니다')
+        }
+
+        const userData = profileResult?.user
+
+        if (profileResult?.profileCompleted && userData) {
           setAuthNotice(null)
           setUser(userData)
           await loadModerationStatus()
@@ -1062,13 +1072,15 @@ export default function HomePage() {
       setPendingProfileEmail(email ?? '')
       setPendingProfileName(getGoogleAccountName(email, data.user.user_metadata))
 
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', data.user.id)
-        .single()
+      const profileResponse = await fetch('/api/profile/me')
+      const profileResult = await profileResponse.json().catch(() => null) as MyProfilePayload | null
+      const userData = profileResult?.user
 
-      if (userError || !userData) {
+      if (!profileResponse.ok) {
+        throw new Error(profileResult?.error ?? '프로필을 확인하지 못했습니다')
+      }
+
+      if (!profileResult?.profileCompleted || !userData) {
         setUser(null)
         setModerationStatus(null)
         setModerationModal(null)

@@ -72,13 +72,20 @@ function RoomsPageContent() {
         return
       }
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', authUser.id)
-        .maybeSingle()
+      const profileResponse = await fetch('/api/profile/me')
+      const profileResult = await profileResponse.json().catch(() => null) as {
+        profileCompleted?: boolean
+        user?: User | null
+        error?: string
+      } | null
 
-      if (!userData) {
+      if (!profileResponse.ok) {
+        throw new Error(profileResult?.error ?? '프로필을 확인하지 못했습니다')
+      }
+
+      const userData = profileResult?.user
+
+      if (!profileResult?.profileCompleted || !userData) {
         router.push('/')
         return
       }

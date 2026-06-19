@@ -51,7 +51,7 @@ test('account deletion API verifies the session and deletes the auth user with t
   assert.equal(existsSync(join(process.cwd(), routePath)), true)
 
   const source = readProjectFile(routePath)
-  assert.match(source, /SUPABASE_SERVICE_ROLE_KEY/)
+  assert.match(source, /createAdminSupabase/)
   assert.match(source, /confirmation !== DELETE_CONFIRMATION_TEXT/)
   assert.match(source, new RegExp(DELETE_CONFIRMATION_TEXT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   assert.match(source, /auth\.getUser\(\)/)
@@ -102,9 +102,12 @@ test('admin dashboard is server-authorized and exposes operational review tools'
   const route = readProjectFile('app/api/admin/dashboard/route.ts')
   const monitorPage = readProjectFile('app/admin/rooms/[id]/page.tsx')
 
-  assert.match(route, /SUPABASE_SERVICE_ROLE_KEY/)
+  assert.match(route, /createAdminSupabase/)
   assert.match(route, /auth\.getUser\(\)/)
-  assert.match(route, /!profile\?\.is_admin \|\| profile\.status !== 'active'/)
+  assert.match(route, /privateProfile\?\.is_admin/)
+  assert.match(route, /privateProfile\.status !== 'active'/)
+  assert.match(route, /user_private_profiles/)
+  assert.match(route, /attachPrivateEmail/)
   assert.match(route, /type:\s*'user-status'/)
   assert.match(route, /type:\s*'report-status'/)
   assert.match(route, /type:\s*'moderation-action'/)
@@ -169,21 +172,26 @@ test('admin dashboard is server-authorized and exposes operational review tools'
 
 test('admin moderation schema stores action history and timed suspensions', () => {
   const schema = readProjectFile('supabase_schema.sql')
-  const migration = readProjectFile('supabase/migrations/20260619072246_add_admin_moderation_actions.sql')
+  const migration = readProjectFile('supabase/migrations/20260619203257_split_private_user_profiles.sql')
   const joinRoute = readProjectFile('app/api/rooms/[id]/join/route.ts')
+
+  assert.match(schema, /suspended_until timestamp with time zone/)
+  assert.match(schema, /suspension_reason text/)
+  assert.match(schema, /moderation_updated_at timestamp with time zone/)
+  assert.match(schema, /create table (if not exists )?public\.user_moderation_actions/)
+  assert.match(schema, /action in \('warning', 'suspend_7d', 'suspend_30d', 'suspend_permanent', 'release'\)/)
 
   for (const source of [schema, migration]) {
     assert.match(source, /suspended_until timestamp with time zone/)
     assert.match(source, /suspension_reason text/)
     assert.match(source, /moderation_updated_at timestamp with time zone/)
-    assert.match(source, /create table (if not exists )?public\.user_moderation_actions/)
-    assert.match(source, /action in \('warning', 'suspend_7d', 'suspend_30d', 'suspend_permanent', 'release'\)/)
     assert.match(source, /Admins can read moderation actions/)
     assert.match(source, /Admins can insert moderation actions/)
+    assert.match(source, /user_private_profiles/)
   }
 
   assert.match(joinRoute, /suspended_until/)
-  assert.match(joinRoute, /isMissingModerationColumn/)
+  assert.match(joinRoute, /\.from\('user_private_profiles'\)/)
   assert.match(joinRoute, /서비스 이용이 정지된 계정입니다/)
 })
 

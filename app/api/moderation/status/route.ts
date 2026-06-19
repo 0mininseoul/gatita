@@ -1,25 +1,9 @@
-import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { withAxiomRoute } from '@/lib/axiom/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
-
-function createAdminSupabase() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error('운영 상태 설정이 아직 연결되지 않았습니다')
-  }
-
-  return createAdminClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
-}
 
 async function getModerationStatus() {
   const supabase = createClient()
@@ -32,9 +16,9 @@ async function getModerationStatus() {
 
   const admin = createAdminSupabase()
   const { data: profile, error: profileError } = await admin
-    .from('users')
-    .select('id, status, suspended_until, suspension_reason, moderation_updated_at')
-    .eq('id', authUser.id)
+    .from('user_private_profiles')
+    .select('user_id, status, suspended_until, suspension_reason, moderation_updated_at')
+    .eq('user_id', authUser.id)
     .maybeSingle()
 
   if (profileError) {
@@ -56,14 +40,14 @@ async function getModerationStatus() {
 
   if (status === 'suspended' && suspendedUntil && new Date(suspendedUntil).getTime() <= Date.now()) {
     const { error: releaseError } = await admin
-      .from('users')
+      .from('user_private_profiles')
       .update({
         status: 'active',
         suspended_until: null,
         suspension_reason: null,
         moderation_updated_at: new Date().toISOString(),
       })
-      .eq('id', authUser.id)
+      .eq('user_id', authUser.id)
 
     if (!releaseError) {
       status = 'active'

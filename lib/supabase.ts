@@ -37,16 +37,22 @@ export const createClient = () => {
 }
 
 // Types for our database
-export type User = {
+export type PublicProfile = {
   id: string
+  nickname: string
+  nickname_updated_at?: string | null
+  department: string
+  created_at: string
+  updated_at: string
+}
+
+export type PrivateProfile = {
+  user_id: string
   email: string
   name: string
   phone: string
   phone_verified_at?: string | null
   phone_mfa_factor_id?: string | null
-  nickname: string
-  nickname_updated_at?: string
-  department: string
   status: 'active' | 'suspended'
   suspended_until?: string | null
   suspension_reason?: string | null
@@ -55,6 +61,8 @@ export type User = {
   created_at: string
   updated_at: string
 }
+
+export type User = PublicProfile & Omit<PrivateProfile, 'user_id'>
 
 export type PayoutAccount = {
   user_id: string

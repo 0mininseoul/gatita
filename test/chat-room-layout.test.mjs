@@ -148,11 +148,33 @@ test('room creators see a first-room guide and submit a one-line appearance note
 
   assert.match(source, /showHostGuide/)
   assert.match(source, /gatita:room-host-guide:/)
+  assert.match(source, /💳/)
+  assert.match(source, /🧍/)
+  assert.match(source, /🤝/)
   assert.match(source, /정산이 필요할 경우 방장이 결제 후 정산한다/)
   assert.match(source, /멤버들과 협의 없이 갑자기 방을 나가면 서비스 이용이 정지될 수 있다/)
   assert.match(source, /hostAppearance/)
+  assert.match(source, /hostAppearanceDraft/)
   assert.match(source, /방장 인상착의/)
-  assert.match(source, /messages'\)\s*[\s\S]*\.insert\(\{\s*room_id: roomId,\s*user_id: user\.id,\s*content: `방장 인상착의: \$\{hostAppearance\.trim\(\)\}`/)
+  assert.match(source, /HOST_APPEARANCE_MESSAGE_PREFIX/)
+  assert.match(source, /content: `\$\{HOST_APPEARANCE_MESSAGE_PREFIX\}\$\{hostAppearanceDraft\.trim\(\)\}`/)
+  assert.doesNotMatch(source, /content: `방장 인상착의: \$\{hostAppearance/)
+})
+
+test('host appearance is hidden from chat and shown in entry guide and participant sheet', () => {
+  const source = readProjectFile('app/rooms/[id]/page.tsx')
+
+  assert.match(source, /extractHostAppearanceFromMessage/)
+  assert.match(source, /LEGACY_HOST_APPEARANCE_MESSAGE_PREFIX/)
+  assert.match(source, /visibleMessageRows/)
+  assert.match(source, /!extractHostAppearanceFromMessage\(message\.content\)/)
+  assert.match(source, /showRoomGuide/)
+  assert.match(source, /gatita:room-entry-guide:/)
+  assert.match(source, /방장 인상착의/)
+  assert.match(source, /꼭 도착지까지 가지 않아도/)
+  assert.match(source, /출발시간 5분 전/)
+  assert.match(source, /setShowRoomGuide\(true\)/)
+  assert.match(source, /participant\.user_id === room\.created_by && hostAppearance/)
 })
 
 test('room creator transfer is required before leaving a room with members', () => {

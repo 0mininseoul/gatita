@@ -10,6 +10,20 @@ import { ko } from 'date-fns/locale'
 import toast from 'react-hot-toast'
 
 const MAX_TIMESTAMP_REVEAL = 68
+const HOST_APPEARANCE_MESSAGE_PREFIX = '__gatita_host_appearance__:'
+const LEGACY_HOST_APPEARANCE_MESSAGE_PREFIX = '방장 인상착의:'
+
+function extractHostAppearanceFromMessage(content: string) {
+  if (content.startsWith(HOST_APPEARANCE_MESSAGE_PREFIX)) {
+    return content.slice(HOST_APPEARANCE_MESSAGE_PREFIX.length).trim()
+  }
+
+  if (content.startsWith(LEGACY_HOST_APPEARANCE_MESSAGE_PREFIX)) {
+    return content.slice(LEGACY_HOST_APPEARANCE_MESSAGE_PREFIX.length).trim()
+  }
+
+  return ''
+}
 
 export default function ChatRoomPage() {
   const router = useRouter()
@@ -28,6 +42,8 @@ export default function ChatRoomPage() {
   const [showParticipants, setShowParticipants] = useState(false)
   const [showHostGuide, setShowHostGuide] = useState(false)
   const [hostAppearance, setHostAppearance] = useState('')
+  const [hostAppearanceDraft, setHostAppearanceDraft] = useState('')
+  const [showRoomGuide, setShowRoomGuide] = useState(false)
   const [isSubmittingHostGuide, setIsSubmittingHostGuide] = useState(false)
   const [showHostLeaveModal, setShowHostLeaveModal] = useState(false)
   const [hostLeaveAgreed, setHostLeaveAgreed] = useState(false)
@@ -36,6 +52,10 @@ export default function ChatRoomPage() {
   const [reportTarget, setReportTarget] = useState<string>('')
   const [timestampReveal, setTimestampReveal] = useState(0)
   const hostGuideStorageKey = useMemo(() => `gatita:room-host-guide:${roomId}`, [roomId])
+  const roomGuideStorageKey = useMemo(
+    () => `gatita:room-entry-guide:${roomId}:${user?.id ?? 'anonymous'}`,
+    [roomId, user?.id]
+  )
 
   const headerRef = useRef<HTMLElement>(null)
   const messagesScrollRef = useRef<HTMLDivElement>(null)
@@ -245,6 +265,7 @@ export default function ChatRoomPage() {
     '--timestamp-opacity': `${Math.min(1, timestampReveal / MAX_TIMESTAMP_REVEAL)}`,
   }) as CSSProperties, [timestampReveal])
   const isRoomCreator = room?.created_by === user?.id
+  const isParticipant = participants.some(p => p.user_id === user?.id)
   const hostTransferCandidates = useMemo(
     () => participants.filter((participant) => participant.user_id !== user?.id),
     [participants, user?.id]
@@ -295,8 +316,17 @@ export default function ChatRoomPage() {
       if (error) throw error
 
       const messageRows = (data ?? []) as Message[]
-      const authorIds = Array.from(new Set(messageRows.map((message) => message.user_id)))
+      const latestHostAppearance = messageRows
+        .map((message) => extractHostAppearanceFromMessage(message.content))
+        .filter(Boolean)
+        .at(-1) ?? ''
+      const visibleMessageRows = messageRows.filter((message) => !extractHostAppearanceFromMessage(message.content))
+      const authorIds = Array.from(new Set(visibleMessageRows.map((message) => message.user_id)))
       const authorsById = new Map<string, Pick<User, 'id' | 'nickname' | 'department'>>()
+
+      if (latestHostAppearance) {
+        setHostAppearance(latestHostAppearance)
+      }
 
       if (authorIds.length > 0) {
         const { data: authors, error: authorError } = await supabase
@@ -313,7 +343,7 @@ export default function ChatRoomPage() {
         }
       }
 
-      const messagesWithAuthors = messageRows.map((message) => ({
+      const messagesWithAuthors = visibleMessageRows.map((message) => ({
         ...message,
         user: authorsById.get(message.user_id),
       }))
@@ -453,6 +483,15 @@ export default function ChatRoomPage() {
 
     setShowHostGuide(true)
   }, [hostGuideStorageKey, loading, room, user])
+
+  useEffect(() => {
+    if (loading || !room || !user) return
+    if (!isParticipant) return
+    if (room.created_by === user.id) return
+    if (window.localStorage.getItem(roomGuideStorageKey)) return
+
+    setShowRoomGuide(true)
+  }, [isParticipant, loading, room, roomGuideStorageKey, user])
 
   useEffect(() => {
     if (!showHostLeaveModal) return
@@ -618,9 +657,14 @@ export default function ChatRoomPage() {
     }
   }, [creatorPayoutAccount])
 
+  const closeRoomGuide = useCallback(() => {
+    window.localStorage.setItem(roomGuideStorageKey, 'true')
+    setShowRoomGuide(false)
+  }, [roomGuideStorageKey])
+
   const handleSubmitHostGuide = async () => {
     if (!user) return
-    if (!hostAppearance.trim()) {
+    if (!hostAppearanceDraft.trim()) {
       toast.error('인상착의를 한 줄로 작성해주세요')
       return
     }
@@ -633,14 +677,15 @@ export default function ChatRoomPage() {
         .insert({
           room_id: roomId,
           user_id: user.id,
-          content: `방장 인상착의: ${hostAppearance.trim()}`,
+          content: `${HOST_APPEARANCE_MESSAGE_PREFIX}${hostAppearanceDraft.trim()}`,
         })
 
       if (error) throw error
 
       window.localStorage.setItem(hostGuideStorageKey, 'true')
+      setHostAppearance(hostAppearanceDraft.trim())
       setShowHostGuide(false)
-      setHostAppearance('')
+      setHostAppearanceDraft('')
       await loadMessages()
       toast.success('방장 안내가 저장되었습니다')
     } catch (error) {
@@ -650,8 +695,6 @@ export default function ChatRoomPage() {
       setIsSubmittingHostGuide(false)
     }
   }
-
-  const isParticipant = participants.some(p => p.user_id === user?.id)
 
   if (loading) {
     return (
@@ -877,6 +920,11 @@ export default function ChatRoomPage() {
                       )}
                     </div>
                     <p className="mt-0.5 truncate text-xs text-gray-500">{participant.user?.department}</p>
+                    {participant.user_id === room.created_by && hostAppearance && (
+                      <p className="mt-1 max-w-[13rem] rounded-lg bg-white px-2 py-1 text-[11px] font-bold leading-4 text-gray-600">
+                        🧍 {hostAppearance}
+                      </p>
+                    )}
                   </div>
                   <a
                     href={`tel:${participant.user?.phone}`}
@@ -900,41 +948,94 @@ export default function ChatRoomPage() {
       {/* 방장 최초 안내 모달 */}
       {showHostGuide && (
         <div className="fixed inset-0 z-50 flex items-end bg-gray-950/35 px-3 pb-3 pt-16">
+          <div className="w-full overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="bg-gradient-to-br from-primary-600 to-blue-500 px-4 py-4 text-white">
+              <p className="text-xs font-black uppercase tracking-[0.08em] text-white/80">방장 안내</p>
+              <h2 className="mt-1 text-xl font-black">방을 만들었어요</h2>
+              <p className="mt-1 text-sm font-semibold leading-5 text-white/85">
+                동행 시작 전에 멤버들이 알아야 할 정보를 짧게 정리해주세요.
+              </p>
+            </div>
+
+            <div className="p-4">
+              <div className="space-y-2 text-sm font-bold leading-5 text-gray-700">
+                <div className="flex gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-lg shadow-sm">💳</span>
+                  <div>
+                    <p className="text-sm font-black text-gray-950">정산</p>
+                    <p className="mt-0.5 text-xs font-bold leading-5 text-gray-600">
+                      정산이 필요할 경우 방장이 결제 후 정산한다.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-lg shadow-sm">🤝</span>
+                  <div>
+                    <p className="text-sm font-black text-gray-950">약속</p>
+                    <p className="mt-0.5 text-xs font-bold leading-5 text-gray-600">
+                      멤버들과 협의 없이 갑자기 방을 나가면 서비스 이용이 정지될 수 있다.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <label className="mt-4 flex items-center gap-2 text-xs font-black text-gray-700" htmlFor="host-appearance">
+                <span className="text-base">🧍</span>
+                방장 인상착의
+              </label>
+              <input
+                id="host-appearance"
+                type="text"
+                value={hostAppearanceDraft}
+                onChange={(event) => setHostAppearanceDraft(event.target.value)}
+                placeholder="예: 검은 백팩, 파란 후드"
+                maxLength={60}
+                className="input-field mt-1.5 text-sm"
+              />
+
+              <button
+                type="button"
+                onClick={handleSubmitHostGuide}
+                disabled={!hostAppearanceDraft.trim() || isSubmittingHostGuide}
+                className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl bg-gray-950 text-sm font-black text-white transition hover:bg-gray-800 disabled:bg-gray-300"
+              >
+                {isSubmittingHostGuide ? '저장 중...' : '확인했어요'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 입장 안내 모달 */}
+      {showRoomGuide && (
+        <div className="fixed inset-0 z-50 flex items-end bg-gray-950/35 px-3 pb-3 pt-16">
           <div className="w-full rounded-2xl bg-white p-4 shadow-2xl">
             <div className="mb-4">
-              <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">방장 안내</p>
-              <h2 className="mt-1 text-lg font-extrabold text-gray-950">출발 전 확인해주세요</h2>
+              <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">입장 안내</p>
+              <h2 className="mt-1 text-lg font-extrabold text-gray-950">동행 전 확인해주세요</h2>
             </div>
 
             <div className="space-y-2 text-sm font-bold leading-5 text-gray-700">
-              <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
-                정산이 필요할 경우 방장이 결제 후 정산한다.
+              <div className="rounded-xl border border-primary-100 bg-primary-50 px-3 py-2.5">
+                <p className="text-xs font-black text-primary-700">🧍 방장 인상착의</p>
+                <p className="mt-1 text-sm font-black text-gray-950">
+                  {hostAppearance || '방장이 아직 인상착의를 입력하지 않았습니다.'}
+                </p>
               </div>
               <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
-                멤버들과 협의 없이 갑자기 방을 나가면 서비스 이용이 정지될 수 있다.
+                🧭 꼭 도착지까지 가지 않아도 동행에 참여할 수 있어요. 중간에 헤어질 예정이면 채팅에서 먼저 알려주세요.
+              </div>
+              <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
+                ⏰ 출발시간 5분 전부터는 갑자기 방을 탈주할 시 서비스 이용이 정지될 수 있습니다.
               </div>
             </div>
 
-            <label className="mt-4 block text-xs font-black text-gray-700" htmlFor="host-appearance">
-              본인의 인상착의
-            </label>
-            <input
-              id="host-appearance"
-              type="text"
-              value={hostAppearance}
-              onChange={(event) => setHostAppearance(event.target.value)}
-              placeholder="예: 검은 백팩, 파란 후드"
-              maxLength={60}
-              className="input-field mt-1.5 text-sm"
-            />
-
             <button
               type="button"
-              onClick={handleSubmitHostGuide}
-              disabled={!hostAppearance.trim() || isSubmittingHostGuide}
-              className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl bg-gray-950 text-sm font-black text-white transition hover:bg-gray-800 disabled:bg-gray-300"
+              onClick={closeRoomGuide}
+              className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl bg-gray-950 text-sm font-black text-white transition hover:bg-gray-800"
             >
-              {isSubmittingHostGuide ? '저장 중...' : '확인했어요'}
+              확인했어요
             </button>
           </div>
         </div>

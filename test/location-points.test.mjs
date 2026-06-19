@@ -254,6 +254,7 @@ test('service worker refreshes navigations before falling back to cached app she
 
 test('iOS PWA startup images are generated and registered for current iPhones', () => {
   const layout = readProjectFile('app/layout.tsx')
+  const pageSource = readProjectFile('app/page.tsx')
   const splashScript = readProjectFile('scripts/generate-ios-splash.mjs')
   const expectedImages = [
     'iphone-17-pro-max.png',
@@ -268,8 +269,14 @@ test('iOS PWA startup images are generated and registered for current iPhones', 
 
   assert.match(layout, /startupImage/)
   assert.match(layout, /apple-touch-startup-image/)
+  assert.match(layout, /SPLASH_ASSET_VERSION/)
+  assert.match(layout, /\?v=\$\{SPLASH_ASSET_VERSION\}/)
   assert.match(layout, /device-width: 440px/)
   assert.match(layout, /device-height: 956px/)
+  assert.match(pageSource, /showStandaloneSplash/)
+  assert.match(pageSource, /gatita-pwa-launch-splash/)
+  assert.match(pageSource, /isInstalled\(\)/)
+  assert.match(pageSource, /setShowStandaloneSplash\(false\)/)
   assert.match(splashScript, /Google Chrome\.app/)
   assert.match(splashScript, /Paperlogy-9Black\.woff2/)
   assert.match(splashScript, /pageHtml/)

@@ -62,6 +62,7 @@ export default function HomePage() {
   const [isStartingGoogle, setIsStartingGoogle] = useState(false)
   const [hasEnteredApp, setHasEnteredApp] = useState(false)
   const [showPwaOnboarding, setShowPwaOnboarding] = useState(false)
+  const [showStandaloneSplash, setShowStandaloneSplash] = useState(false)
   const [pwaInstallManager, setPwaInstallManager] = useState<PWAInstallManager | null>(null)
   const [authNotice, setAuthNotice] = useState<string | null>(null)
   const lastAuthErrorAtRef = useRef(0)
@@ -289,6 +290,17 @@ export default function HomePage() {
 
     return () => subscription.unsubscribe()
   }, [checkAuth, supabase])
+
+  useEffect(() => {
+    if (!isInstalled()) return
+
+    setShowStandaloneSplash(true)
+    const timerId = window.setTimeout(() => {
+      setShowStandaloneSplash(false)
+    }, 900)
+
+    return () => window.clearTimeout(timerId)
+  }, [])
 
   useEffect(() => {
     if (!user || !hasEnteredApp) return
@@ -670,32 +682,53 @@ export default function HomePage() {
     toast.error('먼저 로그인하셔야 합니다.');
   };
 
+  const standaloneLaunchSplash = showStandaloneSplash ? (
+    <div className="gatita-pwa-launch-splash fixed inset-0 z-[120] flex flex-col items-center justify-center bg-[#f9fcff]">
+      <Image
+        src="/brand/gatita-logo.png"
+        alt=""
+        width={128}
+        height={128}
+        priority
+        className="h-28 w-28 object-contain drop-shadow-[0_16px_36px_rgba(31,78,200,0.18)]"
+      />
+      <div className="mt-5 text-5xl font-black leading-none tracking-[0] text-gray-950">
+        같이타
+      </div>
+    </div>
+  ) : null
+
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4"></div>
         <p className="text-gray-900 text-lg">로딩 중...</p>
         <p className="text-gray-500 text-sm mt-2">잠시만 기다려주세요</p>
+        {standaloneLaunchSplash}
       </div>
     )
   }
 
   if (authMode === 'signup') {
     return (
-      <SignupForm
-        onSuccess={() => {
-          setAuthMode(null)
-          router.push('/map')
-          checkAuth(true)
-        }}
-        onBackToLanding={() => setAuthMode(null)}
-      />
+      <>
+        <SignupForm
+          onSuccess={() => {
+            setAuthMode(null)
+            router.push('/map')
+            checkAuth(true)
+          }}
+          onBackToLanding={() => setAuthMode(null)}
+        />
+        {standaloneLaunchSplash}
+      </>
     )
   }
 
   if (!user || !hasEnteredApp) {
     return (
       <main className="landing-page">
+        {standaloneLaunchSplash}
         <div className="landing-background">
           <Grainient
             className="landing-grainient"
@@ -807,6 +840,7 @@ export default function HomePage() {
       className="relative w-screen overflow-hidden bg-[#e7edf4]"
       style={{ height: 'var(--app-viewport-height)' }}
     >
+      {standaloneLaunchSplash}
       <CampusRouteMap
         rooms={mapRooms}
         onlineCount={onlineDisplayCount}

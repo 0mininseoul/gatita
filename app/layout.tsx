@@ -20,59 +20,61 @@ const paperlogy = localFont({
   fallback: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
 })
 const siteUrl = 'https://gatitagachon.vercel.app'
+const SPLASH_ASSET_VERSION = '20260619-03'
+const splashImageUrl = (fileName: string) => `/splash/${fileName}.png?v=${SPLASH_ASSET_VERSION}`
 
 // Next emits these entries as <link rel="apple-touch-startup-image"> tags for iOS PWAs.
 const iosStartupImages = [
   {
-    url: '/splash/iphone-17-pro-max.png',
+    url: splashImageUrl('iphone-17-pro-max'),
     media: 'screen and (device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)',
   },
   {
-    url: '/splash/iphone-17-air.png',
+    url: splashImageUrl('iphone-17-air'),
     media: 'screen and (device-width: 420px) and (device-height: 912px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)',
   },
   {
-    url: '/splash/iphone-17-pro.png',
+    url: splashImageUrl('iphone-17-pro'),
     media: 'screen and (device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)',
   },
   {
-    url: '/splash/iphone-16-pro-max.png',
+    url: splashImageUrl('iphone-16-pro-max'),
     media: 'screen and (device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)',
   },
   {
-    url: '/splash/iphone-16-pro.png',
+    url: splashImageUrl('iphone-16-pro'),
     media: 'screen and (device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)',
   },
   {
-    url: '/splash/iphone-15-pro-max.png',
+    url: splashImageUrl('iphone-15-pro-max'),
     media: 'screen and (device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)',
   },
   {
-    url: '/splash/iphone-14.png',
+    url: splashImageUrl('iphone-14'),
     media: 'screen and (device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)',
   },
   {
-    url: '/splash/iphone-xs-max.png',
+    url: splashImageUrl('iphone-xs-max'),
     media: 'screen and (device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)',
   },
   {
-    url: '/splash/iphone-xr.png',
+    url: splashImageUrl('iphone-xr'),
     media: 'screen and (device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)',
   },
   {
-    url: '/splash/iphone-x.png',
+    url: splashImageUrl('iphone-x'),
     media: 'screen and (device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)',
   },
   {
-    url: '/splash/iphone-8-plus.png',
+    url: splashImageUrl('iphone-8-plus'),
     media: 'screen and (device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)',
   },
   {
-    url: '/splash/iphone-se.png',
+    url: splashImageUrl('iphone-se'),
     media: 'screen and (device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)',
   },
   {
-    url: '/splash/iphone-5.png',
+    url: splashImageUrl('iphone-5'),
     media: 'screen and (device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)',
   },
 ]

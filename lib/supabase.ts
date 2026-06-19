@@ -48,6 +48,9 @@ export type User = {
   nickname_updated_at?: string
   department: string
   status: 'active' | 'suspended'
+  suspended_until?: string | null
+  suspension_reason?: string | null
+  moderation_updated_at?: string | null
   is_admin: boolean
   created_at: string
   updated_at: string
@@ -103,6 +106,10 @@ export type Report = {
   reported_id: string
   reason: string
   status: 'pending' | 'reviewed' | 'resolved'
+  resolution_action?: 'no_action' | 'warning' | 'suspend_7d' | 'suspend_30d' | 'suspend_permanent' | null
+  resolution_note?: string | null
+  resolved_by?: string | null
+  resolved_at?: string | null
   created_at: string
   reporter?: User
   reported?: User

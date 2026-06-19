@@ -269,7 +269,7 @@ test('landing and authenticated map use separate URL paths', () => {
 test('profileless authenticated users see the map first and complete profile from gated actions', () => {
   const source = readProjectFile('app/page.tsx')
   const signup = readProjectFile('components/auth/SignupForm.tsx')
-  const noProfileStart = source.indexOf('} else {\n          setUser(null)\n          setAuthMode(null)')
+  const noProfileStart = source.indexOf('} else {\n          setUser(null)')
   const noProfileEnd = source.indexOf('\n        }', noProfileStart)
   const noProfileBlock = source.slice(noProfileStart, noProfileEnd)
 

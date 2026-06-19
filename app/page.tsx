@@ -21,7 +21,7 @@ import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
 import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, extractGachonProfileFromMetadata, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
 import { isInstalled } from '@/lib/pwa'
 import { identifyAnalyticsUser, shouldSuppressAnalyticsForUser, suppressAnalyticsForCurrentDevice, trackEvent } from '@/lib/analytics/client'
-import { ArrowRight, Clock, MessageSquareText, Share2, Star, Settings, LogOut, Users, X } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Ban, Clock, MessageSquareText, Share2, Star, Settings, LogOut, Users, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import CampusRouteMap, { CampusMapRoom } from '@/components/CampusRouteMap'
@@ -34,6 +34,19 @@ type AuthMode = 'signup' | null
 
 type MyRoomSummary = CampusMapRoom & {
   departure_date: string
+}
+
+type ModerationWarning = {
+  id: string
+  reason: string
+  created_at: string
+}
+
+type ModerationStatusPayload = {
+  status: 'active' | 'suspended' | 'profile_required'
+  suspendedUntil: string | null
+  suspensionReason: string | null
+  warning: ModerationWarning | null
 }
 
 const PWA_ONBOARDING_STORAGE_KEY = 'gatita:pwa-onboarding-dismissed'
@@ -84,6 +97,21 @@ function getGoogleAccountName(email?: string | null, metadata?: Record<string, u
   return googleProfile.name || email?.split('@')[0] || ''
 }
 
+function formatKoreanDateTime(value?: string | null) {
+  if (!value) return ''
+
+  try {
+    return new Intl.DateTimeFormat('ko-KR', {
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(value))
+  } catch {
+    return value
+  }
+}
+
 export default function HomePage() {
   const [user, setUser] = useState<User | null>(null)
   const [hasAuthenticatedSession, setHasAuthenticatedSession] = useState(false)
@@ -108,6 +136,9 @@ export default function HomePage() {
   const [testEmail, setTestEmail] = useState('')
   const [testPassword, setTestPassword] = useState('')
   const [isStartingTestLogin, setIsStartingTestLogin] = useState(false)
+  const [moderationStatus, setModerationStatus] = useState<ModerationStatusPayload | null>(null)
+  const [moderationModal, setModerationModal] = useState<'warning' | 'suspension' | null>(null)
+  const [isAcknowledgingWarning, setIsAcknowledgingWarning] = useState(false)
   const lastAuthErrorAtRef = useRef(0)
   const hasShownProfileRequiredPromptRef = useRef(false)
   const mapHeaderRef = useRef<HTMLElement>(null)
@@ -142,6 +173,8 @@ export default function HomePage() {
     setPendingProfileEmail('')
     setPendingProfileName('')
     setShowProfileRequiredModal(false)
+    setModerationStatus(null)
+    setModerationModal(null)
     setAuthMode(null)
     setHasEnteredApp(false)
 
@@ -149,6 +182,28 @@ export default function HomePage() {
       await supabase.auth.signOut()
     }
   }, [showAuthError, supabase])
+
+  const loadModerationStatus = useCallback(async () => {
+    try {
+      const response = await fetch('/api/moderation/status')
+      const result = await response.json().catch(() => null) as ModerationStatusPayload | null
+
+      if (!response.ok || !result) return null
+
+      setModerationStatus(result)
+
+      if (result.status === 'suspended') {
+        setModerationModal('suspension')
+      } else if (result.warning) {
+        setModerationModal('warning')
+      }
+
+      return result
+    } catch (error) {
+      console.error('Load moderation status error:', error)
+      return null
+    }
+  }, [])
 
   const loadMapRooms = useCallback(async () => {
     if (!supabase) {
@@ -311,6 +366,7 @@ export default function HomePage() {
         if (userData) {
           setAuthNotice(null)
           setUser(userData)
+          await loadModerationStatus()
           const shouldSuppressAnalytics = shouldSuppressAnalyticsForUser({
             userId: userData.id,
             email: userData.email,
@@ -340,6 +396,8 @@ export default function HomePage() {
           enterMap(true)
         } else {
           setUser(null)
+          setModerationStatus(null)
+          setModerationModal(null)
           setAuthMode(null)
           identifyAnalyticsUser(session.user.id, {
             profile_completed: false,
@@ -361,6 +419,8 @@ export default function HomePage() {
         setPendingProfileEmail('')
         setPendingProfileName('')
         setUser(null)
+        setModerationStatus(null)
+        setModerationModal(null)
         identifyAnalyticsUser(null)
         router.replace('/')
       } else {
@@ -368,6 +428,8 @@ export default function HomePage() {
         setPendingProfileEmail('')
         setPendingProfileName('')
         setUser(null)
+        setModerationStatus(null)
+        setModerationModal(null)
         identifyAnalyticsUser(null)
       }
     } catch (error) {
@@ -375,7 +437,7 @@ export default function HomePage() {
     } finally {
       setLoading(false)
     }
-  }, [loadMapRooms, rejectNonGachonAccount, router, supabase])
+  }, [loadMapRooms, loadModerationStatus, rejectNonGachonAccount, router, supabase])
 
   useEffect(() => {
     if (!supabase) {
@@ -407,6 +469,8 @@ export default function HomePage() {
         setPendingProfileEmail('')
         setPendingProfileName('')
         setShowProfileRequiredModal(false)
+        setModerationStatus(null)
+        setModerationModal(null)
         setAuthMode(null)
         setHasEnteredApp(false)
       }
@@ -479,6 +543,9 @@ export default function HomePage() {
   const requiresProfile = hasAuthenticatedSession && !user
   const profileDisplayName = user?.nickname || pendingProfileName || pendingProfileEmail.split('@')[0] || '가천대'
   const showLanding = !loading && authMode !== 'signup' && (!hasAuthenticatedSession || !hasEnteredApp)
+  const isCurrentlySuspended = moderationStatus?.status === 'suspended' || user?.status === 'suspended'
+  const activeSuspendedUntil = moderationStatus?.suspendedUntil ?? user?.suspended_until ?? null
+  const activeSuspensionReason = moderationStatus?.suspensionReason ?? user?.suspension_reason ?? null
 
   useEffect(() => {
     if (!requiresProfile) {
@@ -685,6 +752,11 @@ export default function HomePage() {
       return
     }
 
+    if (isCurrentlySuspended) {
+      setModerationModal('suspension')
+      return
+    }
+
     setFromLocation(location)
     if (location) {
       trackEvent('fixed_point_selected', {
@@ -712,6 +784,11 @@ export default function HomePage() {
     }
 
     if (!validateRouteSelection(roomFromLocation, roomToLocation)) return
+
+    if (isCurrentlySuspended) {
+      setModerationModal('suspension')
+      return
+    }
 
     if (!departureTime) {
       toast.error('출발예정시간을 선택해주세요')
@@ -827,6 +904,11 @@ export default function HomePage() {
       return
     }
 
+    if (isCurrentlySuspended) {
+      setModerationModal('suspension')
+      return
+    }
+
     try {
       const room = mapRooms.find((mapRoom) => mapRoom.id === roomId)
       if (!room) return
@@ -909,6 +991,8 @@ export default function HomePage() {
       setPendingProfileEmail('')
       setPendingProfileName('')
       setShowProfileRequiredModal(false)
+      setModerationStatus(null)
+      setModerationModal(null)
       identifyAnalyticsUser(null)
       router.push('/')
       toast.success('로그아웃되었습니다')
@@ -986,6 +1070,8 @@ export default function HomePage() {
 
       if (userError || !userData) {
         setUser(null)
+        setModerationStatus(null)
+        setModerationModal(null)
         setAuthMode(null)
         setHasEnteredApp(true)
         router.push('/map')
@@ -999,6 +1085,7 @@ export default function HomePage() {
       }
 
       setUser(userData)
+      await loadModerationStatus()
       identifyAnalyticsUser(userData.id, {
         profile_completed: true,
         is_admin: userData.is_admin,
@@ -1061,6 +1148,36 @@ export default function HomePage() {
     window.localStorage.setItem(PWA_ONBOARDING_STORAGE_KEY, 'true')
     setShowPwaOnboarding(false)
   }, [])
+
+  const acknowledgeWarning = async () => {
+    if (!moderationStatus?.warning) {
+      setModerationModal(null)
+      return
+    }
+
+    setIsAcknowledgingWarning(true)
+
+    try {
+      const response = await fetch('/api/moderation/acknowledge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actionId: moderationStatus.warning.id }),
+      })
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        throw new Error(result?.error ?? '경고 확인을 저장하지 못했습니다')
+      }
+
+      setModerationStatus(prev => prev ? { ...prev, warning: null } : prev)
+      setModerationModal(null)
+    } catch (error) {
+      console.error('Acknowledge warning error:', error)
+      toast.error(error instanceof Error ? error.message : '경고 확인을 저장하지 못했습니다')
+    } finally {
+      setIsAcknowledgingWarning(false)
+    }
+  }
 
   const handleFindClick = () => {
     toast.error('먼저 로그인하셔야 합니다.');
@@ -1436,6 +1553,64 @@ export default function HomePage() {
               className="mt-4 h-12 w-full rounded-lg bg-gray-950 text-sm font-black text-white transition hover:bg-gray-800"
             >
               프로필 세팅하기
+            </button>
+          </div>
+        </div>
+      )}
+
+      {moderationModal && (
+        <div
+          className="absolute inset-0 z-[80] flex items-end bg-gray-950/35 px-3 pb-3 pt-24"
+          onClick={() => setModerationModal(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="moderation-modal-title"
+            className="mx-auto w-full max-w-sm rounded-lg border border-white/80 bg-white p-4 shadow-[0_18px_48px_rgba(17,24,39,0.24)]"
+            style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className={`mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                moderationModal === 'suspension' ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600'
+              }`}>
+                {moderationModal === 'suspension' ? <Ban className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className={`text-xs font-black tracking-[0.02em] ${
+                  moderationModal === 'suspension' ? 'text-rose-600' : 'text-amber-600'
+                }`}>
+                  운영 안내
+                </p>
+                <h2 id="moderation-modal-title" className="mt-1 text-lg font-black leading-6 text-gray-950">
+                  {moderationModal === 'suspension' ? '서비스 이용이 정지되었습니다' : '운영 경고가 도착했습니다'}
+                </h2>
+              </div>
+            </div>
+
+            {moderationModal === 'suspension' ? (
+              <div className="mt-4 rounded-lg border border-rose-100 bg-rose-50 px-3 py-3 text-sm font-bold leading-5 text-rose-800">
+                <p>
+                  {activeSuspendedUntil
+                    ? `${formatKoreanDateTime(activeSuspendedUntil)}까지 고정지점 선택, 방 생성, 입장을 이용할 수 없습니다.`
+                    : '현재 고정지점 선택, 방 생성, 입장을 이용할 수 없습니다.'}
+                </p>
+                {activeSuspensionReason && <p className="mt-2 text-xs font-semibold leading-5 text-rose-700">{activeSuspensionReason}</p>}
+              </div>
+            ) : (
+              <div className="mt-4 rounded-lg border border-amber-100 bg-amber-50 px-3 py-3 text-sm font-bold leading-5 text-amber-900">
+                {moderationStatus?.warning?.reason || '서비스 이용 경고가 접수되었습니다.'}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={moderationModal === 'warning' ? acknowledgeWarning : () => setModerationModal(null)}
+              disabled={isAcknowledgingWarning}
+              className="mt-4 h-12 w-full rounded-lg bg-gray-950 text-sm font-black text-white transition hover:bg-gray-800 disabled:bg-gray-300"
+            >
+              {isAcknowledgingWarning ? '저장 중...' : '확인했어요'}
             </button>
           </div>
         </div>

@@ -81,6 +81,7 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
   const [formData, setFormData] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [hasAcceptedRequiredTerms, setHasAcceptedRequiredTerms] = useState(false)
   const supabase = useMemo(() => createClient(), [])
   const [activatedSteps, setActivatedSteps] = useState<boolean[]>(Array(SIGNUP_STEPS.length).fill(false))
   const [googleEmail, setGoogleEmail] = useState<string>('')
@@ -207,6 +208,11 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
       return
     }
 
+    if (isLastStep && !hasAcceptedRequiredTerms) {
+      setErrors({ consent: '개인정보처리방침과 서비스약관에 동의해주세요' })
+      return
+    }
+
     // 닉네임 중복 확인
     if (currentStepData.id === 'nickname') {
       setIsLoading(true)
@@ -272,8 +278,6 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
           phone: formData.phone.trim(),
           nickname: formData.nickname.trim(),
           department: formData.department || '학과 미확인',
-          status: 'active',
-          is_admin: false
         })
 
       if (profileError) {
@@ -422,7 +426,7 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
             </p>
 
             <p className="text-xs leading-5 text-gray-500 text-center">
-              계속하면 같이타의{' '}
+              프로필 세팅 마지막 단계에서 같이타의{' '}
               <Link href="/terms" className="font-medium text-primary-600 underline">
                 서비스약관
               </Link>
@@ -430,7 +434,7 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
               <Link href="/privacy" className="font-medium text-primary-600 underline">
                 개인정보처리방침
               </Link>
-              을 확인한 것으로 간주됩니다.
+              에 명시적으로 동의해야 합니다.
             </p>
           </div>
         </div>
@@ -532,11 +536,52 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
                 </p>
               )}
 
+              {isCurrent && isLastStep && (
+                <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
+                  <label className="flex items-start gap-2 text-xs font-semibold leading-5 text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={hasAcceptedRequiredTerms}
+                      onChange={(event) => {
+                        setHasAcceptedRequiredTerms(event.target.checked)
+                        if (errors.consent) {
+                          setErrors(prev => {
+                            const next = { ...prev }
+                            delete next.consent
+                            return next
+                          })
+                        }
+                      }}
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                    />
+                    <span>
+                      <Link href="/terms" className="font-black text-primary-700 underline">
+                        서비스약관
+                      </Link>
+                      과{' '}
+                      <Link href="/privacy" className="font-black text-primary-700 underline">
+                        개인정보처리방침
+                      </Link>
+                      에 동의합니다.
+                    </span>
+                  </label>
+                  <p className="mt-2 text-[11px] font-semibold leading-4 text-gray-500">
+                    &lt;같이타&gt;는 현재 수집된 개인정보를 마케팅에 일체 활용하지 않습니다.
+                  </p>
+                  {errors.consent && (
+                    <div className="mt-2 flex items-center text-xs font-semibold text-red-500">
+                      <AlertCircle className="mr-1 h-3.5 w-3.5" />
+                      {errors.consent}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Next button only at the current step */}
               {isCurrent && (
                 <button
                   onClick={handleNext}
-                  disabled={!formData[step.id] || isLoading}
+                  disabled={!formData[step.id] || isLoading || (isLastStep && !hasAcceptedRequiredTerms)}
                   className="btn-primary w-full"
                 >
                   {isLoading ? (

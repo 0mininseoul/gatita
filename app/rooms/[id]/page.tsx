@@ -4,7 +4,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, typ
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { ChatRoom, User, Message, RoomParticipant, PayoutAccount, LOCATIONS } from '@/lib/supabase'
-import { ArrowLeft, Users, Clock, Send, Flag, Check, X, LogOut, Phone, CreditCard, Copy } from 'lucide-react'
+import { ArrowLeft, Users, Clock, Send, Flag, Check, X, LogOut, Phone, CreditCard, Copy, ShieldAlert } from 'lucide-react'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -40,6 +40,9 @@ export default function ChatRoomPage() {
   const [isConfirmed, setIsConfirmed] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
   const [showParticipants, setShowParticipants] = useState(false)
+  const [showPhonePrivacyNotice, setShowPhonePrivacyNotice] = useState(false)
+  const [showCallConsentModal, setShowCallConsentModal] = useState(false)
+  const [selectedCallParticipant, setSelectedCallParticipant] = useState<RoomParticipant | null>(null)
   const [showHostGuide, setShowHostGuide] = useState(false)
   const [hostAppearance, setHostAppearance] = useState('')
   const [hostAppearanceDraft, setHostAppearanceDraft] = useState('')
@@ -54,6 +57,10 @@ export default function ChatRoomPage() {
   const hostGuideStorageKey = useMemo(() => `gatita:room-host-guide:${roomId}`, [roomId])
   const roomGuideStorageKey = useMemo(
     () => `gatita:room-entry-guide:${roomId}:${user?.id ?? 'anonymous'}`,
+    [roomId, user?.id]
+  )
+  const phonePrivacyNoticeStorageKey = useMemo(
+    () => `gatita:room-phone-privacy-notice:${roomId}:${user?.id ?? 'anonymous'}`,
     [roomId, user?.id]
   )
 
@@ -494,6 +501,14 @@ export default function ChatRoomPage() {
   }, [isParticipant, loading, room, roomGuideStorageKey, user])
 
   useEffect(() => {
+    if (loading || !room || !user) return
+    if (!isParticipant) return
+    if (window.localStorage.getItem(phonePrivacyNoticeStorageKey)) return
+
+    setShowPhonePrivacyNotice(true)
+  }, [isParticipant, loading, phonePrivacyNoticeStorageKey, room, user])
+
+  useEffect(() => {
     if (!showHostLeaveModal) return
     if (nextHostId) return
 
@@ -656,6 +671,39 @@ export default function ChatRoomPage() {
       toast.error('계좌 정보를 복사하지 못했습니다')
     }
   }, [creatorPayoutAccount])
+
+  const closePhonePrivacyNotice = useCallback(() => {
+    window.localStorage.setItem(phonePrivacyNoticeStorageKey, 'true')
+    setShowPhonePrivacyNotice(false)
+  }, [phonePrivacyNoticeStorageKey])
+
+  const handleCallParticipant = useCallback((participant: RoomParticipant) => {
+    if (!participant.user?.phone) {
+      toast.error('전화번호가 등록되지 않았습니다')
+      return
+    }
+
+    setSelectedCallParticipant(participant)
+    setShowCallConsentModal(true)
+  }, [])
+
+  const closeCallConsentModal = useCallback(() => {
+    setShowCallConsentModal(false)
+    setSelectedCallParticipant(null)
+  }, [])
+
+  const confirmCallParticipant = useCallback(() => {
+    const phone = selectedCallParticipant?.user?.phone
+
+    if (!phone) {
+      toast.error('전화번호가 등록되지 않았습니다')
+      closeCallConsentModal()
+      return
+    }
+
+    closeCallConsentModal()
+    window.location.href = `tel:${phone}`
+  }, [closeCallConsentModal, selectedCallParticipant])
 
   const closeRoomGuide = useCallback(() => {
     window.localStorage.setItem(roomGuideStorageKey, 'true')
@@ -926,18 +974,19 @@ export default function ChatRoomPage() {
                       </p>
                     )}
                   </div>
-                  <a
-                    href={`tel:${participant.user?.phone}`}
+                  <button
+                    type="button"
+                    onClick={() => handleCallParticipant(participant)}
                     aria-label={`${participant.user?.nickname ?? '참여자'}에게 전화하기`}
-                    aria-disabled={!participant.user?.phone}
+                    disabled={!participant.user?.phone}
                     className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
                       participant.user?.phone
                         ? 'bg-primary-600 text-white hover:bg-primary-700'
-                        : 'pointer-events-none bg-gray-200 text-gray-400'
+                        : 'bg-gray-200 text-gray-400'
                     }`}
                   >
                     <Phone className="h-5 w-5" />
-                  </a>
+                  </button>
                 </div>
               ))}
             </div>
@@ -974,6 +1023,17 @@ export default function ChatRoomPage() {
                     <p className="text-sm font-black text-gray-950">약속</p>
                     <p className="mt-0.5 text-xs font-bold leading-5 text-gray-600">
                       멤버들과 협의 없이 갑자기 방을 나가면 서비스 이용이 정지될 수 있다.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-3 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-amber-600 shadow-sm">
+                    <ShieldAlert className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-black text-gray-950">전화번호</p>
+                    <p className="mt-0.5 text-xs font-bold leading-5 text-gray-600">
+                      무료 안전번호가 없어 전화 연결 시 실제 전화번호가 전달될 수 있다.
                     </p>
                   </div>
                 </div>
@@ -1028,6 +1088,9 @@ export default function ChatRoomPage() {
               <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
                 ⏰ 출발시간 5분 전부터는 갑자기 방을 탈주할 시 서비스 이용이 정지될 수 있습니다.
               </div>
+              <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5">
+                전화 연결 시 무료 안전번호가 아닌 실제 전화번호가 전달될 수 있어요. 지각, 노쇼, 출발 위치 확인 등 동행 확인 목적에만 사용해주세요.
+              </div>
             </div>
 
             <button
@@ -1037,6 +1100,102 @@ export default function ChatRoomPage() {
             >
               확인했어요
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 전화번호 노출 안내 모달 */}
+      {showPhonePrivacyNotice && !showHostGuide && !showRoomGuide && (
+        <div className="fixed inset-0 z-50 flex items-end bg-gray-950/35 px-3 pb-3 pt-16">
+          <div className="w-full rounded-2xl bg-white p-4 shadow-2xl">
+            <div className="mb-4 flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+                <ShieldAlert className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-[0.08em] text-amber-600">전화번호 안내</p>
+                <h2 className="mt-1 text-lg font-extrabold text-gray-950">전화번호가 그대로 전달될 수 있어요</h2>
+                <p className="mt-1 text-sm font-semibold leading-5 text-gray-600">
+                  같이타는 현재 무료 안전번호를 제공하지 않습니다.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-sm font-bold leading-5 text-gray-700">
+              <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
+                참여자에게 전화하면 휴대폰 전화 앱에 실제 전화번호가 전달될 수 있습니다.
+              </div>
+              <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
+                통화 과정에서 내 번호도 상대에게 표시될 수 있습니다.
+              </div>
+              <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5">
+                지각, 노쇼, 출발 위치 확인 등 동행 확인 목적에만 사용해주세요.
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={closePhonePrivacyNotice}
+              className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl bg-gray-950 text-sm font-black text-white transition hover:bg-gray-800"
+            >
+              확인하고 동의합니다
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 전화 걸기 확인 모달 */}
+      {showCallConsentModal && selectedCallParticipant && (
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-gray-950/35 px-3 pb-3 pt-16"
+          onClick={closeCallConsentModal}
+        >
+          <div
+            className="w-full rounded-2xl bg-white p-4 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-50 text-primary-600">
+                  <Phone className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">전화 연결</p>
+                  <h2 className="mt-1 truncate text-lg font-extrabold text-gray-950">
+                    {selectedCallParticipant.user?.nickname ?? '참여자'}에게 전화
+                  </h2>
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label="전화 연결 취소"
+                onClick={closeCallConsentModal}
+                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <p className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5 text-sm font-bold leading-5 text-gray-700">
+              안전번호가 아니므로 전화번호가 그대로 전달될 수 있어요. 동행 확인 목적에만 사용해주세요.
+            </p>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={closeCallConsentModal}
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-gray-200 bg-white text-sm font-black text-gray-700 transition hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={confirmCallParticipant}
+                className="inline-flex h-11 items-center justify-center rounded-xl bg-primary-600 text-sm font-black text-white transition hover:bg-primary-700"
+              >
+                전화 걸기
+              </button>
+            </div>
           </div>
         </div>
       )}

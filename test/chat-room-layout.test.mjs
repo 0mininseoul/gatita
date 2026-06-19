@@ -127,11 +127,31 @@ test('chat room hides participant chips behind a participant sheet and shows cre
   assert.doesNotMatch(source, /absolute -right-0\.5 -top-0\.5/, 'participant header action should not show a numeric badge')
   assert.match(source, /showParticipants/, 'participants should be shown from an explicit header action')
   assert.match(source, /참여자/, 'chat header should include participant list affordance')
-  assert.match(source, /href=\{`tel:\$\{participant\.user\?\.phone\}`\}/, 'participant list should allow direct phone calls')
+  assert.match(source, /handleCallParticipant/, 'participant list should allow guarded phone calls')
+  assert.doesNotMatch(source, /href=\{`tel:\$\{participant\.user\?\.phone\}`\}/, 'participant sheet should not expose direct tel links before consent')
   assert.match(source, /user:users\(nickname, department, phone\)/, 'participant query should include phone numbers for the participant sheet')
   assert.match(source, /user_payout_accounts/, 'chat room should load room creator payout account')
   assert.match(source, /방장 계좌/, 'creator payout account should replace the old participant chip area')
   assert.match(source, /account_number/, 'creator payout account should display the account number')
+})
+
+test('chat room shows phone privacy notice to all room participants and confirms before dialing', () => {
+  const source = readProjectFile('app/rooms/[id]/page.tsx')
+  const noticeEffectStart = source.indexOf('setShowPhonePrivacyNotice(true)')
+  const noticeEffectEnd = source.indexOf('\n  useEffect', noticeEffectStart)
+  const noticeEffectBlock = source.slice(noticeEffectStart, noticeEffectEnd)
+
+  assert.match(source, /showPhonePrivacyNotice/)
+  assert.match(source, /phonePrivacyNoticeStorageKey/)
+  assert.match(source, /gatita:room-phone-privacy-notice:/)
+  assert.match(source, /setShowPhonePrivacyNotice\(true\)/, 'phone notice should open on room entry')
+  assert.ok(noticeEffectStart > -1, 'phone privacy notice effect exists')
+  assert.doesNotMatch(noticeEffectBlock, /room\.created_by === user\.id/, 'phone notice should not skip room creators')
+  assert.match(source, /selectedCallParticipant/)
+  assert.match(source, /showCallConsentModal/)
+  assert.match(source, /전화번호가 그대로 전달될 수 있어요/)
+  assert.match(source, /동행 확인 목적/)
+  assert.match(source, /window\.location\.href = `tel:\$\{phone\}`/)
 })
 
 test('chat room can copy the room creator payout account', () => {

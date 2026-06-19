@@ -37,6 +37,7 @@ type MyRoomSummary = CampusMapRoom & {
 }
 
 const PWA_ONBOARDING_STORAGE_KEY = 'gatita:pwa-onboarding-dismissed'
+const PWA_INSTALLED_DETECTED_STORAGE_KEY = 'gatita:pwa-installed-detected'
 const ANALYTICS_PENDING_LOGIN_KEY = 'gatita:analytics-pending-login'
 
 function rememberPendingLogin(method: string) {
@@ -265,10 +266,14 @@ export default function HomePage() {
     }
 
     try {
-      const enterMap = () => {
+      const enterMap = (profileCompleted: boolean) => {
         if (!enterApp) return
 
         setHasEnteredApp(true)
+        trackEvent('map_opened', {
+          source: 'auth_redirect',
+          profile_completed: profileCompleted,
+        })
         if (window.location.pathname !== '/map') {
           router.replace('/map')
         }
@@ -332,7 +337,7 @@ export default function HomePage() {
             }
           }
           await loadMapRooms()
-          enterMap()
+          enterMap(true)
         } else {
           setUser(null)
           setAuthMode(null)
@@ -349,7 +354,7 @@ export default function HomePage() {
             })
           }
           await loadMapRooms()
-          enterMap()
+          enterMap(false)
         }
       } else if (window.location.pathname === '/map') {
         setHasAuthenticatedSession(false)
@@ -418,12 +423,42 @@ export default function HomePage() {
   useEffect(() => {
     if (!isInstalled()) return
 
+    if (!window.localStorage.getItem(PWA_INSTALLED_DETECTED_STORAGE_KEY)) {
+      window.localStorage.setItem(PWA_INSTALLED_DETECTED_STORAGE_KEY, 'true')
+      trackEvent('pwa_installed_detected', {
+        detection_source: 'standalone_open',
+      })
+    }
+
     setShowStandaloneSplash(true)
     const timerId = window.setTimeout(() => {
       setShowStandaloneSplash(false)
     }, 900)
 
     return () => window.clearTimeout(timerId)
+  }, [])
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = () => {
+      trackEvent('pwa_install_prompt_available', {
+        source: 'beforeinstallprompt',
+      })
+    }
+
+    const handleAppInstalled = () => {
+      window.localStorage.setItem(PWA_INSTALLED_DETECTED_STORAGE_KEY, 'true')
+      trackEvent('pwa_installed_detected', {
+        detection_source: 'appinstalled',
+      })
+    }
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+    window.addEventListener('appinstalled', handleAppInstalled)
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+      window.removeEventListener('appinstalled', handleAppInstalled)
+    }
   }, [])
 
   useEffect(() => {
@@ -607,6 +642,9 @@ export default function HomePage() {
 
     const timerId = window.setTimeout(() => {
       setShowPwaOnboarding(true)
+      trackEvent('pwa_install_instruction_shown', {
+        source: 'map_onboarding',
+      })
     }, 600)
 
     return () => window.clearTimeout(timerId)
@@ -1016,7 +1054,10 @@ export default function HomePage() {
     setAuthMode('signup')
   }
 
-  const dismissPwaOnboarding = useCallback(() => {
+  const dismissPwaOnboarding = useCallback((action: 'later' | 'start' | 'outside' = 'later') => {
+    trackEvent('pwa_install_instruction_dismissed', {
+      action,
+    })
     window.localStorage.setItem(PWA_ONBOARDING_STORAGE_KEY, 'true')
     setShowPwaOnboarding(false)
   }, [])
@@ -1299,7 +1340,7 @@ export default function HomePage() {
       {showPwaOnboarding && (
         <div
           className="absolute inset-0 z-[60] flex items-end bg-gray-950/30 px-3 pb-3 pt-20"
-          onClick={dismissPwaOnboarding}
+          onClick={() => dismissPwaOnboarding('outside')}
         >
           <div
             role="dialog"
@@ -1338,14 +1379,14 @@ export default function HomePage() {
             <div className="mt-4 flex gap-2">
               <button
                 type="button"
-                onClick={dismissPwaOnboarding}
+                onClick={() => dismissPwaOnboarding('later')}
                 className="h-11 flex-1 rounded-lg border border-gray-200 bg-white text-sm font-black text-gray-700 transition hover:bg-gray-50"
               >
                 나중에
               </button>
               <button
                 type="button"
-                onClick={dismissPwaOnboarding}
+                onClick={() => dismissPwaOnboarding('start')}
                 className="h-11 flex-1 rounded-lg bg-gray-950 text-sm font-black text-white transition hover:bg-gray-800"
               >
                 지금 할게요

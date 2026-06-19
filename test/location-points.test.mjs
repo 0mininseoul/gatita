@@ -284,7 +284,7 @@ test('profileless authenticated users see the map first and complete profile fro
 
   assert.ok(noProfileStart > -1, 'missing profile branch exists')
   assert.match(noProfileBlock, /await loadMapRooms\(\)/, 'missing profile branch should still load the map')
-  assert.match(noProfileBlock, /enterMap\(\)/, 'missing profile branch should route into map UI')
+  assert.match(noProfileBlock, /enterMap\(false\)/, 'missing profile branch should route into map UI')
   assert.doesNotMatch(noProfileBlock, /setAuthMode\('signup'\)/, 'missing profile branch should not auto-open profile setup')
 
   assert.match(source, /router\.replace\('\/map'\)/, 'OAuth completion should normalize the URL to the map route')
@@ -322,6 +322,13 @@ test('map shows a one-time PWA home screen onboarding modal', () => {
 
   assert.match(source, /showPwaOnboarding/)
   assert.match(source, /gatita:pwa-onboarding-dismissed/)
+  assert.match(source, /gatita:pwa-installed-detected/)
+  assert.match(source, /pwa_install_instruction_shown/)
+  assert.match(source, /pwa_install_instruction_dismissed/)
+  assert.match(source, /pwa_install_prompt_available/)
+  assert.match(source, /pwa_installed_detected/)
+  assert.match(source, /window\.addEventListener\('appinstalled'/)
+  assert.match(source, /detection_source:\s*'standalone_open'/)
   assert.match(source, /홈 화면에 추가/)
   assert.match(source, /지금 할게요/)
   assert.match(source, /브라우저의 공유/)

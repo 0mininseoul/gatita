@@ -642,6 +642,38 @@ export default function HomePage() {
     }
   }
 
+  const broadcastRoomSync = useCallback(async (targetRoomId: string, reason: 'participants') => {
+    if (!supabase) return
+
+    const channel = supabase.channel(`room-sync:${targetRoomId}`)
+
+    await new Promise<void>((resolve) => {
+      const timeoutId = window.setTimeout(resolve, 900)
+
+      channel.subscribe(async (status) => {
+        if (status !== 'SUBSCRIBED') return
+
+        window.clearTimeout(timeoutId)
+        try {
+          await channel.send({
+            type: 'broadcast',
+            event: 'room-sync',
+            payload: {
+              reason,
+              roomId: targetRoomId,
+            },
+          })
+        } catch (error) {
+          console.error('Broadcast room sync error:', error)
+        } finally {
+          resolve()
+        }
+      })
+    })
+
+    await supabase.removeChannel(channel)
+  }, [supabase])
+
   const handleJoinMapRoom = async (roomId: string) => {
     if (!user || !supabase) {
       if (requiresProfile) {
@@ -678,6 +710,7 @@ export default function HomePage() {
         throw new Error(result?.error ?? '채팅방 참여 중 오류가 발생했습니다')
       }
 
+      await broadcastRoomSync(roomId, 'participants')
       router.push(`/rooms/${roomId}`)
     } catch (error) {
       console.error('Join map room error:', error)

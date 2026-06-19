@@ -280,5 +280,32 @@ create index reports_reported_id_idx on public.reports (reported_id);
 create index reports_status_idx on public.reports (status);
 create index favorites_user_id_idx on public.favorites (user_id);
 
+-- Supabase Realtime publication for live chat and participant membership updates
+alter table public.messages replica identity full;
+alter table public.room_participants replica identity full;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'messages'
+  ) then
+    alter publication supabase_realtime add table public.messages;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'room_participants'
+  ) then
+    alter publication supabase_realtime add table public.room_participants;
+  end if;
+end $$;
+
 -- Sample data for testing (optional)
 -- You can insert some test data here if needed

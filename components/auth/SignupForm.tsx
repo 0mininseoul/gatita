@@ -63,7 +63,7 @@ const SIGNUP_STEPS: SignupStep[] = [
   {
     id: 'nickname',
     label: '닉네임을 입력해주세요',
-    placeholder: '테토영민',
+    placeholder: '가천존예여신',
     type: 'text',
     required: true,
     description: '다른 사용자에게 보여질 이름입니다'

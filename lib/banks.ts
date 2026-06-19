@@ -133,6 +133,13 @@ export function joinAccountSegments(segments: string[]) {
   return segments.map((segment) => segment.replace(/\D/g, '')).join('-')
 }
 
+export function formatAccountNumberForBank(bankName: string | null | undefined, accountNumber: string) {
+  return splitAccountNumberForBank(bankName, accountNumber)
+    .map((segment) => segment.replace(/\D/g, ''))
+    .filter(Boolean)
+    .join('-')
+}
+
 export function isAccountNumberCompleteForBank(bankName: string | null | undefined, accountNumber: string) {
   const bank = getBankOption(bankName)
   const digits = accountNumber.replace(/\D/g, '')

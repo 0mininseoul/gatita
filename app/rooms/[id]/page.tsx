@@ -4,7 +4,8 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, typ
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { ChatRoom, User, Message, RoomParticipant, PayoutAccount, LOCATIONS } from '@/lib/supabase'
-import { ArrowLeft, Users, Clock, Send, Flag, Check, X, LogOut, Phone, CreditCard, Copy } from 'lucide-react'
+import { formatAccountNumberForBank } from '@/lib/banks'
+import { ArrowLeft, Users, Clock, Send, Flag, X, LogOut, Phone, CreditCard, Copy } from 'lucide-react'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -38,6 +39,7 @@ export default function ChatRoomPage() {
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const [isConfirmed, setIsConfirmed] = useState(false)
+  const [isConfirmingParticipation, setIsConfirmingParticipation] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
   const [showParticipants, setShowParticipants] = useState(false)
   const [showCallConsentModal, setShowCallConsentModal] = useState(false)
@@ -72,6 +74,7 @@ export default function ChatRoomPage() {
     startY: 0,
   })
   const supabase = useMemo(() => createClient(), [])
+  const roomSyncChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     const scroller = messagesScrollRef.current
@@ -289,6 +292,11 @@ export default function ChatRoomPage() {
   }) as CSSProperties, [timestampReveal])
   const isRoomCreator = room?.created_by === user?.id
   const isParticipant = participants.some(p => p.user_id === user?.id)
+  const formattedCreatorAccountNumber = useMemo(() => (
+    creatorPayoutAccount
+      ? formatAccountNumberForBank(creatorPayoutAccount.bank_name, creatorPayoutAccount.account_number)
+      : ''
+  ), [creatorPayoutAccount])
   const hostTransferCandidates = useMemo(
     () => participants.filter((participant) => participant.user_id !== user?.id),
     [participants, user?.id]
@@ -404,10 +412,12 @@ export default function ChatRoomPage() {
         .select('confirmed')
         .eq('room_id', roomId)
         .eq('user_id', userId)
-        .single()
+        .maybeSingle()
 
       if (data) {
         setIsConfirmed(data.confirmed)
+      } else {
+        setIsConfirmed(false)
       }
     } catch (error) {
       // 참여자가 아닌 경우
@@ -458,8 +468,41 @@ export default function ChatRoomPage() {
     checkAuthAndLoadData()
   }, [checkAuthAndLoadData, roomId, router])
 
+  const handleRealtimeRefresh = useCallback(async () => {
+    await Promise.all([
+      loadMessages(),
+      loadParticipants(),
+      user ? checkParticipation(user.id) : Promise.resolve(),
+    ])
+  }, [checkParticipation, loadMessages, loadParticipants, user])
+
+  const broadcastRoomSync = useCallback(async (reason: 'message' | 'participants' | 'host-guide') => {
+    const channel = roomSyncChannelRef.current
+    if (!channel) return
+
+    try {
+      await channel.send({
+        type: 'broadcast',
+        event: 'room-sync',
+        payload: {
+          reason,
+          roomId,
+        },
+      })
+    } catch (error) {
+      console.error('Broadcast room sync error:', error)
+    }
+  }, [roomId])
+
   useEffect(() => {
     if (!room) return
+
+    const syncChannel = supabase
+      .channel(`room-sync:${roomId}`)
+      .on('broadcast', { event: 'room-sync' }, handleRealtimeRefresh)
+      .subscribe()
+
+    roomSyncChannelRef.current = syncChannel
 
     const messagesChannel = supabase
       .channel(`messages:${roomId}`)
@@ -471,11 +514,7 @@ export default function ChatRoomPage() {
           table: 'messages',
           filter: `room_id=eq.${roomId}`,
         },
-        (payload) => {
-          if (payload.new.user_id !== user?.id) {
-            loadMessages()
-          }
-        }
+        handleRealtimeRefresh
       )
       .subscribe()
 
@@ -489,17 +528,28 @@ export default function ChatRoomPage() {
           table: 'room_participants',
           filter: `room_id=eq.${roomId}`,
         },
-        () => {
-          loadParticipants()
-        }
+        handleRealtimeRefresh
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'room_participants',
+        },
+        handleRealtimeRefresh
       )
       .subscribe()
 
     return () => {
+      if (roomSyncChannelRef.current === syncChannel) {
+        roomSyncChannelRef.current = null
+      }
+      supabase.removeChannel(syncChannel)
       supabase.removeChannel(messagesChannel)
       supabase.removeChannel(participantsChannel)
     }
-  }, [loadMessages, loadParticipants, room, roomId, supabase, user?.id])
+  }, [handleRealtimeRefresh, room, roomId, supabase])
 
   useEffect(() => {
     if (loading || !room || !user) return
@@ -562,6 +612,7 @@ export default function ChatRoomPage() {
 
       // 서버에서 실제 메시지 다시 로드
       await loadMessages()
+      await broadcastRoomSync('message')
     } catch (error) {
       // 오류 시 임시 메시지 제거하고 입력창에 다시 표시
       setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id))
@@ -572,7 +623,9 @@ export default function ChatRoomPage() {
   }
 
   const handleConfirmParticipation = async () => {
-    if (!user) return
+    if (!user || isConfirmed || isConfirmingParticipation) return
+
+    setIsConfirmingParticipation(true)
 
     try {
       const { error } = await supabase
@@ -584,10 +637,14 @@ export default function ChatRoomPage() {
       if (error) throw error
 
       setIsConfirmed(true)
-      toast.success('참여가 확정되었습니다!')
+      await loadParticipants()
+      await broadcastRoomSync('participants')
+      toast.success('참여 확정되었습니다', { id: 'confirm-participation' })
     } catch (error) {
       console.error('Confirm participation error:', error)
       toast.error('참여 확정 중 오류가 발생했습니다')
+    } finally {
+      setIsConfirmingParticipation(false)
     }
   }
 
@@ -607,6 +664,7 @@ export default function ChatRoomPage() {
       }
 
       toast.success('채팅방을 나갔습니다')
+      await broadcastRoomSync('participants')
       router.push('/map')
     } catch (error) {
       console.error('Leave room error:', error)
@@ -674,7 +732,7 @@ export default function ChatRoomPage() {
 
     const accountText = [
       creatorPayoutAccount.bank_name,
-      creatorPayoutAccount.account_number,
+      formattedCreatorAccountNumber,
       creatorPayoutAccount.account_holder,
     ].filter(Boolean).join(' ')
 
@@ -685,7 +743,7 @@ export default function ChatRoomPage() {
       console.error('Copy creator payout account error:', error)
       toast.error('계좌 정보를 복사하지 못했습니다')
     }
-  }, [creatorPayoutAccount])
+  }, [creatorPayoutAccount, formattedCreatorAccountNumber])
 
   const handleCallParticipant = useCallback((participant: RoomParticipant) => {
     if (!participant.user?.phone) {
@@ -745,6 +803,7 @@ export default function ChatRoomPage() {
       setShowHostGuide(false)
       setHostAppearanceDraft('')
       await loadMessages()
+      await broadcastRoomSync('host-guide')
       toast.success('방장 안내가 저장되었습니다')
     } catch (error) {
       console.error('Save host guide error:', error)
@@ -844,8 +903,8 @@ export default function ChatRoomPage() {
             )}
           </div>
           {creatorPayoutAccount ? (
-            <p className="mt-1 truncate text-xs font-semibold text-gray-900">
-              {creatorPayoutAccount.bank_name} {creatorPayoutAccount.account_number} {creatorPayoutAccount.account_holder}
+            <p className="chat-payout-account mt-1 truncate text-xs font-semibold text-gray-900">
+              {creatorPayoutAccount.bank_name} {formattedCreatorAccountNumber} {creatorPayoutAccount.account_holder}
             </p>
           ) : (
             <p className="mt-1 text-xs text-gray-500">
@@ -859,9 +918,10 @@ export default function ChatRoomPage() {
           <div className="mt-2">
             <button
               onClick={handleConfirmParticipation}
+              disabled={isConfirmingParticipation}
               className="btn-primary w-full py-2 text-sm"
             >
-              참여 확정하기
+              {isConfirmingParticipation ? '확정 중...' : '참여 확정하기'}
             </button>
           </div>
         )}
@@ -982,8 +1042,8 @@ export default function ChatRoomPage() {
                           방장
                         </span>
                       )}
-                      {participant.confirmed && (
-                        <Check className="h-3.5 w-3.5 shrink-0 text-green-600" />
+                      {participant.user_id !== room.created_by && participant.confirmed && (
+                        <span className="shrink-0 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700">확정</span>
                       )}
                     </div>
                     <p className="mt-0.5 truncate text-xs text-gray-500">{participant.user?.department}</p>
@@ -1090,7 +1150,7 @@ export default function ChatRoomPage() {
               </div>
               <div className="chat-guide-line">
                 <span className="chat-guide-icon">🧭</span>
-                <p>꼭 도착지까지 가지 않아도 참여할 수 있어요. 중간에 헤어질 예정이면 채팅에서 먼저 알려주세요.</p>
+                <p>꼭 도착지까지 가지 않아도 참여할 수 있어요.<br /> 중간에 헤어질 예정이면 채팅에서 먼저 알려주세요.</p>
               </div>
               <div className="chat-guide-line">
                 <span className="chat-guide-icon">⏰</span>
@@ -1099,7 +1159,7 @@ export default function ChatRoomPage() {
               <div className="chat-guide-line">
                 <span className="chat-guide-icon">📞</span>
                 <p>
-                  방장과 멤버들은 서로 전화번호가 노출될 수 있어요. 지각, 노쇼, 출발 위치 확인 등 동행 목적에만 사용해주세요.
+                  방장과 멤버들은 서로 전화번호가 노출될 수 있어요.<br /> 지각, 노쇼, 출발 위치 확인 등 동행 목적에만 사용해주세요.
                 </p>
               </div>
             </div>

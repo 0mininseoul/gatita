@@ -182,6 +182,7 @@ test('map bottom sheet room cards show destination only beside departure time', 
   assert.match(roomCardBlock, /\(\{LOCATIONS\[room\.to_location\]\}\)/)
   assert.doesNotMatch(roomCardBlock, /LOCATIONS\[room\.from_location\]/, 'origin should not be repeated inside origin sheet cards')
   assert.doesNotMatch(roomCardBlock, /ArrowRight/, 'compact room cards should not need route arrows')
+  assert.match(roomCardBlock, /!\s*isPastDeparture &&/, 'past departure rooms should hide participant counts in the bottom sheet')
 })
 
 test('map room loading keeps only rooms within the visible map window', () => {

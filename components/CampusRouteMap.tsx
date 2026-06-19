@@ -500,9 +500,11 @@ export default function CampusRouteMap({
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
-                          <span className="text-xs font-black text-gray-500">
-                            {participantCount}/{room.max_participants}
-                          </span>
+                          {!isPastDeparture && (
+                            <span className="text-xs font-black text-gray-500">
+                              {participantCount}/{room.max_participants}
+                            </span>
+                          )}
                           <button
                             type="button"
                             onClick={() => onJoinRoom(room.id)}

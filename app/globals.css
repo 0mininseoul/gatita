@@ -247,6 +247,7 @@
 
   .chat-message {
     @apply max-w-xs break-words text-sm;
+    width: fit-content;
     padding: 0.45rem 0.7rem;
     border-radius: 0.875rem;
     line-height: 1.35;
@@ -271,6 +272,23 @@
 
   .chat-message-other {
     @apply bg-white border border-gray-200 text-gray-900;
+  }
+
+  .chat-payout-account {
+    text-decoration: none;
+    -webkit-text-decoration-line: none;
+    text-decoration-line: none;
+    -webkit-touch-callout: none;
+  }
+
+  .chat-payout-account a,
+  .chat-payout-account a[x-apple-data-detectors] {
+    color: inherit !important;
+    text-decoration: none !important;
+    -webkit-text-decoration-line: none !important;
+    text-decoration-line: none !important;
+    -webkit-touch-callout: none;
+    pointer-events: none;
   }
 
   .chat-shell {
@@ -357,11 +375,11 @@
   .chat-guide-line {
     display: grid;
     grid-template-columns: 1.7rem minmax(0, 1fr);
-    align-items: start;
+    align-items: center;
     gap: 0.48rem;
     padding: 0.66rem 0.78rem;
     color: #4b5563;
-    font-size: 0.6875rem;
+    font-size: 0.625rem;
     font-weight: 600;
     letter-spacing: 0;
     line-height: 1.42;
@@ -373,6 +391,7 @@
 
   .chat-guide-icon {
     display: inline-flex;
+    align-items: center;
     width: 1.7rem;
     justify-content: center;
     font-size: 1rem;

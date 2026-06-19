@@ -21,6 +21,7 @@ test('profile onboarding stores phone without SMS MFA and derives department fro
   assert.match(signup, /bank_name/, 'signup should collect bank name')
   assert.match(signup, /account_number/, 'signup should collect account number')
   assert.match(signup, /account_holder/, 'signup should collect account holder')
+  assert.match(signup, /placeholder:\s*'가천존예여신'/, 'nickname placeholder should use the requested sample nickname')
 
   assert.match(schema, /create table public\.user_payout_accounts/i, 'schema should define payout account table')
   assert.match(schema, /Room participants can read creator payout accounts/i, 'schema should scope payout account reads to room participants')
@@ -54,6 +55,7 @@ test('profile onboarding uses three phone boxes and keeps account number segment
   const signup = readProjectFile('components', 'auth', 'SignupForm.tsx')
   const settings = readProjectFile('app', 'settings', 'page.tsx')
   const bankFields = readProjectFile('components', 'BankAccountFields.tsx')
+  const banks = readProjectFile('lib', 'banks.ts')
 
   assert.match(signup, /hasCheckedSessionRef/, 'signup session bootstrap should run only once so parent rerenders do not reset onboarding progress')
   assert.doesNotMatch(signup, /\[onSuccess,\s*supabase\]/, 'signup session bootstrap must not rerun whenever parent callbacks are recreated')
@@ -65,5 +67,6 @@ test('profile onboarding uses three phone boxes and keeps account number segment
   assert.match(bankFields, /inputRefs\.current = inputRefs\.current\.slice\(0, segments\.length\)/, 'account segment refs should be trimmed when bank format changes')
   assert.match(bankFields, /const pastedSegments = splitAccountNumberForBank\(bankName, digits\)/, 'pasted account numbers should be repartitioned by selected bank')
   assert.match(bankFields, /handleSegmentKeyDown/, 'account segment inputs should handle backward focus without crashing')
+  assert.match(banks, /formatAccountNumberForBank/, 'bank helpers should format stored account numbers for display')
   assert.match(settings, /\.\.\.\(field === 'bank_name' \? \{ account_number: '' \} : \{\}\)/, 'changing bank should clear a stale account number format')
 })

@@ -1035,9 +1035,7 @@ export default function ChatRoomPage() {
               <div className="chat-guide-line">
                 <span className="chat-guide-icon">📞</span>
                 <p>
-                  방장과 멤버들은 서로 전화번호가 노출될 수 있어요.
-                  <br />
-                  지각, 노쇼, 출발 위치 확인 등 동행 목적에만 사용해주세요.
+                  방장과 멤버들은 서로 전화번호가 노출될 수 있어요. 지각, 노쇼, 출발 위치 확인 등 동행 목적에만 사용해주세요.
                 </p>
               </div>
             </div>
@@ -1101,9 +1099,7 @@ export default function ChatRoomPage() {
               <div className="chat-guide-line">
                 <span className="chat-guide-icon">📞</span>
                 <p>
-                  방장과 멤버들은 서로 전화번호가 노출될 수 있어요.
-                  <br />
-                  지각, 노쇼, 출발 위치 확인 등 동행 목적에만 사용해주세요.
+                  방장과 멤버들은 서로 전화번호가 노출될 수 있어요. 지각, 노쇼, 출발 위치 확인 등 동행 목적에만 사용해주세요.
                 </p>
               </div>
             </div>

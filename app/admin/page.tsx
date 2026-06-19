@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, CheckCircle, Flag, MessageCircle, RefreshCw, Search, Shield, Users } from 'lucide-react'
+import { AlertTriangle, CheckCircle, Eye, Flag, MessageCircle, RefreshCw, Search, Shield, Users } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 
@@ -283,21 +283,33 @@ export default function AdminPage() {
               <h2 className="text-base font-black">최근 개설 방</h2>
               <div className="mt-3 space-y-2">
                 {dashboard.rooms.slice(0, 5).map((room) => (
-                  <button
+                  <div
                     key={room.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedRoomId(room.id)
-                      setActiveTab('messages')
-                      loadDashboard(room.id)
-                    }}
-                    className="block w-full rounded-lg bg-gray-50 px-3 py-2 text-left text-sm hover:bg-gray-100"
+                    className="rounded-lg bg-gray-50 px-3 py-2 text-sm"
                   >
-                    <p className="font-black text-gray-950">{room.title}</p>
-                    <p className="text-xs font-semibold text-gray-500">
-                      {room.participants?.length ?? 0}/{room.max_participants}명 · {room.creator?.nickname ?? '개설자 미상'}
-                    </p>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedRoomId(room.id)
+                        setActiveTab('messages')
+                        loadDashboard(room.id)
+                      }}
+                      className="block w-full text-left hover:text-primary-700"
+                    >
+                      <p className="font-black text-gray-950">{room.title}</p>
+                      <p className="text-xs font-semibold text-gray-500">
+                        {room.participants?.length ?? 0}/{room.max_participants}명 · {room.creator?.nickname ?? '개설자 미상'}
+                      </p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/admin/rooms/${room.id}`)}
+                      className="mt-2 inline-flex h-8 items-center gap-1.5 rounded-md bg-gray-950 px-2.5 text-xs font-black text-white transition hover:bg-gray-800"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      채팅방 UI로 모니터링
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
@@ -433,17 +445,27 @@ export default function AdminPage() {
                 </div>
                 <div className="mt-3 flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm font-black">
                   <span>참여자 {room.participants?.length ?? 0}/{room.max_participants}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedRoomId(room.id)
-                      setActiveTab('messages')
-                      loadDashboard(room.id)
-                    }}
-                    className="text-primary-600"
-                  >
-                    대화 보기
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedRoomId(room.id)
+                        setActiveTab('messages')
+                        loadDashboard(room.id)
+                      }}
+                      className="text-primary-600"
+                    >
+                      대화 보기
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/admin/rooms/${room.id}`)}
+                      className="inline-flex items-center gap-1 text-gray-950"
+                    >
+                      <Eye className="h-4 w-4" />
+                      모니터링
+                    </button>
+                  </div>
                 </div>
               </article>
             ))}
@@ -480,6 +502,16 @@ export default function AdminPage() {
             )}
             {dashboard.messages.length > 0 && (
               <div className="max-h-[60vh] space-y-3 overflow-y-auto rounded-lg bg-gray-50 p-3">
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => selectedRoomId && router.push(`/admin/rooms/${selectedRoomId}`)}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-gray-950 px-3 text-xs font-black text-white transition hover:bg-gray-800"
+                  >
+                    <Eye className="h-4 w-4" />
+                    실제 채팅방 UI로 보기
+                  </button>
+                </div>
                 {dashboard.messages.map((message) => (
                   <div key={message.id} className="rounded-lg bg-white px-3 py-2">
                     <div className="flex items-center justify-between gap-2">

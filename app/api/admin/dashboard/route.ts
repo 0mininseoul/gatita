@@ -155,11 +155,37 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: '관리자 데이터를 불러오지 못했습니다' }, { status: 500 })
   }
 
+  const creatorIds = Array.from(new Set(
+    (roomsResult.data ?? [])
+      .map((room) => room.created_by)
+      .filter((creatorId): creatorId is string => typeof creatorId === 'string' && creatorId.length > 0),
+  ))
+  const payoutAccountsByUserId = new Map<string, unknown>()
+
+  if (creatorIds.length > 0) {
+    const { data: payoutAccounts, error: payoutError } = await admin
+      .from('user_payout_accounts')
+      .select('user_id, bank_name, account_number, account_holder, created_at, updated_at')
+      .in('user_id', creatorIds)
+
+    if (payoutError) {
+      console.error('Admin payout account load error:', payoutError)
+      return NextResponse.json({ error: '방장 계좌 정보를 불러오지 못했습니다' }, { status: 500 })
+    }
+
+    payoutAccounts?.forEach((account) => {
+      payoutAccountsByUserId.set(account.user_id, account)
+    })
+  }
+
   return NextResponse.json({
     adminUser: profile,
     users: usersResult.data ?? [],
     reports: reportsResult.data ?? [],
-    rooms: roomsResult.data ?? [],
+    rooms: (roomsResult.data ?? []).map((room) => ({
+      ...room,
+      creatorPayoutAccount: payoutAccountsByUserId.get(room.created_by) ?? null,
+    })),
     messages: messagesResult.data ?? [],
   })
 }

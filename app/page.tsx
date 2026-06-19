@@ -21,7 +21,7 @@ import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
 import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, extractGachonProfileFromMetadata, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
 import { isInstalled } from '@/lib/pwa'
 import { identifyAnalyticsUser, shouldSuppressAnalyticsForUser, suppressAnalyticsForCurrentDevice, trackEvent } from '@/lib/analytics/client'
-import { AlertTriangle, ArrowRight, Ban, Clock, MessageSquareText, Share2, Star, Settings, LogOut, Users, X } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Ban, Clock, MessageSquareText, Share2, Star, Settings, Users, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import CampusRouteMap, { CampusMapRoom } from '@/components/CampusRouteMap'
@@ -991,26 +991,6 @@ export default function HomePage() {
     }
   }
 
-  const handleLogout = async () => {
-    if (!supabase) return
-
-    try {
-      await supabase.auth.signOut()
-      setUser(null)
-      setHasAuthenticatedSession(false)
-      setPendingProfileEmail('')
-      setPendingProfileName('')
-      setShowProfileRequiredModal(false)
-      setModerationStatus(null)
-      setModerationModal(null)
-      identifyAnalyticsUser(null)
-      router.push('/')
-      toast.success('로그아웃되었습니다')
-    } catch (error) {
-      toast.error('로그아웃 중 오류가 발생했습니다')
-    }
-  }
-
   const handleGoogleStart = async () => {
     if (!supabase) {
       toast.error('인증 설정을 불러오지 못했습니다')
@@ -1682,14 +1662,6 @@ export default function HomePage() {
                 <Star className="h-5 w-5" />
               </button>
             )}
-            <button
-              type="button"
-              aria-label="로그아웃"
-              onClick={handleLogout}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition hover:bg-gray-100 hover:text-gray-950"
-            >
-              <LogOut className="h-5 w-5" />
-            </button>
           </div>
         </div>
       </header>

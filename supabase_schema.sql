@@ -24,6 +24,9 @@ create table public.users (
   nickname_updated_at timestamp with time zone,
   department varchar(100) not null,
   status varchar(20) default 'active' check (status in ('active', 'suspended')),
+  suspended_until timestamp with time zone,
+  suspension_reason text,
+  moderation_updated_at timestamp with time zone,
   is_admin boolean default false,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
@@ -83,6 +86,22 @@ create table public.reports (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
+-- User moderation actions table
+create table public.user_moderation_actions (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references public.users(id) on delete cascade not null,
+  admin_id uuid references public.users(id) on delete set null,
+  report_id uuid references public.reports(id) on delete set null,
+  action varchar(30) not null check (
+    action in ('warning', 'suspend_7d', 'suspend_30d', 'suspend_permanent', 'release')
+  ),
+  reason text,
+  previous_status varchar(20),
+  next_status varchar(20),
+  suspended_until timestamp with time zone,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
 -- Favorites table
 create table public.favorites (
   id uuid default uuid_generate_v4() primary key,
@@ -100,6 +119,7 @@ alter table public.chat_rooms enable row level security;
 alter table public.room_participants enable row level security;
 alter table public.messages enable row level security;
 alter table public.reports enable row level security;
+alter table public.user_moderation_actions enable row level security;
 alter table public.favorites enable row level security;
 
 -- Explicit Data API grants
@@ -112,6 +132,7 @@ grant select, insert, update, delete on table public.chat_rooms to authenticated
 grant select, insert, update, delete on table public.room_participants to authenticated;
 grant select, insert on table public.messages to authenticated;
 grant select, insert, update on table public.reports to authenticated;
+grant select, insert on table public.user_moderation_actions to authenticated;
 grant select, insert, delete on table public.favorites to authenticated;
 
 -- RLS Policies
@@ -202,6 +223,31 @@ create policy "Admins can update reports" on public.reports for update using (
   )
 );
 
+-- User moderation actions: admins can read and insert operational actions
+create policy "Admins can read moderation actions"
+  on public.user_moderation_actions
+  for select
+  using (
+    exists (
+      select 1 from public.users
+      where id = auth.uid()
+        and is_admin = true
+        and status = 'active'
+    )
+  );
+
+create policy "Admins can insert moderation actions"
+  on public.user_moderation_actions
+  for insert
+  with check (
+    exists (
+      select 1 from public.users
+      where id = auth.uid()
+        and is_admin = true
+        and status = 'active'
+    )
+  );
+
 -- Favorites: Users can manage their own favorites
 create policy "Users can manage own favorites" on public.favorites for all using (auth.uid() = user_id);
 
@@ -278,6 +324,9 @@ create index messages_room_id_created_at_idx on public.messages (room_id, create
 create index reports_reporter_id_idx on public.reports (reporter_id);
 create index reports_reported_id_idx on public.reports (reported_id);
 create index reports_status_idx on public.reports (status);
+create index user_moderation_actions_user_id_idx on public.user_moderation_actions (user_id, created_at desc);
+create index user_moderation_actions_report_id_idx on public.user_moderation_actions (report_id);
+create index user_moderation_actions_created_at_idx on public.user_moderation_actions (created_at desc);
 create index favorites_user_id_idx on public.favorites (user_id);
 
 -- Supabase Realtime publication for live chat and participant membership updates

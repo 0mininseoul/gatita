@@ -1,9 +1,19 @@
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { withAxiomRoute } from '@/lib/axiom/server'
 import { isRoomJoinable } from '@/lib/supabase'
 import { createClient } from '@/lib/supabase/server'
 
-export async function POST(
+function isMissingModerationColumn(error: { code?: string; message?: string } | null) {
+  if (!error) return false
+  return (
+    error.code === '42703'
+    || error.code === 'PGRST204'
+    || /suspended_until|suspension_reason|moderation_updated_at/.test(error.message ?? '')
+  )
+}
+
+async function joinRoom(
   _request: Request,
   { params }: { params: { id: string } },
 ) {
@@ -33,11 +43,21 @@ export async function POST(
     },
   })
 
-  const { data: profile, error: profileError } = await admin
+  let profileResult = await admin
     .from('users')
-    .select('id, status')
+    .select('id, status, suspended_until')
     .eq('id', authUser.id)
     .maybeSingle()
+
+  if (profileResult.error && isMissingModerationColumn(profileResult.error)) {
+    profileResult = await admin
+      .from('users')
+      .select('id, status')
+      .eq('id', authUser.id)
+      .maybeSingle()
+  }
+
+  const { data: profile, error: profileError } = profileResult
 
   if (profileError) {
     return NextResponse.json({ error: '프로필을 확인하지 못했습니다' }, { status: 500 })
@@ -48,7 +68,36 @@ export async function POST(
   }
 
   if (profile.status !== 'active') {
-    return NextResponse.json({ error: '서비스 이용이 정지된 계정입니다' }, { status: 403 })
+    const suspendedUntil = 'suspended_until' in profile ? profile.suspended_until : null
+
+    if (suspendedUntil && new Date(suspendedUntil).getTime() <= Date.now()) {
+      const { error: releaseError } = await admin
+        .from('users')
+        .update({
+          status: 'active',
+          suspended_until: null,
+          suspension_reason: null,
+          moderation_updated_at: new Date().toISOString(),
+        })
+        .eq('id', authUser.id)
+
+      if (releaseError && !isMissingModerationColumn(releaseError)) {
+        return NextResponse.json({ error: '프로필을 확인하지 못했습니다' }, { status: 500 })
+      }
+
+      if (releaseError && isMissingModerationColumn(releaseError)) {
+        const { error: fallbackReleaseError } = await admin
+          .from('users')
+          .update({ status: 'active' })
+          .eq('id', authUser.id)
+
+        if (fallbackReleaseError) {
+          return NextResponse.json({ error: '프로필을 확인하지 못했습니다' }, { status: 500 })
+        }
+      }
+    } else {
+      return NextResponse.json({ error: '서비스 이용이 정지된 계정입니다' }, { status: 403 })
+    }
   }
 
   const { data: room, error: roomError } = await admin
@@ -107,3 +156,5 @@ export async function POST(
 
   return NextResponse.json({ ok: true })
 }
+
+export const POST = withAxiomRoute(joinRoom)

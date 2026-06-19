@@ -32,3 +32,5 @@ supabase/.temp/
 # Accidental copied home-directory artifacts
 ~/
 .vercel
+.gstack/
+.env*

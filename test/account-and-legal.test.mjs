@@ -107,6 +107,12 @@ test('admin dashboard is server-authorized and exposes operational review tools'
   assert.match(route, /!profile\?\.is_admin \|\| profile\.status !== 'active'/)
   assert.match(route, /type:\s*'user-status'/)
   assert.match(route, /type:\s*'report-status'/)
+  assert.match(route, /type:\s*'moderation-action'/)
+  assert.match(route, /user_moderation_actions/)
+  assert.match(route, /suspend_7d/)
+  assert.match(route, /suspend_30d/)
+  assert.match(route, /suspend_permanent/)
+  assert.match(route, /release/)
   assert.match(route, /\.from\('reports'\)/)
   assert.match(route, /\.from\('chat_rooms'\)/)
   assert.match(route, /\.from\('messages'\)/)
@@ -121,7 +127,16 @@ test('admin dashboard is server-authorized and exposes operational review tools'
   assert.match(page, /LOCATIONS\[room\.from_location\]/)
   assert.match(page, /roomDateFilter/)
   assert.match(page, /type="date"/)
+  assert.match(page, /roomsByDeparture/)
+  assert.match(page, /departure_date.*departure_time/s)
   assert.match(page, /filteredRooms/)
+  assert.match(page, /MODERATION_ACTIONS/)
+  assert.match(page, /경고/)
+  assert.match(page, /7일 정지/)
+  assert.match(page, /30일 정지/)
+  assert.match(page, /영구 정지/)
+  assert.match(page, /해제/)
+  assert.match(page, /신고 대상 조치/)
   assert.match(page, /setAdminAccessError/)
   assert.match(page, /관리자 접근 권한을 확인해주세요/)
   assert.match(page, /사용자 관리/)
@@ -141,6 +156,26 @@ test('admin dashboard is server-authorized and exposes operational review tools'
   assert.match(monitorPage, /메시지 전송은 비활성화/)
   assert.match(monitorPage, /setInterval\(\(\) => loadMonitor\(true\), 5000\)/)
   assert.doesNotMatch(monitorPage, /\.from\('messages'\)/, 'admin monitor should use the server-authorized dashboard API, not client RLS')
+})
+
+test('admin moderation schema stores action history and timed suspensions', () => {
+  const schema = readProjectFile('supabase_schema.sql')
+  const migration = readProjectFile('supabase/migrations/20260619072246_add_admin_moderation_actions.sql')
+  const joinRoute = readProjectFile('app/api/rooms/[id]/join/route.ts')
+
+  for (const source of [schema, migration]) {
+    assert.match(source, /suspended_until timestamp with time zone/)
+    assert.match(source, /suspension_reason text/)
+    assert.match(source, /moderation_updated_at timestamp with time zone/)
+    assert.match(source, /create table (if not exists )?public\.user_moderation_actions/)
+    assert.match(source, /action in \('warning', 'suspend_7d', 'suspend_30d', 'suspend_permanent', 'release'\)/)
+    assert.match(source, /Admins can read moderation actions/)
+    assert.match(source, /Admins can insert moderation actions/)
+  }
+
+  assert.match(joinRoute, /suspended_until/)
+  assert.match(joinRoute, /isMissingModerationColumn/)
+  assert.match(joinRoute, /서비스 이용이 정지된 계정입니다/)
 })
 
 test('legal pages use a compact system-font document layout', () => {

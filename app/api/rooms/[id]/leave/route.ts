@@ -1,12 +1,13 @@
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { withAxiomRoute } from '@/lib/axiom/server'
 import { createClient } from '@/lib/supabase/server'
 
 type LeaveRoomPayload = {
   nextHostId?: string | null
 }
 
-export async function POST(
+async function leaveRoom(
   request: Request,
   { params }: { params: { id: string } },
 ) {
@@ -119,3 +120,5 @@ export async function POST(
 
   return NextResponse.json({ ok: true })
 }
+
+export const POST = withAxiomRoute(leaveRoom)

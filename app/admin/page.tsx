@@ -8,6 +8,7 @@ import toast from 'react-hot-toast'
 import { LOCATIONS, type LocationType } from '@/lib/supabase'
 
 type TabType = 'overview' | 'reports' | 'users' | 'rooms' | 'messages'
+type ModerationActionType = 'warning' | 'suspend_7d' | 'suspend_30d' | 'suspend_permanent' | 'release'
 
 type AdminUser = {
   id: string
@@ -32,6 +33,9 @@ type ManagedUser = {
 
 type AdminReport = {
   id: string
+  room_id?: string | null
+  reporter_id?: string
+  reported_id?: string
   reason: string
   status: 'pending' | 'reviewed' | 'resolved'
   created_at: string
@@ -88,6 +92,18 @@ const STATUS_LABELS = {
   resolved: '완료',
   closed: '종료',
 }
+
+const MODERATION_ACTIONS: Array<{
+  action: ModerationActionType
+  label: string
+  className: string
+}> = [
+  { action: 'warning', label: '경고', className: 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100' },
+  { action: 'suspend_7d', label: '7일 정지', className: 'border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100' },
+  { action: 'suspend_30d', label: '30일 정지', className: 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100' },
+  { action: 'suspend_permanent', label: '영구 정지', className: 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100' },
+  { action: 'release', label: '해제', className: 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' },
+]
 
 function statusClass(status: string) {
   if (status === 'active' || status === 'resolved') return 'bg-emerald-50 text-emerald-700 ring-emerald-100'
@@ -205,6 +221,24 @@ export default function AdminPage() {
     }
   }
 
+  const runModerationAction = (
+    userId: string,
+    action: ModerationActionType,
+    reportId?: string | null,
+    reason?: string,
+  ) => {
+    const payload: Record<string, string> = {
+      type: 'moderation-action',
+      userId,
+      action,
+    }
+
+    if (reportId) payload.reportId = reportId
+    if (reason?.trim()) payload.reason = reason.trim()
+
+    return runAdminAction(payload)
+  }
+
   const filteredUsers = useMemo(() => {
     const keyword = searchTerm.trim().toLowerCase()
     if (!dashboard || !keyword) return dashboard?.users ?? []
@@ -224,11 +258,17 @@ export default function AdminPage() {
     const dates = Array.from(new Set((dashboard?.rooms ?? []).map((room) => room.departure_date)))
     return dates.sort((a, b) => b.localeCompare(a))
   }, [dashboard?.rooms])
+  const roomsByDeparture = useMemo(() => {
+    return [...(dashboard?.rooms ?? [])].sort((a, b) => {
+      const aStart = `${a.departure_date}T${a.departure_time}`
+      const bStart = `${b.departure_date}T${b.departure_time}`
+      return aStart.localeCompare(bStart) || a.created_at.localeCompare(b.created_at)
+    })
+  }, [dashboard?.rooms])
   const filteredRooms = useMemo(() => {
-    if (!dashboard) return []
-    if (!roomDateFilter) return dashboard.rooms
-    return dashboard.rooms.filter((room) => room.departure_date === roomDateFilter)
-  }, [dashboard, roomDateFilter])
+    if (!roomDateFilter) return roomsByDeparture
+    return roomsByDeparture.filter((room) => room.departure_date === roomDateFilter)
+  }, [roomDateFilter, roomsByDeparture])
 
   if (loading && !dashboard) {
     return (
@@ -410,6 +450,24 @@ export default function AdminPage() {
                   </div>
                 </div>
                 <p className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700">{report.reason}</p>
+                {report.reported_id && (
+                  <div className="mt-3 rounded-lg border border-gray-100 bg-white px-3 py-3">
+                    <p className="text-xs font-black text-gray-500">신고 대상 조치</p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {MODERATION_ACTIONS.map((action) => (
+                        <button
+                          key={action.action}
+                          type="button"
+                          disabled={isMutating}
+                          onClick={() => runModerationAction(report.reported_id!, action.action, report.id, report.reason)}
+                          className={`rounded-md border px-2.5 py-1.5 text-xs font-black transition disabled:opacity-40 ${action.className}`}
+                        >
+                          {action.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </article>
             ))}
           </section>
@@ -461,18 +519,19 @@ export default function AdminPage() {
                         {format(new Date(managedUser.created_at), 'yyyy-MM-dd')}
                       </td>
                       <td className="px-3 py-3">
-                        <button
-                          type="button"
-                          disabled={isMutating || managedUser.is_admin}
-                          onClick={() => runAdminAction({
-                            type: 'user-status',
-                            userId: managedUser.id,
-                            status: managedUser.status === 'active' ? 'suspended' : 'active',
-                          })}
-                          className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-black text-gray-700 disabled:opacity-40"
-                        >
-                          {managedUser.status === 'active' ? '정지' : '해제'}
-                        </button>
+                        <div className="flex max-w-[260px] flex-wrap gap-1.5">
+                          {MODERATION_ACTIONS.map((action) => (
+                            <button
+                              key={action.action}
+                              type="button"
+                              disabled={isMutating || managedUser.is_admin}
+                              onClick={() => runModerationAction(managedUser.id, action.action)}
+                              className={`rounded-md border px-2 py-1.5 text-xs font-black transition disabled:opacity-40 ${action.className}`}
+                            >
+                              {action.label}
+                            </button>
+                          ))}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -579,7 +638,7 @@ export default function AdminPage() {
                 className="h-10 max-w-full rounded-lg border border-gray-200 bg-white px-3 text-sm font-bold text-gray-950"
               >
                 <option value="">채팅방 선택</option>
-                {dashboard.rooms.map((room) => (
+                {roomsByDeparture.map((room) => (
                   <option key={room.id} value={room.id}>{formatAdminRoomTitle(room)}</option>
                 ))}
               </select>

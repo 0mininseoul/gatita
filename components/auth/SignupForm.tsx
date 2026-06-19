@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase'
 import { NON_GACHON_ACCOUNT_MESSAGE, extractGachonProfileFromMetadata, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
 import { getBankOption, isAccountNumberCompleteForBank } from '@/lib/banks'
 import { AccountNumberSegmentField, BankSelectField } from '@/components/BankAccountFields'
+import { identifyAnalyticsUser, trackEvent } from '@/lib/analytics/client'
 import { ChevronDown, AlertCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -140,6 +141,10 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
 
   const handleGoogleLogin = async () => {
     setIsLoading(true)
+    trackEvent('login_started', {
+      method: 'google',
+      source: 'profile_setup',
+    })
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -148,6 +153,10 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
       if (error) throw error
     } catch (error: any) {
       console.error('Google login error:', error)
+      trackEvent('login_failed', {
+        method: 'google',
+        source: 'profile_setup',
+      })
       toast.error('구글 로그인 중 오류가 발생했습니다')
       setIsLoading(false)
     }
@@ -220,6 +229,10 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
     }
 
     setErrors({})
+    trackEvent('profile_setup_step_completed', {
+      step_id: currentStepData.id,
+      step_index: currentStep,
+    })
 
     if (isLastStep) {
       await handleSignup()
@@ -283,9 +296,21 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
       }
 
       toast.success('회원가입이 완료되었습니다!')
+      identifyAnalyticsUser(userId, {
+        profile_completed: true,
+        account_status: 'active',
+        is_admin: false,
+        department: formData.department || '학과 미확인',
+      })
+      trackEvent('profile_completed', {
+        department: formData.department || '학과 미확인',
+      })
       onSuccess()
     } catch (error: any) {
       console.error('Signup error:', error)
+      trackEvent('profile_completion_failed', {
+        step_id: currentStepData?.id,
+      })
       toast.error(error.message || '회원가입 중 오류가 발생했습니다')
     } finally {
       setIsLoading(false)

@@ -13,6 +13,7 @@ import {
   LOCATIONS,
   LocationType,
 } from '@/lib/supabase'
+import { trackEvent } from '@/lib/analytics/client'
 
 export type CampusMapRoom = {
   id: string
@@ -526,7 +527,13 @@ export default function CampusRouteMap({
 
               <button
                 type="button"
-                onClick={() => setIsCreateMode(true)}
+                onClick={() => {
+                  setIsCreateMode(true)
+                  trackEvent('room_create_form_opened', {
+                    from_location: selectedFrom,
+                    source: 'map_bottom_sheet',
+                  })
+                }}
                 className={`${isCreateMode ? 'hidden' : 'mt-3 inline-flex'} w-full items-center justify-center rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-black text-white transition hover:bg-primary-700`}
               >
                 <Plus className="mr-2 h-4 w-4" />

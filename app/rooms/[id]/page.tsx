@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { ChatRoom, User, Message, RoomParticipant, PayoutAccount, LOCATIONS } from '@/lib/supabase'
 import { formatAccountNumberForBank } from '@/lib/banks'
+import { identifyAnalyticsUser, trackEvent } from '@/lib/analytics/client'
 import { ArrowLeft, Users, Clock, Send, Flag, X, LogOut, Phone, CreditCard, Copy } from 'lucide-react'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
@@ -75,6 +76,7 @@ export default function ChatRoomPage() {
   })
   const supabase = useMemo(() => createClient(), [])
   const roomSyncChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const trackedRoomOpenRef = useRef<string | null>(null)
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     const scroller = messagesScrollRef.current
@@ -445,6 +447,12 @@ export default function ChatRoomPage() {
       }
 
       setUser(userData)
+      identifyAnalyticsUser(userData.id, {
+        profile_completed: true,
+        is_admin: userData.is_admin,
+        account_status: userData.status,
+        department: userData.department,
+      })
       await Promise.all([
         loadRoom(),
         loadMessages(),
@@ -553,6 +561,24 @@ export default function ChatRoomPage() {
 
   useEffect(() => {
     if (loading || !room || !user) return
+    const trackingKey = `${roomId}:${user.id}`
+    if (trackedRoomOpenRef.current === trackingKey) return
+
+    trackedRoomOpenRef.current = trackingKey
+
+    trackEvent('chat_room_opened', {
+      room_id: roomId,
+      from_location: room.from_location,
+      to_location: room.to_location,
+      departure_date: room.departure_date,
+      departure_time: room.departure_time,
+      is_creator: room.created_by === user.id,
+      is_participant: isParticipant,
+    })
+  }, [isParticipant, loading, room, roomId, user])
+
+  useEffect(() => {
+    if (loading || !room || !user) return
     if (room.created_by !== user.id) return
     if (!hostAppearanceLoaded) return
     if (hostAppearance.trim()) {
@@ -613,6 +639,11 @@ export default function ChatRoomPage() {
       // 서버에서 실제 메시지 다시 로드
       await loadMessages()
       await broadcastRoomSync('message')
+      trackEvent('chat_message_sent', {
+        room_id: roomId,
+        message_length: tempMessage.content.length,
+        is_creator: isRoomCreator,
+      })
     } catch (error) {
       // 오류 시 임시 메시지 제거하고 입력창에 다시 표시
       setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id))
@@ -639,6 +670,10 @@ export default function ChatRoomPage() {
       setIsConfirmed(true)
       await loadParticipants()
       await broadcastRoomSync('participants')
+      trackEvent('participant_confirmed', {
+        room_id: roomId,
+        is_creator: isRoomCreator,
+      })
       toast.success('참여 확정되었습니다', { id: 'confirm-participation' })
     } catch (error) {
       console.error('Confirm participation error:', error)
@@ -665,6 +700,11 @@ export default function ChatRoomPage() {
 
       toast.success('채팅방을 나갔습니다')
       await broadcastRoomSync('participants')
+      trackEvent('room_left', {
+        room_id: roomId,
+        was_creator: isRoomCreator,
+        transferred_host: Boolean(transferHostId),
+      })
       router.push('/map')
     } catch (error) {
       console.error('Leave room error:', error)
@@ -720,6 +760,9 @@ export default function ChatRoomPage() {
       setShowReportModal(false)
       setReportReason('')
       setReportTarget('')
+      trackEvent('report_submitted', {
+        room_id: roomId,
+      })
       toast.success('신고가 접수되었습니다')
     } catch (error) {
       console.error('Report error:', error)
@@ -738,12 +781,15 @@ export default function ChatRoomPage() {
 
     try {
       await navigator.clipboard.writeText(accountText)
+      trackEvent('payout_account_copied', {
+        room_id: roomId,
+      })
       toast.success('계좌 정보를 복사했습니다')
     } catch (error) {
       console.error('Copy creator payout account error:', error)
       toast.error('계좌 정보를 복사하지 못했습니다')
     }
-  }, [creatorPayoutAccount, formattedCreatorAccountNumber])
+  }, [creatorPayoutAccount, formattedCreatorAccountNumber, roomId])
 
   const handleCallParticipant = useCallback((participant: RoomParticipant) => {
     if (!participant.user?.phone) {
@@ -753,7 +799,11 @@ export default function ChatRoomPage() {
 
     setSelectedCallParticipant(participant)
     setShowCallConsentModal(true)
-  }, [])
+    trackEvent('participant_call_started', {
+      room_id: roomId,
+      has_phone: true,
+    })
+  }, [roomId])
 
   const closeCallConsentModal = useCallback(() => {
     setShowCallConsentModal(false)
@@ -804,6 +854,10 @@ export default function ChatRoomPage() {
       setHostAppearanceDraft('')
       await loadMessages()
       await broadcastRoomSync('host-guide')
+      trackEvent('host_guide_saved', {
+        room_id: roomId,
+        appearance_length: hostAppearanceDraft.trim().length,
+      })
       toast.success('방장 안내가 저장되었습니다')
     } catch (error) {
       console.error('Save host guide error:', error)

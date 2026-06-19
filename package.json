@@ -10,6 +10,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@amplitude/analytics-browser": "^2.44.1",
     "@axiomhq/js": "^1.7.0",
     "@axiomhq/logging": "^0.2.2",
     "@supabase/ssr": "^0.7.0",

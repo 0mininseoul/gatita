@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase'
 import { PayoutAccount, User } from '@/lib/supabase'
 import { isAccountNumberCompleteForBank } from '@/lib/banks'
 import { AccountNumberSegmentField, BankSelectField } from '@/components/BankAccountFields'
+import { identifyAnalyticsUser, trackEvent } from '@/lib/analytics/client'
 import { ArrowLeft, User as UserIcon, AlertCircle, Bug, Check, Mail, Trash2, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -59,6 +60,12 @@ export default function SettingsPage() {
       
       if (userData) {
         setUser(userData)
+        identifyAnalyticsUser(userData.id, {
+          profile_completed: true,
+          is_admin: userData.is_admin,
+          account_status: userData.status,
+          department: userData.department,
+        })
         setNewNickname(userData.nickname)
 
         const { data: payoutData } = await supabase
@@ -162,6 +169,9 @@ export default function SettingsPage() {
       } : null)
 
       setIsEditing(false)
+      trackEvent('profile_updated', {
+        field: 'nickname',
+      })
       toast.success('닉네임이 변경되었습니다')
     } catch (error) {
       console.error('Nickname change error:', error)
@@ -220,6 +230,9 @@ export default function SettingsPage() {
         account_number: data.account_number,
         account_holder: data.account_holder,
       })
+      trackEvent('payout_account_updated', {
+        bank_name: data.bank_name,
+      })
       toast.success('계좌 정보가 저장되었습니다')
     } catch (error) {
       console.error('Payout account save error:', error)
@@ -232,6 +245,10 @@ export default function SettingsPage() {
   const handleLogout = async () => {
     try {
       await supabase.auth.signOut()
+      identifyAnalyticsUser(null)
+      trackEvent('logout_completed', {
+        source: 'settings',
+      })
       router.push('/')
       toast.success('로그아웃되었습니다')
     } catch (error) {
@@ -251,6 +268,9 @@ export default function SettingsPage() {
     if (deleteConfirmText.trim() !== DELETE_CONFIRMATION_TEXT || !deleteAcknowledged) return
 
     setIsDeleting(true)
+    trackEvent('account_delete_submitted', {
+      source: 'settings',
+    })
 
     try {
       const response = await fetch('/api/account/delete', {
@@ -267,6 +287,10 @@ export default function SettingsPage() {
       }
 
       await supabase.auth.signOut()
+      identifyAnalyticsUser(null)
+      trackEvent('account_deleted', {
+        source: 'settings',
+      })
       toast.success('계정이 탈퇴 처리되었습니다')
       router.push('/')
     } catch (error) {

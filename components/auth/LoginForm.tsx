@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { getGoogleOAuthOptions } from '@/lib/auth'
+import { trackEvent } from '@/lib/analytics/client'
 import { ChevronLeft } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -18,6 +19,10 @@ export default function LoginForm({ onBackToLanding, onStartSignup }: LoginFormP
 
   const handleGoogleLogin = async () => {
     setIsLoading(true)
+    trackEvent('login_started', {
+      method: 'google',
+      source: 'login_form',
+    })
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -26,6 +31,10 @@ export default function LoginForm({ onBackToLanding, onStartSignup }: LoginFormP
       if (error) throw error
     } catch (error: any) {
       console.error('Google login error:', error)
+      trackEvent('login_failed', {
+        method: 'google',
+        source: 'login_form',
+      })
       toast.error('구글 로그인 중 오류가 발생했습니다')
       setIsLoading(false)
     }

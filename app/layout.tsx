@@ -2,6 +2,7 @@ import './globals.css'
 import localFont from 'next/font/local'
 import { Toaster } from 'react-hot-toast'
 import { Metadata, Viewport } from 'next'
+import AnalyticsProvider from '@/components/AnalyticsProvider'
 
 const paperlogy = localFont({
   src: [
@@ -144,6 +145,7 @@ export default function RootLayout({
         <div id="root" className="min-h-screen app-bg">
           {children}
         </div>
+        <AnalyticsProvider />
         <Toaster
           position="top-center"
           toastOptions={{

@@ -19,6 +19,7 @@ import {
 import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
 import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, extractGachonProfileFromMetadata, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
 import { isInstalled } from '@/lib/pwa'
+import { identifyAnalyticsUser, trackEvent } from '@/lib/analytics/client'
 import { ArrowRight, Clock, MessageSquareText, Share2, Star, Settings, LogOut, Users, X } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -95,6 +96,9 @@ export default function HomePage() {
   const showAuthError = useCallback((message: string) => {
     const now = Date.now()
     setAuthNotice(message)
+    trackEvent('auth_error_shown', {
+      reason: message,
+    })
 
     if (now - lastAuthErrorAtRef.current > 1500) {
       toast.error(message)
@@ -272,11 +276,26 @@ export default function HomePage() {
         if (userData) {
           setAuthNotice(null)
           setUser(userData)
+          identifyAnalyticsUser(userData.id, {
+            profile_completed: true,
+            is_admin: userData.is_admin,
+            account_status: userData.status,
+            department: userData.department,
+          })
+          trackEvent('auth_session_loaded', {
+            profile_completed: true,
+          })
           await loadMapRooms()
           enterMap()
         } else {
           setUser(null)
           setAuthMode(null)
+          identifyAnalyticsUser(session.user.id, {
+            profile_completed: false,
+          })
+          trackEvent('auth_session_loaded', {
+            profile_completed: false,
+          })
           await loadMapRooms()
           enterMap()
         }
@@ -285,12 +304,14 @@ export default function HomePage() {
         setPendingProfileEmail('')
         setPendingProfileName('')
         setUser(null)
+        identifyAnalyticsUser(null)
         router.replace('/')
       } else {
         setHasAuthenticatedSession(false)
         setPendingProfileEmail('')
         setPendingProfileName('')
         setUser(null)
+        identifyAnalyticsUser(null)
       }
     } catch (error) {
       console.error('Auth check error:', error)
@@ -547,11 +568,21 @@ export default function HomePage() {
 
     if (from === to) {
       toast.error('출발지와 도착지가 같을 수 없습니다')
+      trackEvent('route_validation_failed', {
+        reason: 'same_location',
+        from_location: from,
+        to_location: to,
+      })
       return false
     }
 
     if (isRestrictedRoutePair(from, to)) {
       toast.error(ROUTE_TOO_CLOSE_MESSAGE)
+      trackEvent('route_validation_failed', {
+        reason: 'too_close',
+        from_location: from,
+        to_location: to,
+      })
       return false
     }
 
@@ -565,6 +596,11 @@ export default function HomePage() {
     }
 
     setFromLocation(location)
+    if (location) {
+      trackEvent('fixed_point_selected', {
+        from_location: location,
+      })
+    }
   }
 
   const handleCreateMapRoom = async ({
@@ -592,6 +628,12 @@ export default function HomePage() {
       return
     }
 
+    trackEvent('room_create_started', {
+      from_location: roomFromLocation,
+      to_location: roomToLocation,
+      departure_time: departureTime,
+      source: 'map_bottom_sheet',
+    })
     setIsCreatingMapRoom(true)
 
     try {
@@ -633,9 +675,22 @@ export default function HomePage() {
       }
 
       toast.success('채팅방이 생성되었습니다!')
+      trackEvent('room_created', {
+        room_id: room.id,
+        from_location: roomFromLocation,
+        to_location: roomToLocation,
+        departure_date: departureDate,
+        departure_time: departureTime,
+        source: 'map_bottom_sheet',
+      })
       router.push(`/rooms/${room.id}`)
     } catch (error) {
       console.error('Create map room error:', error)
+      trackEvent('room_create_failed', {
+        from_location: roomFromLocation,
+        to_location: roomToLocation,
+        departure_time: departureTime,
+      })
       toast.error('채팅방 생성 중 오류가 발생했습니다')
     } finally {
       setIsCreatingMapRoom(false)
@@ -688,19 +743,43 @@ export default function HomePage() {
 
       if (!isRoomJoinable(room.departure_date, room.departure_time)) {
         toast.error('이미 지난 출발 시간입니다')
+        trackEvent('room_join_blocked', {
+          room_id: roomId,
+          reason: 'past_departure',
+          from_location: room.from_location,
+          to_location: room.to_location,
+        })
         return
       }
 
       if (room.participants?.some((participant) => participant.user_id === user.id)) {
+        trackEvent('room_reopened', {
+          room_id: roomId,
+          source: 'map_bottom_sheet',
+        })
         router.push(`/rooms/${roomId}`)
         return
       }
 
       if ((room.participants?.length ?? 0) >= room.max_participants) {
         toast.error('채팅방이 가득 찼습니다')
+        trackEvent('room_join_blocked', {
+          room_id: roomId,
+          reason: 'full',
+          from_location: room.from_location,
+          to_location: room.to_location,
+        })
         return
       }
 
+      trackEvent('room_join_started', {
+        room_id: roomId,
+        from_location: room.from_location,
+        to_location: room.to_location,
+        departure_date: room.departure_date,
+        departure_time: room.departure_time,
+        source: 'map_bottom_sheet',
+      })
       const response = await fetch(`/api/rooms/${roomId}/join`, {
         method: 'POST',
       })
@@ -711,9 +790,21 @@ export default function HomePage() {
       }
 
       await broadcastRoomSync(roomId, 'participants')
+      trackEvent('room_joined', {
+        room_id: roomId,
+        from_location: room.from_location,
+        to_location: room.to_location,
+        departure_date: room.departure_date,
+        departure_time: room.departure_time,
+        source: 'map_bottom_sheet',
+      })
       router.push(`/rooms/${roomId}`)
     } catch (error) {
       console.error('Join map room error:', error)
+      trackEvent('room_join_failed', {
+        room_id: roomId,
+        source: 'map_bottom_sheet',
+      })
       toast.error(error instanceof Error ? error.message : '채팅방 참여 중 오류가 발생했습니다')
     }
   }
@@ -728,6 +819,7 @@ export default function HomePage() {
       setPendingProfileEmail('')
       setPendingProfileName('')
       setShowProfileRequiredModal(false)
+      identifyAnalyticsUser(null)
       router.push('/')
       toast.success('로그아웃되었습니다')
     } catch (error) {
@@ -743,6 +835,9 @@ export default function HomePage() {
 
     setAuthNotice(null)
     setIsStartingGoogle(true)
+    trackEvent('login_started', {
+      method: 'google',
+    })
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -769,6 +864,9 @@ export default function HomePage() {
 
     setIsStartingTestLogin(true)
     setAuthNotice(null)
+    trackEvent('login_started', {
+      method: 'password_test',
+    })
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -800,17 +898,34 @@ export default function HomePage() {
         setHasEnteredApp(true)
         router.push('/map')
         await loadMapRooms()
+        trackEvent('login_succeeded', {
+          method: 'password_test',
+          profile_completed: false,
+        })
         toast.success('지도에서 프로필을 완료해주세요')
         return
       }
 
       setUser(userData)
+      identifyAnalyticsUser(userData.id, {
+        profile_completed: true,
+        is_admin: userData.is_admin,
+        account_status: userData.status,
+        department: userData.department,
+      })
       setAuthMode(null)
       setHasEnteredApp(true)
       router.push('/map')
+      trackEvent('login_succeeded', {
+        method: 'password_test',
+        profile_completed: true,
+      })
       toast.success('테스트 계정으로 로그인했습니다')
     } catch (error) {
       console.error('Test login error:', error)
+      trackEvent('login_failed', {
+        method: 'password_test',
+      })
       toast.error('테스트 로그인에 실패했습니다')
     } finally {
       setIsStartingTestLogin(false)
@@ -819,6 +934,10 @@ export default function HomePage() {
 
   const handleEnterApp = () => {
     setHasEnteredApp(true)
+    trackEvent('map_opened', {
+      source: 'landing_cta',
+      profile_completed: Boolean(user),
+    })
     router.push('/map')
   }
 
@@ -829,11 +948,17 @@ export default function HomePage() {
     }
 
     setShowMyRooms(true)
+    trackEvent('my_rooms_opened', {
+      source: 'map_header',
+    })
     loadMyRooms()
   }
 
   const openProfileSetup = () => {
     setShowProfileRequiredModal(false)
+    trackEvent('profile_setup_started', {
+      source: 'profile_required_modal',
+    })
     setAuthMode('signup')
   }
 

@@ -198,6 +198,33 @@ test('map room loading keeps only rooms within the visible map window', () => {
   assert.doesNotMatch(loadBlock, /departure_time\s*>=/, 'same-day room loading should not use fragile string comparisons')
 })
 
+test('room join capacity trigger can lock active rooms without granting participant room edits', () => {
+  const schema = readProjectFile('supabase_schema.sql')
+  const migration = readProjectFile('supabase/migrations/20260619022643_allow_room_capacity_lock_for_join.sql')
+
+  assert.match(schema, /Authenticated users can lock active rooms for capacity checks/)
+  assert.match(schema, /using \(status = 'active'\)/)
+  assert.match(schema, /with check \(false\)/)
+  assert.match(migration, /for update\s+to authenticated/i)
+  assert.match(migration, /with check \(false\)/i)
+})
+
+test('room joins go through a server route that verifies the session and uses the service role safely', () => {
+  const mapSource = readProjectFile('app/page.tsx')
+  const roomsSource = readProjectFile('app/rooms/page.tsx')
+  const routeSource = readProjectFile('app/api/rooms/[id]/join/route.ts')
+
+  assert.match(mapSource, /fetch\(`\/api\/rooms\/\$\{roomId\}\/join`,\s*\{\s*method:\s*'POST'/)
+  assert.match(roomsSource, /fetch\(`\/api\/rooms\/\$\{roomId\}\/join`,\s*\{\s*method:\s*'POST'/)
+  assert.match(routeSource, /SUPABASE_SERVICE_ROLE_KEY/)
+  assert.match(routeSource, /auth\.getUser\(\)/)
+  assert.match(routeSource, /\.from\('users'\)[\s\S]*\.eq\('id', authUser\.id\)/)
+  assert.match(routeSource, /profile\.status !== 'active'/)
+  assert.match(routeSource, /isRoomJoinable\(room\.departure_date, room\.departure_time\)/)
+  assert.match(routeSource, /currentParticipants\.length >= room\.max_participants/)
+  assert.match(routeSource, /\.from\('room_participants'\)[\s\S]*\.insert\(/)
+})
+
 test('room visibility and joinability follow departure time rules', () => {
   assert.equal(isRoomJoinable('2026-06-19', '12:00', new Date('2026-06-19T11:59:00+09:00')), true)
   assert.equal(isRoomJoinable('2026-06-19', '12:00', new Date('2026-06-19T12:00:00+09:00')), true)

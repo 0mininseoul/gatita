@@ -120,12 +120,17 @@ export const metadata: Metadata = {
     title: '같이타',
     startupImage: iosStartupImages,
   },
+  other: {
+    'color-scheme': 'only light',
+    'supported-color-schemes': 'light',
+  },
 }
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
+  themeColor: '#ffffff',
 }
 
 export default function RootLayout({
@@ -134,7 +139,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="ko" className={paperlogy.variable}>
+    <html lang="ko" className={paperlogy.variable} style={{ colorScheme: 'only light' }}>
       <body className="antialiased">
         <div id="root" className="min-h-screen app-bg">
           {children}

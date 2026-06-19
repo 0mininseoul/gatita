@@ -70,6 +70,51 @@ test('public legal and metadata copy do not expose the owner real name', () => {
   })
 })
 
+test('privacy policy discloses participant phone, payout account, map SDK, and app-based contact', () => {
+  const source = readProjectFile('app/privacy/page.tsx')
+
+  assert.match(source, /휴대전화번호는 지각, 노쇼, 출발 위치 확인 등 동행 목적/)
+  assert.match(source, /계좌정보는 방장이 정산을 진행할 수 있도록/)
+  assert.match(source, /\['Kakao', '캠퍼스 지도 표시를 위한 지도 SDK 제공'/)
+  assert.match(source, /관리자 화면 접근 권한 확인 및 서버 측 권한 검증/)
+  assert.match(source, /설정 화면의 문의하기 또는 버그 제보 버튼/)
+  assert.doesNotMatch(source, /ym5373@gachon\.ac\.kr/)
+})
+
+test('app opts out of browser dark-mode recoloring and keeps a light scheme', () => {
+  const layout = readProjectFile('app/layout.tsx')
+  const css = readProjectFile('app/globals.css')
+
+  assert.match(layout, /'color-scheme': 'only light'/)
+  assert.match(layout, /'supported-color-schemes': 'light'/)
+  assert.match(layout, /style=\{\{ colorScheme: 'only light' \}\}/)
+  assert.match(layout, /themeColor:\s*'#ffffff'/)
+  assert.match(css, /:root\s*\{[\s\S]*color-scheme:\s*only light;/)
+  assert.match(css, /html\s*\{[\s\S]*color-scheme:\s*only light;/)
+  assert.match(css, /body\s*\{[\s\S]*color-scheme:\s*only light;/)
+  assert.match(css, /input,\s*\n\s*textarea,\s*\n\s*select,\s*\n\s*button\s*\{[\s\S]*color-scheme:\s*only light;/)
+  assert.doesNotMatch(css, /color-scheme:\s*light only;/)
+})
+
+test('admin dashboard is server-authorized and exposes operational review tools', () => {
+  const page = readProjectFile('app/admin/page.tsx')
+  const route = readProjectFile('app/api/admin/dashboard/route.ts')
+
+  assert.match(route, /SUPABASE_SERVICE_ROLE_KEY/)
+  assert.match(route, /auth\.getUser\(\)/)
+  assert.match(route, /!profile\?\.is_admin \|\| profile\.status !== 'active'/)
+  assert.match(route, /type:\s*'user-status'/)
+  assert.match(route, /type:\s*'report-status'/)
+  assert.match(route, /\.from\('reports'\)/)
+  assert.match(route, /\.from\('chat_rooms'\)/)
+  assert.match(route, /\.from\('messages'\)/)
+  assert.match(page, /\/api\/admin\/dashboard/)
+  assert.match(page, /관리자 대시보드/)
+  assert.match(page, /사용자 관리/)
+  assert.match(page, /메시지 조회/)
+  assert.match(page, /대기 신고/)
+})
+
 test('legal pages use a compact system-font document layout', () => {
   const shellSource = readProjectFile('components/legal/LegalShell.tsx')
   const cssSource = readProjectFile('app/globals.css')

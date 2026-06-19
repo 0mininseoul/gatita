@@ -156,6 +156,12 @@ create policy "Room creators can transfer active rooms to participants"
         and room_participants.user_id = chat_rooms.created_by
     )
   );
+create policy "Authenticated users can lock active rooms for capacity checks"
+  on public.chat_rooms
+  for update
+  to authenticated
+  using (status = 'active')
+  with check (false);
 create policy "Room creators can delete their rooms" on public.chat_rooms for delete using (auth.uid() = created_by);
 
 -- Room participants: Everyone can read, users can join/leave

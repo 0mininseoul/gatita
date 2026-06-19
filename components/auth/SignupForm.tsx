@@ -459,6 +459,13 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
                     onChange={(v) => handleInputChange(step.id, v)}
                     error={errors[step.id]}
                   />
+                ) : step.id === 'phone' ? (
+                  <PhoneSegmentField
+                    value={formData[step.id] || ''}
+                    onChange={(v) => handleInputChange(step.id, v)}
+                    error={errors[step.id]}
+                    autoFocus={isCurrent}
+                  />
                 ) : (
                   <InputField
                     type={step.type}
@@ -501,6 +508,99 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
           )
         })}
       </div>
+    </div>
+  )
+}
+
+function splitPhoneNumber(value: string) {
+  const digits = value.replace(/\D/g, '').slice(0, 11)
+
+  return [
+    digits.slice(0, 3),
+    digits.slice(3, 7),
+    digits.slice(7, 11),
+  ]
+}
+
+function joinPhoneSegments(segments: string[]) {
+  return segments.map((segment) => segment.replace(/\D/g, '')).filter(Boolean).join('-')
+}
+
+function PhoneSegmentField({
+  value,
+  onChange,
+  error,
+  autoFocus,
+}: {
+  value: string
+  onChange: (value: string) => void
+  error?: string
+  autoFocus?: boolean
+}) {
+  const inputRefs = useRef<Array<HTMLInputElement | null>>([])
+  const segmentLengths = [3, 4, 4]
+  const segmentValues = useMemo(() => splitPhoneNumber(value), [value])
+
+  const updateSegment = (index: number, nextValue: string) => {
+    const digits = nextValue.replace(/\D/g, '')
+    const nextSegments = [...segmentValues]
+    const maxLength = segmentLengths[index]
+
+    if (digits.length > maxLength) {
+      const pastedSegments = splitPhoneNumber(digits)
+      onChange(joinPhoneSegments(pastedSegments))
+      inputRefs.current[pastedSegments.every(Boolean) ? 2 : pastedSegments.findIndex((segment) => !segment)]?.focus()
+      return
+    }
+
+    nextSegments[index] = digits.slice(0, maxLength)
+    onChange(joinPhoneSegments(nextSegments))
+
+    if (digits.length >= maxLength) {
+      inputRefs.current[index + 1]?.focus()
+    }
+
+  }
+
+  const handleKeyDown = (index: number, event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Backspace') return
+    if (segmentValues[index]) return
+
+    inputRefs.current[index - 1]?.focus()
+  }
+
+  return (
+    <div>
+      <div className="grid grid-cols-[0.82fr_auto_1fr_auto_1fr] items-center gap-1.5">
+        {segmentLengths.map((length, index) => (
+          <div key={index} className="contents">
+            <input
+              ref={(element) => { inputRefs.current[index] = element }}
+              type="tel"
+              inputMode="numeric"
+              value={segmentValues[index] ?? ''}
+              onChange={(event) => updateSegment(index, event.target.value)}
+              onKeyDown={(event) => handleKeyDown(index, event)}
+              maxLength={length}
+              placeholder={index === 0 ? '010' : '0000'}
+              autoFocus={autoFocus && index === 0}
+              aria-label={`전화번호 ${index + 1}번째 입력칸`}
+              className={`h-12 min-w-0 rounded-xl border bg-white px-3 text-center text-lg font-black tracking-normal text-gray-950 outline-none transition focus:border-primary-600 focus:ring-2 focus:ring-primary-100 ${
+                error ? 'border-red-500' : 'border-gray-200'
+              }`}
+            />
+            {index < segmentLengths.length - 1 && (
+              <span className="text-center text-sm font-black text-gray-400">-</span>
+            )}
+          </div>
+        ))}
+      </div>
+      {error && (
+        <div className="mt-2 flex items-center text-sm text-red-500">
+          <AlertCircle className="mr-1 h-4 w-4" />
+          {error}
+        </div>
+      )}
     </div>
   )
 }

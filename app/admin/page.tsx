@@ -1,606 +1,509 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
-import { User, Report, ChatRoom, Message } from '@/lib/supabase'
-import { Users, Flag, MessageCircle, Shield, Eye, Ban, CheckCircle, Clock, Search } from 'lucide-react'
+import { AlertTriangle, CheckCircle, Flag, MessageCircle, RefreshCw, Search, Shield, Users } from 'lucide-react'
 import { format } from 'date-fns'
-import { ko } from 'date-fns/locale'
 import toast from 'react-hot-toast'
 
-type TabType = 'users' | 'reports' | 'rooms' | 'messages'
+type TabType = 'overview' | 'reports' | 'users' | 'rooms' | 'messages'
+
+type AdminUser = {
+  id: string
+  email: string
+  nickname: string
+  department: string
+  is_admin: boolean
+  status: 'active' | 'suspended'
+}
+
+type ManagedUser = {
+  id: string
+  email: string
+  name: string
+  phone: string
+  nickname: string
+  department: string
+  status: 'active' | 'suspended'
+  is_admin: boolean
+  created_at: string
+}
+
+type AdminReport = {
+  id: string
+  reason: string
+  status: 'pending' | 'reviewed' | 'resolved'
+  created_at: string
+  reporter?: { nickname?: string; email?: string; department?: string } | null
+  reported?: { nickname?: string; email?: string; department?: string } | null
+  room?: { title?: string; from_location?: string; to_location?: string } | null
+}
+
+type AdminRoom = {
+  id: string
+  title: string
+  departure_date: string
+  departure_time: string
+  max_participants: number
+  status: 'active' | 'closed'
+  created_at: string
+  creator?: { nickname?: string; department?: string } | null
+  participants?: Array<{
+    id: string
+    user_id: string
+    user?: { nickname?: string; department?: string } | null
+  }>
+}
+
+type AdminMessage = {
+  id: string
+  room_id: string
+  content: string
+  created_at: string
+  user?: { nickname?: string; department?: string } | null
+}
+
+type DashboardData = {
+  adminUser: AdminUser
+  users: ManagedUser[]
+  reports: AdminReport[]
+  rooms: AdminRoom[]
+  messages: AdminMessage[]
+}
+
+const STATUS_LABELS = {
+  active: '활성',
+  suspended: '정지',
+  pending: '대기',
+  reviewed: '검토',
+  resolved: '완료',
+  closed: '종료',
+}
+
+function statusClass(status: string) {
+  if (status === 'active' || status === 'resolved') return 'bg-emerald-50 text-emerald-700 ring-emerald-100'
+  if (status === 'pending') return 'bg-amber-50 text-amber-700 ring-amber-100'
+  if (status === 'reviewed') return 'bg-blue-50 text-blue-700 ring-blue-100'
+  return 'bg-rose-50 text-rose-700 ring-rose-100'
+}
+
+function StatCard({
+  label,
+  value,
+  detail,
+}: {
+  label: string
+  value: string | number
+  detail: string
+}) {
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-[0_10px_24px_rgba(17,24,39,0.04)]">
+      <p className="text-xs font-black text-gray-500">{label}</p>
+      <p className="mt-1 text-2xl font-black text-gray-950">{value}</p>
+      <p className="mt-1 text-xs font-semibold text-gray-500">{detail}</p>
+    </div>
+  )
+}
 
 export default function AdminPage() {
   const router = useRouter()
-  const [user, setUser] = useState<User | null>(null)
+  const [activeTab, setActiveTab] = useState<TabType>('overview')
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<TabType>('reports')
-  const [isAuthorized, setIsAuthorized] = useState(false)
-
-  // Data states
-  const [users, setUsers] = useState<User[]>([])
-  const [reports, setReports] = useState<Report[]>([])
-  const [rooms, setRooms] = useState<ChatRoom[]>([])
-  const [messages, setMessages] = useState<Message[]>([])
-
-  // UI states
+  const [isMutating, setIsMutating] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
-  const [selectedRoomId, setSelectedRoomId] = useState<string>('')
-  const [showUserModal, setShowUserModal] = useState(false)
-  const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [selectedRoomId, setSelectedRoomId] = useState('')
 
-  const supabase = useMemo(() => createClient(), [])
+  const loadDashboard = useCallback(async (roomId = selectedRoomId) => {
+    setLoading(true)
 
-  const loadUsers = useCallback(async () => {
-    const { data } = await supabase
-      .from('users')
-      .select('*')
-      .order('created_at', { ascending: false })
-
-    if (data) setUsers(data)
-  }, [supabase])
-
-  const loadReports = useCallback(async () => {
-    const { data } = await supabase
-      .from('reports')
-      .select(`
-        *,
-        reporter:reporter_id(nickname, email, department),
-        reported:reported_id(nickname, email, department),
-        room:room_id(title, from_location, to_location)
-      `)
-      .order('created_at', { ascending: false })
-
-    if (data) setReports(data as any)
-  }, [supabase])
-
-  const loadRooms = useCallback(async () => {
-    const { data } = await supabase
-      .from('chat_rooms')
-      .select(`
-        *,
-        creator:created_by(nickname, department),
-        participants:room_participants(
-          id,
-          user:users(nickname)
-        )
-      `)
-      .order('created_at', { ascending: false })
-
-    if (data) setRooms(data as any)
-  }, [supabase])
-
-  const loadMessages = useCallback(async () => {
-    if (!selectedRoomId) return
-
-    const { data } = await supabase
-      .from('messages')
-      .select(`
-        *,
-        user:users(nickname, department)
-      `)
-      .eq('room_id', selectedRoomId)
-      .order('created_at', { ascending: true })
-
-    if (data) setMessages(data as any)
-  }, [selectedRoomId, supabase])
-
-  const loadTabData = useCallback(async () => {
     try {
-      switch (activeTab) {
-        case 'users':
-          await loadUsers()
-          break
-        case 'reports':
-          await loadReports()
-          break
-        case 'rooms':
-          await loadRooms()
-          break
-        case 'messages':
-          if (selectedRoomId) {
-            await loadMessages()
-          }
-          break
-      }
-    } catch (error) {
-      console.error('Load data error:', error)
-    }
-  }, [activeTab, loadMessages, loadReports, loadRooms, loadUsers, selectedRoomId])
+      const query = roomId ? `?roomId=${encodeURIComponent(roomId)}` : ''
+      const response = await fetch(`/api/admin/dashboard${query}`)
+      const result = await response.json().catch(() => null)
 
-  const checkAuthAndLoadData = useCallback(async () => {
-    try {
-      const { data: { user: authUser } } = await supabase.auth.getUser()
-
-      if (!authUser) {
-        router.push('/')
+      if (response.status === 401 || response.status === 403) {
+        router.push('/map')
         return
       }
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', authUser.id)
-        .single()
-
-      if (userData) {
-        setUser(userData)
-
-        if (userData.is_admin) {
-          setIsAuthorized(true)
-        } else {
-          router.push('/')
-          return
-        }
+      if (!response.ok) {
+        throw new Error(result?.error ?? '관리자 데이터를 불러오지 못했습니다')
       }
+
+      setDashboard(result)
     } catch (error) {
-      console.error('Auth error:', error)
-      router.push('/')
+      console.error('Admin dashboard load error:', error)
+      toast.error(error instanceof Error ? error.message : '관리자 데이터를 불러오지 못했습니다')
     } finally {
       setLoading(false)
     }
-  }, [router, supabase])
+  }, [router, selectedRoomId])
 
   useEffect(() => {
-    checkAuthAndLoadData()
-  }, [checkAuthAndLoadData])
+    loadDashboard()
+  }, [loadDashboard])
 
-  useEffect(() => {
-    if (isAuthorized) {
-      loadTabData()
-    }
-  }, [isAuthorized, loadTabData])
+  const runAdminAction = async (payload: Record<string, string>) => {
+    setIsMutating(true)
 
-  const handleUserStatusChange = async (userId: string, status: 'active' | 'suspended') => {
     try {
-      const { error } = await supabase
-        .from('users')
-        .update({ status })
-        .eq('id', userId)
+      const response = await fetch('/api/admin/dashboard', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const result = await response.json().catch(() => null)
 
-      if (error) throw error
+      if (!response.ok) {
+        throw new Error(result?.error ?? '관리자 작업을 처리하지 못했습니다')
+      }
 
-      await loadUsers()
-      toast.success(`사용자가 ${status === 'suspended' ? '정지' : '정지 해제'}되었습니다`)
+      await loadDashboard(selectedRoomId)
+      toast.success('변경사항이 반영되었습니다')
     } catch (error) {
-      console.error('User status change error:', error)
-      toast.error('사용자 상태 변경 중 오류가 발생했습니다')
+      console.error('Admin action error:', error)
+      toast.error(error instanceof Error ? error.message : '관리자 작업을 처리하지 못했습니다')
+    } finally {
+      setIsMutating(false)
     }
   }
 
-  const handleReportStatusChange = async (reportId: string, status: 'reviewed' | 'resolved') => {
-    try {
-      const { error } = await supabase
-        .from('reports')
-        .update({ status })
-        .eq('id', reportId)
+  const filteredUsers = useMemo(() => {
+    const keyword = searchTerm.trim().toLowerCase()
+    if (!dashboard || !keyword) return dashboard?.users ?? []
 
-      if (error) throw error
+    return dashboard.users.filter((user) => (
+      user.nickname.toLowerCase().includes(keyword)
+      || user.email.toLowerCase().includes(keyword)
+      || user.department.toLowerCase().includes(keyword)
+      || user.phone.includes(keyword)
+    ))
+  }, [dashboard, searchTerm])
 
-      await loadReports()
-      toast.success('신고 상태가 변경되었습니다')
-    } catch (error) {
-      console.error('Report status change error:', error)
-      toast.error('신고 상태 변경 중 오류가 발생했습니다')
-    }
-  }
+  const activeRooms = dashboard?.rooms.filter((room) => room.status === 'active') ?? []
+  const pendingReports = dashboard?.reports.filter((report) => report.status === 'pending') ?? []
+  const suspendedUsers = dashboard?.users.filter((user) => user.status === 'suspended') ?? []
 
-  if (loading) {
+  if (loading && !dashboard) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 text-gray-950">
         <div className="loading-spinner" />
       </div>
     )
   }
 
-  if (!isAuthorized) {
+  if (!dashboard) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <Shield className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">접근 권한이 없습니다</h1>
-          <p className="text-gray-600">관리자만 접근할 수 있는 페이지입니다</p>
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 text-center">
+        <div>
+          <Shield className="mx-auto mb-4 h-12 w-12 text-rose-500" />
+          <h1 className="text-xl font-black text-gray-950">관리자 데이터를 불러오지 못했습니다</h1>
+          <button type="button" onClick={() => loadDashboard()} className="btn-primary mt-4">
+            다시 시도
+          </button>
         </div>
       </div>
     )
   }
 
-  const filteredUsers = users.filter(user =>
-    user.nickname.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.department.toLowerCase().includes(searchTerm.toLowerCase())
-  )
-
   return (
-    <div className="min-h-screen app-bg">
-      {/* Header */}
-      <header className="app-header px-6 py-4">
-        <div className="flex items-center justify-between">
+    <main className="min-h-screen bg-gray-50 text-gray-950">
+      <header className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 px-4 py-3 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">관리자 대시보드</h1>
-            <p className="text-gray-600">{user?.nickname}님, 관리자 권한으로 로그인됨</p>
+            <p className="text-xs font-black text-primary-600">같이타 운영</p>
+            <h1 className="text-xl font-black">관리자 대시보드</h1>
+            <p className="text-xs font-semibold text-gray-500">
+              {dashboard.adminUser.nickname} · {dashboard.adminUser.department}
+            </p>
           </div>
-          <button
-            onClick={() => router.push('/')}
-            className="btn-secondary"
-          >
-            메인으로
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => loadDashboard()}
+              disabled={loading}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 disabled:opacity-50"
+              aria-label="새로고침"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+            <button type="button" onClick={() => router.push('/map')} className="btn-secondary h-10 px-3 text-sm">
+              지도로
+            </button>
+          </div>
         </div>
       </header>
 
-      <div className="container mx-auto px-6 py-8">
-        {/* 탭 네비게이션 */}
-        <div className="bg-white rounded-xl border border-gray-200 mb-8">
-          <div className="flex">
-            {[
-              { key: 'reports', label: '신고 관리', icon: Flag },
-              { key: 'users', label: '사용자 관리', icon: Users },
-              { key: 'rooms', label: '채팅방 관리', icon: MessageCircle },
-              { key: 'messages', label: '메시지 조회', icon: Eye },
-            ].map(({ key, label, icon: Icon }) => (
-              <button
-                key={key}
-                onClick={() => setActiveTab(key as TabType)}
-                className={`flex items-center px-6 py-4 font-medium transition-colors ${
-                  activeTab === key
-                    ? 'text-primary-600 border-b-2 border-primary-600'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <Icon className="w-5 h-5 mr-2" />
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
+      <div className="mx-auto max-w-6xl px-4 py-5">
+        <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <StatCard label="전체 사용자" value={dashboard.users.length} detail={`정지 ${suspendedUsers.length}명`} />
+          <StatCard label="활성 방" value={activeRooms.length} detail={`전체 ${dashboard.rooms.length}개`} />
+          <StatCard label="대기 신고" value={pendingReports.length} detail={`전체 ${dashboard.reports.length}건`} />
+          <StatCard label="선택 방 메시지" value={dashboard.messages.length} detail={selectedRoomId ? '조회 중' : '방 선택 필요'} />
+        </section>
 
-        {/* 신고 관리 탭 */}
-        {activeTab === 'reports' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h2 className="text-xl font-semibold mb-6">신고 내역</h2>
+        <nav className="mt-5 flex gap-2 overflow-x-auto rounded-lg border border-gray-200 bg-white p-1">
+          {[
+            { key: 'overview', label: '요약', icon: Shield },
+            { key: 'reports', label: '신고', icon: Flag },
+            { key: 'users', label: '사용자', icon: Users },
+            { key: 'rooms', label: '방', icon: MessageCircle },
+            { key: 'messages', label: '메시지', icon: Search },
+          ].map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setActiveTab(key as TabType)}
+              className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-black transition ${
+                activeTab === key ? 'bg-gray-950 text-white' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-950'
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+            </button>
+          ))}
+        </nav>
 
-              {reports.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  신고 내역이 없습니다
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {reports.map((report) => (
-                    <div key={report.id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <div className="flex items-center mb-2">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              report.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                              report.status === 'reviewed' ? 'bg-blue-100 text-blue-800' :
-                              'bg-green-100 text-green-800'
-                            }`}>
-                              {report.status === 'pending' ? '대기 중' :
-                               report.status === 'reviewed' ? '검토 중' : '처리 완료'}
-                            </span>
-                            <span className="ml-2 text-sm text-gray-500">
-                              {format(new Date(report.created_at), 'yyyy-MM-dd HH:mm')}
-                            </span>
-                          </div>
-                          <p className="font-medium">
-                            신고자: {report.reporter?.nickname} ({report.reporter?.department})
-                          </p>
-                          <p className="font-medium text-red-600">
-                            신고당한 사용자: {report.reported?.nickname} ({report.reported?.department})
-                          </p>
-                          {report.room && (
-                            <p className="text-sm text-gray-600">
-                              채팅방: {report.room.title}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex space-x-2">
-                          {report.status === 'pending' && (
-                            <button
-                              onClick={() => handleReportStatusChange(report.id, 'reviewed')}
-                              className="px-3 py-1 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
-                            >
-                              검토 시작
-                            </button>
-                          )}
-                          {report.status === 'reviewed' && (
-                            <button
-                              onClick={() => handleReportStatusChange(report.id, 'resolved')}
-                              className="px-3 py-1 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
-                            >
-                              처리 완료
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      <div className="bg-gray-50 rounded-lg p-3">
-                        <p className="text-sm font-medium text-gray-700 mb-1">신고 사유:</p>
-                        <p className="text-sm text-gray-900">{report.reason}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* 사용자 관리 탭 */}
-        {activeTab === 'users' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold">사용자 관리</h2>
-                <div className="flex items-center space-x-4">
-                  <div className="relative">
-                    <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="사용자 검색..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    />
+        {activeTab === 'overview' && (
+          <section className="mt-5 grid gap-4 md:grid-cols-2">
+            <div className="rounded-lg border border-gray-200 bg-white p-4">
+              <h2 className="text-base font-black">처리 대기 신고</h2>
+              <div className="mt-3 space-y-2">
+                {pendingReports.slice(0, 5).map((report) => (
+                  <div key={report.id} className="rounded-lg bg-amber-50 px-3 py-2 text-sm">
+                    <p className="font-black text-amber-900">{report.reported?.nickname ?? '대상 미상'}</p>
+                    <p className="line-clamp-2 text-amber-800">{report.reason}</p>
                   </div>
-                  <span className="text-sm text-gray-600">
-                    총 {filteredUsers.length}명
-                  </span>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">사용자 정보</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">상태</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">가입일</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">관리</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {filteredUsers.map((user) => (
-                      <tr key={user.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3">
-                          <div>
-                            <p className="font-medium text-gray-900">{user.nickname}</p>
-                            <p className="text-sm text-gray-600">{user.email}</p>
-                            <p className="text-sm text-gray-600">{user.department}</p>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            user.status === 'active'
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {user.status === 'active' ? '활성' : '정지됨'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">
-                          {format(new Date(user.created_at), 'yyyy-MM-dd', { locale: ko })}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center space-x-2">
-                            <button
-                              onClick={() => {
-                                setSelectedUser(user)
-                                setShowUserModal(true)
-                              }}
-                              className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleUserStatusChange(
-                                user.id,
-                                user.status === 'active' ? 'suspended' : 'active'
-                              )}
-                              className={`p-1 rounded ${
-                                user.status === 'active'
-                                  ? 'text-red-600 hover:bg-red-100'
-                                  : 'text-green-600 hover:bg-green-100'
-                              }`}
-                            >
-                              {user.status === 'active' ? (
-                                <Ban className="w-4 h-4" />
-                              ) : (
-                                <CheckCircle className="w-4 h-4" />
-                              )}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                ))}
+                {pendingReports.length === 0 && <p className="text-sm font-semibold text-gray-500">대기 중인 신고가 없습니다</p>}
               </div>
             </div>
-          </div>
-        )}
-
-        {/* 채팅방 관리 탭 */}
-        {activeTab === 'rooms' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h2 className="text-xl font-semibold mb-6">채팅방 목록</h2>
-
-              <div className="space-y-4">
-                {rooms.map((room) => (
-                  <div key={room.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h3 className="font-medium text-gray-900 mb-2">{room.title}</h3>
-                        <div className="space-y-1 text-sm text-gray-600">
-                          <p>개설자: {room.creator?.nickname} ({room.creator?.department})</p>
-                          <p>참여자: {room.participants?.length || 0}/{room.max_participants}명</p>
-                          <p>생성일: {format(new Date(room.created_at), 'yyyy-MM-dd HH:mm')}</p>
-                          <p>출발일시: {format(new Date(`${room.departure_date}T${room.departure_time}`), 'yyyy-MM-dd HH:mm')}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => {
-                            setSelectedRoomId(room.id)
-                            setActiveTab('messages')
-                          }}
-                          className="px-3 py-1 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700"
-                        >
-                          대화 기록
-                        </button>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          room.status === 'active'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {room.status === 'active' ? '활성' : '종료'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+            <div className="rounded-lg border border-gray-200 bg-white p-4">
+              <h2 className="text-base font-black">최근 개설 방</h2>
+              <div className="mt-3 space-y-2">
+                {dashboard.rooms.slice(0, 5).map((room) => (
+                  <button
+                    key={room.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedRoomId(room.id)
+                      setActiveTab('messages')
+                      loadDashboard(room.id)
+                    }}
+                    className="block w-full rounded-lg bg-gray-50 px-3 py-2 text-left text-sm hover:bg-gray-100"
+                  >
+                    <p className="font-black text-gray-950">{room.title}</p>
+                    <p className="text-xs font-semibold text-gray-500">
+                      {room.participants?.length ?? 0}/{room.max_participants}명 · {room.creator?.nickname ?? '개설자 미상'}
+                    </p>
+                  </button>
                 ))}
               </div>
             </div>
-          </div>
+          </section>
         )}
 
-        {/* 메시지 조회 탭 */}
-        {activeTab === 'messages' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold">메시지 조회</h2>
-                <select
-                  value={selectedRoomId}
-                  onChange={(e) => {
-                    setSelectedRoomId(e.target.value)
-                    if (e.target.value) {
-                      loadMessages()
-                    }
-                  }}
-                  className="border border-gray-300 rounded-lg px-3 py-2"
-                >
-                  <option value="">채팅방을 선택하세요</option>
-                  {rooms.map((room) => (
-                    <option key={room.id} value={room.id}>
-                      {room.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {selectedRoomId && messages.length > 0 && (
-                <div className="border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto">
-                  <div className="space-y-4">
-                    {messages.map((message) => (
-                      <div key={message.id} className="flex items-start space-x-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center space-x-2 mb-1">
-                            <span className="font-medium text-sm text-gray-900">
-                              {message.user?.nickname}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              ({message.user?.department})
-                            </span>
-                            <span className="text-xs text-gray-400">
-                              {format(new Date(message.created_at), 'HH:mm')}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-700">{message.content}</p>
-                        </div>
-                      </div>
-                    ))}
+        {activeTab === 'reports' && (
+          <section className="mt-5 space-y-3">
+            {dashboard.reports.map((report) => (
+              <article key={report.id} className="rounded-lg border border-gray-200 bg-white p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <span className={`inline-flex rounded-full px-2 py-1 text-xs font-black ring-1 ${statusClass(report.status)}`}>
+                      {STATUS_LABELS[report.status]}
+                    </span>
+                    <p className="mt-2 text-sm font-black text-gray-950">
+                      신고 대상: {report.reported?.nickname ?? '알 수 없음'} · 신고자: {report.reporter?.nickname ?? '알 수 없음'}
+                    </p>
+                    <p className="text-xs font-semibold text-gray-500">
+                      {format(new Date(report.created_at), 'yyyy-MM-dd HH:mm')} · {report.room?.title ?? '방 정보 없음'}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    {report.status === 'pending' && (
+                      <button
+                        type="button"
+                        disabled={isMutating}
+                        onClick={() => runAdminAction({ type: 'report-status', reportId: report.id, status: 'reviewed' })}
+                        className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-black text-white disabled:bg-gray-300"
+                      >
+                        검토
+                      </button>
+                    )}
+                    {report.status !== 'resolved' && (
+                      <button
+                        type="button"
+                        disabled={isMutating}
+                        onClick={() => runAdminAction({ type: 'report-status', reportId: report.id, status: 'resolved' })}
+                        className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white disabled:bg-gray-300"
+                      >
+                        완료
+                      </button>
+                    )}
                   </div>
                 </div>
-              )}
+                <p className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700">{report.reason}</p>
+              </article>
+            ))}
+          </section>
+        )}
 
-              {selectedRoomId && messages.length === 0 && (
-                <div className="text-center py-8 text-gray-500">
-                  이 채팅방에는 메시지가 없습니다
-                </div>
-              )}
+        {activeTab === 'users' && (
+          <section className="mt-5 rounded-lg border border-gray-200 bg-white p-4">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-base font-black">사용자 관리</h2>
+              <div className="relative w-full max-w-xs">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="search"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="닉네임, 이메일, 학과, 전화번호"
+                  className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm font-semibold text-gray-950 outline-none focus:border-primary-600"
+                />
+              </div>
             </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] text-left text-sm">
+                <thead className="border-b border-gray-200 bg-gray-50 text-xs font-black text-gray-500">
+                  <tr>
+                    <th className="px-3 py-3">사용자</th>
+                    <th className="px-3 py-3">연락처</th>
+                    <th className="px-3 py-3">상태</th>
+                    <th className="px-3 py-3">가입일</th>
+                    <th className="px-3 py-3">관리</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredUsers.map((managedUser) => (
+                    <tr key={managedUser.id}>
+                      <td className="px-3 py-3">
+                        <p className="font-black">{managedUser.nickname}</p>
+                        <p className="text-xs font-semibold text-gray-500">{managedUser.name} · {managedUser.department}</p>
+                      </td>
+                      <td className="px-3 py-3 text-xs font-semibold text-gray-600">
+                        <p>{managedUser.phone}</p>
+                        <p>{managedUser.email}</p>
+                      </td>
+                      <td className="px-3 py-3">
+                        <span className={`inline-flex rounded-full px-2 py-1 text-xs font-black ring-1 ${statusClass(managedUser.status)}`}>
+                          {STATUS_LABELS[managedUser.status]}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-xs font-semibold text-gray-500">
+                        {format(new Date(managedUser.created_at), 'yyyy-MM-dd')}
+                      </td>
+                      <td className="px-3 py-3">
+                        <button
+                          type="button"
+                          disabled={isMutating || managedUser.is_admin}
+                          onClick={() => runAdminAction({
+                            type: 'user-status',
+                            userId: managedUser.id,
+                            status: managedUser.status === 'active' ? 'suspended' : 'active',
+                          })}
+                          className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-black text-gray-700 disabled:opacity-40"
+                        >
+                          {managedUser.status === 'active' ? '정지' : '해제'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {activeTab === 'rooms' && (
+          <section className="mt-5 grid gap-3 md:grid-cols-2">
+            {dashboard.rooms.map((room) => (
+              <article key={room.id} className="rounded-lg border border-gray-200 bg-white p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="font-black text-gray-950">{room.title}</h2>
+                    <p className="mt-1 text-xs font-semibold text-gray-500">
+                      {room.creator?.nickname ?? '개설자 미상'} · {format(new Date(`${room.departure_date}T${room.departure_time}+09:00`), 'MM-dd HH:mm')}
+                    </p>
+                  </div>
+                  <span className={`inline-flex rounded-full px-2 py-1 text-xs font-black ring-1 ${statusClass(room.status)}`}>
+                    {STATUS_LABELS[room.status]}
+                  </span>
+                </div>
+                <div className="mt-3 flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm font-black">
+                  <span>참여자 {room.participants?.length ?? 0}/{room.max_participants}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedRoomId(room.id)
+                      setActiveTab('messages')
+                      loadDashboard(room.id)
+                    }}
+                    className="text-primary-600"
+                  >
+                    대화 보기
+                  </button>
+                </div>
+              </article>
+            ))}
+          </section>
+        )}
+
+        {activeTab === 'messages' && (
+          <section className="mt-5 rounded-lg border border-gray-200 bg-white p-4">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-base font-black">메시지 조회</h2>
+              <select
+                value={selectedRoomId}
+                onChange={(event) => {
+                  setSelectedRoomId(event.target.value)
+                  loadDashboard(event.target.value)
+                }}
+                className="h-10 max-w-full rounded-lg border border-gray-200 bg-white px-3 text-sm font-bold text-gray-950"
+              >
+                <option value="">채팅방 선택</option>
+                {dashboard.rooms.map((room) => (
+                  <option key={room.id} value={room.id}>{room.title}</option>
+                ))}
+              </select>
+            </div>
+            {!selectedRoomId && (
+              <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-10 text-center text-sm font-bold text-gray-500">
+                채팅방을 선택하면 메시지가 표시됩니다
+              </div>
+            )}
+            {selectedRoomId && dashboard.messages.length === 0 && (
+              <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-10 text-center text-sm font-bold text-gray-500">
+                메시지가 없습니다
+              </div>
+            )}
+            {dashboard.messages.length > 0 && (
+              <div className="max-h-[60vh] space-y-3 overflow-y-auto rounded-lg bg-gray-50 p-3">
+                {dashboard.messages.map((message) => (
+                  <div key={message.id} className="rounded-lg bg-white px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-black text-gray-950">
+                        {message.user?.nickname ?? '알 수 없음'}
+                        <span className="ml-1 text-xs font-semibold text-gray-500">{message.user?.department}</span>
+                      </p>
+                      <span className="text-xs font-semibold text-gray-400">{format(new Date(message.created_at), 'MM-dd HH:mm')}</span>
+                    </div>
+                    <p className="mt-1 whitespace-pre-wrap text-sm font-semibold text-gray-700">{message.content}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {(pendingReports.length > 0 || suspendedUsers.length > 0) && (
+          <div className="mt-5 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900">
+            {pendingReports.length > 0 ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+            대기 신고 {pendingReports.length}건, 정지 사용자 {suspendedUsers.length}명
           </div>
         )}
       </div>
-
-      {/* 사용자 상세 모달 */}
-      {showUserModal && selectedUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md">
-            <div className="p-6">
-              <h3 className="text-lg font-semibold mb-4">사용자 상세 정보</h3>
-
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">닉네임</label>
-                  <p className="text-sm text-gray-900">{selectedUser.nickname}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">이메일</label>
-                  <p className="text-sm text-gray-900">{selectedUser.email}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">실명</label>
-                  <p className="text-sm text-gray-900">{selectedUser.name}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">전화번호</label>
-                  <p className="text-sm text-gray-900">{selectedUser.phone}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">학과</label>
-                  <p className="text-sm text-gray-900">{selectedUser.department}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">상태</label>
-                  <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
-                    selectedUser.status === 'active'
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-red-100 text-red-800'
-                  }`}>
-                    {selectedUser.status === 'active' ? '활성' : '정지됨'}
-                  </span>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">가입일</label>
-                  <p className="text-sm text-gray-900">
-                    {format(new Date(selectedUser.created_at), 'yyyy-MM-dd HH:mm', { locale: ko })}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex space-x-3 mt-6">
-                <button
-                  onClick={() => setShowUserModal(false)}
-                  className="btn-secondary flex-1"
-                >
-                  닫기
-                </button>
-                <button
-                  onClick={() => {
-                    handleUserStatusChange(
-                      selectedUser.id,
-                      selectedUser.status === 'active' ? 'suspended' : 'active'
-                    )
-                    setShowUserModal(false)
-                  }}
-                  className={`flex-1 px-4 py-2 rounded-lg font-medium text-sm ${
-                    selectedUser.status === 'active'
-                      ? 'bg-red-600 hover:bg-red-700 text-white'
-                      : 'bg-green-600 hover:bg-green-700 text-white'
-                  }`}
-                >
-                  {selectedUser.status === 'active' ? '사용자 정지' : '정지 해제'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+    </main>
   )
 }

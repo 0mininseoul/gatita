@@ -196,40 +196,31 @@ function RoomsPageContent() {
       const room = rooms.find(r => r.id === roomId)
       if (!room) return
 
-      const { count, error: countError } = await supabase
-        .from('room_participants')
-        .select('id', { count: 'exact', head: true })
-        .eq('room_id', roomId)
-
-      if (countError) throw countError
-
-      const currentParticipants = count ?? room.participants?.length ?? 0
+      const currentParticipants = room.participants?.length ?? 0
       if (currentParticipants >= room.max_participants) {
         toast.error('채팅방이 가득 찼습니다')
         return
       }
 
-      const { error } = await supabase
-        .from('room_participants')
-        .insert({
-          room_id: roomId,
-          user_id: user.id,
-          confirmed: false
-        })
+      const response = await fetch(`/api/rooms/${roomId}/join`, {
+        method: 'POST',
+      })
+      const result = await response.json().catch(() => null)
 
-      if (error) {
-        if (error.code === '23505') {
-          toast.error('이미 참여 중인 채팅방입니다')
-        } else {
-          throw error
-        }
+      if (!response.ok) {
+        throw new Error(result?.error ?? '채팅방 참여 중 오류가 발생했습니다')
+      }
+
+      if (result?.alreadyJoined) {
+        toast.error('이미 참여 중인 채팅방입니다')
+        router.push(`/rooms/${roomId}`)
         return
       }
 
       router.push(`/rooms/${roomId}`)
     } catch (error) {
       console.error('Join room error:', error)
-      toast.error('채팅방 참여 중 오류가 발생했습니다')
+      toast.error(error instanceof Error ? error.message : '채팅방 참여 중 오류가 발생했습니다')
     }
   }
 

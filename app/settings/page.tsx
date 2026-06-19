@@ -175,6 +175,7 @@ export default function SettingsPage() {
     setAccountForm(prev => ({
       ...prev,
       [field]: value,
+      ...(field === 'bank_name' ? { account_number: '' } : {}),
     }))
     setAccountError('')
   }

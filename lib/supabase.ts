@@ -226,10 +226,7 @@ export function getDepartureDateForTime(now: Date, departureTime: string) {
 export const ROOM_MAP_VISIBILITY_WINDOW_MINUTES = 30
 
 export function getRoomDepartureDateTime(departureDate: string, departureTime: string) {
-  const [year, month, day] = departureDate.split('-').map(Number)
-  const [hours, minutes] = departureTime.slice(0, 5).split(':').map(Number)
-
-  return new Date(year, month - 1, day, hours, minutes, 0, 0)
+  return new Date(`${departureDate}T${departureTime.slice(0, 5)}:00+09:00`)
 }
 
 export function isRoomJoinable(departureDate: string, departureTime: string, now = new Date()) {

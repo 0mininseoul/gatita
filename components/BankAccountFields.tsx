@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
   BANK_OPTIONS,
   BankOption,
@@ -184,14 +184,23 @@ export function AccountNumberSegmentField({
     [bankName, value]
   )
 
+  useEffect(() => {
+    inputRefs.current = inputRefs.current.slice(0, segments.length)
+  }, [segments.length])
+
   const updateSegment = (index: number, nextValue: string) => {
     const maxLength = segments[index]
     const digits = nextValue.replace(/\D/g, '')
-    const nextSegments = [...segmentValues]
+    const nextSegments = Array.from(
+      { length: segments.length },
+      (_, segmentIndex) => segmentValues[segmentIndex] ?? '',
+    )
 
     if (digits.length > maxLength) {
       const pastedSegments = splitAccountNumberForBank(bankName, digits)
       onChange(joinAccountSegments(pastedSegments))
+      const nextFocusIndex = Math.min(pastedSegments.findIndex((segment) => !segment), segments.length - 1)
+      inputRefs.current[nextFocusIndex >= 0 ? nextFocusIndex : segments.length - 1]?.focus()
       return
     }
 
@@ -201,6 +210,13 @@ export function AccountNumberSegmentField({
     if (digits.length >= maxLength) {
       inputRefs.current[index + 1]?.focus()
     }
+  }
+
+  const handleSegmentKeyDown = (index: number, event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Backspace') return
+    if (segmentValues[index]) return
+
+    inputRefs.current[index - 1]?.focus()
   }
 
   return (
@@ -214,6 +230,7 @@ export function AccountNumberSegmentField({
               inputMode="numeric"
               value={segmentValues[index] ?? ''}
               onChange={(event) => updateSegment(index, event.target.value)}
+              onKeyDown={(event) => handleSegmentKeyDown(index, event)}
               maxLength={length}
               disabled={disabled}
               aria-label={`계좌번호 ${index + 1}번째 입력칸`}

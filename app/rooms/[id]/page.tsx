@@ -985,18 +985,24 @@ export default function ChatRoomPage() {
               <h2 className="mt-1 text-lg font-extrabold text-gray-950">출발 전 확인해주세요</h2>
             </div>
 
-            <div className="space-y-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-sm font-bold leading-5 text-gray-700">
+            <div className="space-y-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-[11px] font-medium leading-4 text-gray-600">
               <div className="flex gap-2.5">
                 <span className="shrink-0">💳</span>
-                <p>정산이 필요할 경우 방장이 결제 후 정산합니다.</p>
+                <p>정산이 필요할 경우 방장이 결제 후 정산해요.</p>
               </div>
-              <div className="flex gap-2.5">
+              <div className="flex gap-1.5">
                 <span className="shrink-0">🤝</span>
-                <p>멤버들과 협의 없이 갑자기 방을 나가면 서비스 이용이 정지될 수 있습니다.</p>
+                <p className="whitespace-nowrap text-[9.5px] leading-4 tracking-[-0.08em]">
+                  출발 5분 전부터는 갑자기 방을 나가면 서비스 이용이 정지될 수 있어요
+                </p>
               </div>
               <div className="flex gap-2.5">
                 <span className="shrink-0">📞</span>
-                <p>방장과 멤버들은 서로 전화번호가 노출될 수 있습니다.</p>
+                <p>
+                  방장과 멤버들은 서로 전화번호가 노출될 수 있어요.
+                  <br />
+                  지각, 노쇼, 출발 위치 확인 등 동행 목적에만 사용해주세요.
+                </p>
               </div>
             </div>
 
@@ -1035,7 +1041,7 @@ export default function ChatRoomPage() {
               <h2 className="mt-1 text-lg font-extrabold text-gray-950">동행 전 확인해주세요</h2>
             </div>
 
-            <div className="space-y-2 text-sm font-bold leading-5 text-gray-700">
+            <div className="space-y-2 text-xs font-medium leading-4 text-gray-600">
               <div className="rounded-xl border border-primary-100 bg-primary-50 px-3 py-2.5">
                 <p className="text-xs font-black text-primary-700">🧍 방장 인상착의</p>
                 <p className="mt-1 text-sm font-black text-gray-950">
@@ -1046,10 +1052,10 @@ export default function ChatRoomPage() {
                 🧭 꼭 도착지까지 가지 않아도 동행에 참여할 수 있어요. 중간에 헤어질 예정이면 채팅에서 먼저 알려주세요.
               </div>
               <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
-                ⏰ 출발시간 5분 전부터는 갑자기 방을 탈주할 시 서비스 이용이 정지될 수 있습니다.
+                ⏰ 출발 5분 전부터는 갑자기 방을 나가면 서비스 이용이 정지될 수 있어요
               </div>
               <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5">
-                📞 방장과 멤버들은 서로 전화번호가 노출될 수 있습니다. 지각, 노쇼, 출발 위치 확인 등 동행 목적에만 사용해주세요.
+                방장과 멤버들은 서로 전화번호가 노출될 수 있어요. 지각, 노쇼, 출발 위치 확인 등 동행 목적에만 사용해주세요.
               </div>
             </div>
 

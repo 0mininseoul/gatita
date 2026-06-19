@@ -229,14 +229,35 @@ test('landing and authenticated map use separate URL paths', () => {
   assert.match(chatSource, /router\.push\('\/map'\)/)
 })
 
+test('landing exposes email password login only through the test login query', () => {
+  const source = readProjectFile('app/page.tsx')
+
+  assert.match(source, /test-login/)
+  assert.match(source, /showTestLogin/)
+  assert.match(source, /signInWithPassword/)
+  assert.match(source, /검수용 로그인/)
+  assert.match(source, /테스트 계정으로 로그인/)
+  assert.match(source, /isGachonEmail\(email\)/)
+})
+
 test('map shows a one-time PWA home screen onboarding modal', () => {
   const source = readProjectFile('app/page.tsx')
   const manifest = readProjectFile('public/manifest.json')
+  const onboardingStart = source.indexOf('{showPwaOnboarding && (')
+  const onboardingEnd = source.indexOf('\n      <header', onboardingStart)
+  const onboardingBlock = source.slice(onboardingStart, onboardingEnd)
 
   assert.match(source, /showPwaOnboarding/)
   assert.match(source, /gatita:pwa-onboarding-dismissed/)
   assert.match(source, /홈 화면에 추가/)
-  assert.match(source, /PWAInstallManager/)
+  assert.match(source, /지금 할게요/)
+  assert.match(source, /브라우저의 공유/)
+  assert.match(source, /<Share2 className="mx-1 inline h-3\.5 w-3\.5/)
+  assert.doesNotMatch(onboardingBlock, />PWA</)
+  assert.doesNotMatch(onboardingBlock, /Safari/)
+  assert.doesNotMatch(onboardingBlock, /설치 시도/)
+  assert.doesNotMatch(onboardingBlock, /aria-label="PWA 안내 닫기"/)
+  assert.doesNotMatch(source, /handlePwaInstallClick/)
   assert.match(source, /isInstalled\(\)/)
   assert.match(manifest, /"display":\s*"standalone"/)
   assert.match(manifest, /"start_url":\s*"\/map"/)

@@ -18,8 +18,8 @@ import {
 } from '@/lib/supabase'
 import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
 import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
-import { PWAInstallManager, isInstalled } from '@/lib/pwa'
-import { ArrowRight, Clock, Download, MessageSquareText, Share2, Star, Settings, LogOut, Users, X } from 'lucide-react'
+import { isInstalled } from '@/lib/pwa'
+import { ArrowRight, Clock, MessageSquareText, Share2, Star, Settings, LogOut, Users, X } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 
@@ -63,8 +63,11 @@ export default function HomePage() {
   const [hasEnteredApp, setHasEnteredApp] = useState(false)
   const [showPwaOnboarding, setShowPwaOnboarding] = useState(false)
   const [showStandaloneSplash, setShowStandaloneSplash] = useState(false)
-  const [pwaInstallManager, setPwaInstallManager] = useState<PWAInstallManager | null>(null)
   const [authNotice, setAuthNotice] = useState<string | null>(null)
+  const [showTestLogin, setShowTestLogin] = useState(false)
+  const [testEmail, setTestEmail] = useState('')
+  const [testPassword, setTestPassword] = useState('')
+  const [isStartingTestLogin, setIsStartingTestLogin] = useState(false)
   const lastAuthErrorAtRef = useRef(0)
   const mapHeaderRef = useRef<HTMLElement>(null)
   const router = useRouter()
@@ -292,6 +295,11 @@ export default function HomePage() {
   }, [checkAuth, supabase])
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    setShowTestLogin(params.get('test-login') === '1')
+  }, [])
+
+  useEffect(() => {
     if (!isInstalled()) return
 
     setShowStandaloneSplash(true)
@@ -461,9 +469,7 @@ export default function HomePage() {
     if (isInstalled()) return
     if (window.localStorage.getItem(PWA_ONBOARDING_STORAGE_KEY)) return
 
-    const manager = new PWAInstallManager()
     const timerId = window.setTimeout(() => {
-      setPwaInstallManager(manager)
       setShowPwaOnboarding(true)
     }, 600)
 
@@ -651,6 +657,58 @@ export default function HomePage() {
     }
   }
 
+  const handleTestLogin = async () => {
+    if (!supabase) {
+      toast.error('인증 설정을 불러오지 못했습니다')
+      return
+    }
+
+    if (!testEmail.trim() || !testPassword) {
+      toast.error('테스트 계정 정보를 입력해주세요')
+      return
+    }
+
+    setIsStartingTestLogin(true)
+    setAuthNotice(null)
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: testEmail.trim(),
+        password: testPassword,
+      })
+
+      if (error) throw error
+
+      const email = data.user?.email
+      if (!isGachonEmail(email)) {
+        await rejectNonGachonAccount()
+        return
+      }
+
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', data.user.id)
+        .single()
+
+      if (userError || !userData) {
+        await supabase.auth.signOut()
+        throw userError || new Error('테스트 프로필을 찾지 못했습니다')
+      }
+
+      setUser(userData)
+      setAuthMode(null)
+      setHasEnteredApp(true)
+      router.push('/map')
+      toast.success('테스트 계정으로 로그인했습니다')
+    } catch (error) {
+      console.error('Test login error:', error)
+      toast.error('테스트 로그인에 실패했습니다')
+    } finally {
+      setIsStartingTestLogin(false)
+    }
+  }
+
   const handleEnterApp = () => {
     setHasEnteredApp(true)
     router.push('/map')
@@ -665,18 +723,6 @@ export default function HomePage() {
     window.localStorage.setItem(PWA_ONBOARDING_STORAGE_KEY, 'true')
     setShowPwaOnboarding(false)
   }, [])
-
-  const handlePwaInstallClick = useCallback(async () => {
-    const installed = await pwaInstallManager?.showInstallPrompt()
-
-    if (installed) {
-      dismissPwaOnboarding()
-      toast.success('홈 화면에 추가되었습니다')
-      return
-    }
-
-    toast.success('브라우저 메뉴에서 홈 화면에 추가를 선택해주세요')
-  }, [dismissPwaOnboarding, pwaInstallManager])
 
   const handleFindClick = () => {
     toast.error('먼저 로그인하셔야 합니다.');
@@ -820,6 +866,43 @@ export default function HomePage() {
                 {authNotice}
               </div>
             )}
+
+            {showTestLogin && !user && (
+              <form
+                className="mt-5 w-full max-w-[320px] rounded-lg border border-white/55 bg-white/90 p-3 shadow-[0_12px_30px_rgba(17,24,39,0.16)] backdrop-blur"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  handleTestLogin()
+                }}
+              >
+                <p className="mb-2 text-xs font-black text-gray-700">검수용 로그인</p>
+                <div className="space-y-2">
+                  <input
+                    type="email"
+                    value={testEmail}
+                    onChange={(event) => setTestEmail(event.target.value)}
+                    placeholder="아이디"
+                    autoComplete="username"
+                    className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm font-semibold text-gray-900 outline-none transition focus:border-primary-500"
+                  />
+                  <input
+                    type="password"
+                    value={testPassword}
+                    onChange={(event) => setTestPassword(event.target.value)}
+                    placeholder="비밀번호"
+                    autoComplete="current-password"
+                    className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm font-semibold text-gray-900 outline-none transition focus:border-primary-500"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isStartingTestLogin}
+                    className="h-10 w-full rounded-lg bg-gray-950 text-sm font-black text-white transition hover:bg-gray-800 disabled:bg-gray-300"
+                  >
+                    {isStartingTestLogin ? '로그인 중...' : '테스트 계정으로 로그인'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
 
           <div className="landing-footer">
@@ -931,32 +1014,26 @@ export default function HomePage() {
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">PWA</p>
+                <p className="text-xs font-black tracking-[0.02em] text-primary-600">홈 화면 추가</p>
                 <h2 id="pwa-onboarding-title" className="mt-1 text-lg font-black text-gray-950">
                   홈 화면에 추가해서 앱처럼 쓰세요
                 </h2>
               </div>
-              <button
-                type="button"
-                aria-label="PWA 안내 닫기"
-                onClick={dismissPwaOnboarding}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
-              >
-                <X className="h-5 w-5" />
-              </button>
             </div>
 
             <div className="mt-4 space-y-2">
               <div className="flex gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
                 <Share2 className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
                 <p className="text-xs font-bold leading-5 text-gray-700">
-                  iPhone에서는 Safari 공유 버튼을 누른 뒤 홈 화면에 추가를 선택하세요.
+                  iPhone에서는 브라우저의 공유
+                  <Share2 className="mx-1 inline h-3.5 w-3.5 align-[-2px] text-primary-600" aria-hidden="true" />
+                  버튼을 누른 뒤 홈 화면에 추가를 선택하세요.
                 </p>
               </div>
               <div className="flex gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-                <Download className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
+                <Star className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
                 <p className="text-xs font-bold leading-5 text-gray-700">
-                  Android Chrome에서는 설치 버튼이나 브라우저 메뉴의 앱 설치를 사용하면 됩니다.
+                  Android에서는 브라우저 메뉴에서 홈 화면에 추가 또는 앱 설치를 선택하면 됩니다.
                 </p>
               </div>
             </div>
@@ -971,10 +1048,10 @@ export default function HomePage() {
               </button>
               <button
                 type="button"
-                onClick={handlePwaInstallClick}
+                onClick={dismissPwaOnboarding}
                 className="h-11 flex-1 rounded-lg bg-gray-950 text-sm font-black text-white transition hover:bg-gray-800"
               >
-                설치 시도
+                지금 할게요
               </button>
             </div>
           </div>

@@ -65,6 +65,7 @@ export default function HomePage() {
   const [pwaInstallManager, setPwaInstallManager] = useState<PWAInstallManager | null>(null)
   const [authNotice, setAuthNotice] = useState<string | null>(null)
   const lastAuthErrorAtRef = useRef(0)
+  const mapHeaderRef = useRef<HTMLElement>(null)
   const router = useRouter()
 
   const supabase = useMemo(() => {
@@ -371,6 +372,7 @@ export default function HomePage() {
     const root = document.documentElement
     const body = document.body
     const previousAppViewportHeight = root.style.getPropertyValue('--app-viewport-height')
+    const previousMapHeaderBottom = root.style.getPropertyValue('--map-header-bottom')
     const previousRootOverflow = root.style.overflow
     const previousBodyOverflow = body.style.overflow
     const previousBodyOverscrollBehavior = body.style.overscrollBehavior
@@ -378,8 +380,12 @@ export default function HomePage() {
 
     const setAppViewport = () => {
       const visualHeight = window.visualViewport?.height ?? window.innerHeight
+      const headerBottom = mapHeaderRef.current?.getBoundingClientRect().bottom
 
       root.style.setProperty('--app-viewport-height', `${Math.ceil(visualHeight)}px`)
+      if (typeof headerBottom === 'number' && headerBottom > 0) {
+        root.style.setProperty('--map-header-bottom', `${Math.ceil(headerBottom)}px`)
+      }
     }
     const applyMapDisplayMode = () => {
       const isStandaloneMap = isInstalled()
@@ -394,6 +400,11 @@ export default function HomePage() {
     root.style.overflow = 'hidden'
     body.style.overflow = 'hidden'
     body.style.overscrollBehavior = 'none'
+
+    const headerResizeObserver = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(setAppViewport)
+      : null
+    if (mapHeaderRef.current) headerResizeObserver?.observe(mapHeaderRef.current)
 
     window.addEventListener('resize', setAppViewport)
     window.addEventListener('orientationchange', setAppViewport)
@@ -411,10 +422,16 @@ export default function HomePage() {
       } else {
         root.style.removeProperty('--app-viewport-height')
       }
+      if (previousMapHeaderBottom) {
+        root.style.setProperty('--map-header-bottom', previousMapHeaderBottom)
+      } else {
+        root.style.removeProperty('--map-header-bottom')
+      }
       root.style.overflow = previousRootOverflow
       body.style.overflow = previousBodyOverflow
       body.style.overscrollBehavior = previousBodyOverscrollBehavior
       root.classList.remove('gatita-standalone-map', 'gatita-browser-map')
+      headerResizeObserver?.disconnect()
       window.removeEventListener('resize', setAppViewport)
       window.removeEventListener('orientationchange', setAppViewport)
       window.visualViewport?.removeEventListener('resize', setAppViewport)
@@ -931,6 +948,7 @@ export default function HomePage() {
       )}
 
       <header
+        ref={mapHeaderRef}
         className="pointer-events-none absolute inset-x-0 top-0 z-40 px-3"
         style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
       >

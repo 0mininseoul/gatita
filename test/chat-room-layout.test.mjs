@@ -143,6 +143,37 @@ test('chat room can copy the room creator payout account', () => {
   assert.match(source, /계좌 정보를 복사했습니다/)
 })
 
+test('room creators see a first-room guide and submit a one-line appearance note', () => {
+  const source = readProjectFile('app/rooms/[id]/page.tsx')
+
+  assert.match(source, /showHostGuide/)
+  assert.match(source, /gatita:room-host-guide:/)
+  assert.match(source, /정산이 필요할 경우 방장이 결제 후 정산한다/)
+  assert.match(source, /멤버들과 협의 없이 갑자기 방을 나가면 서비스 이용이 정지될 수 있다/)
+  assert.match(source, /hostAppearance/)
+  assert.match(source, /방장 인상착의/)
+  assert.match(source, /messages'\)\s*[\s\S]*\.insert\(\{\s*room_id: roomId,\s*user_id: user\.id,\s*content: `방장 인상착의: \$\{hostAppearance\.trim\(\)\}`/)
+})
+
+test('room creator transfer is required before leaving a room with members', () => {
+  const source = readProjectFile('app/rooms/[id]/page.tsx')
+  const routePath = 'app/api/rooms/[id]/leave/route.ts'
+  const routeSource = readProjectFile(routePath)
+  const schema = readProjectFile('supabase_schema.sql')
+
+  assert.match(source, /showHostLeaveModal/)
+  assert.match(source, /멤버들과 협의가 완료됐나요\?/)
+  assert.match(source, /nextHostId/)
+  assert.match(source, /fetch\(`\/api\/rooms\/\$\{roomId\}\/leave`/)
+  assert.match(source, /협의 없이 여러 번 탈주하면 서비스 이용이 정지될 수 있습니다/)
+  assert.doesNotMatch(source, /if \(!confirm\('정말로 채팅방을 나가시겠습니까\?'\)\) return/)
+  assert.match(routeSource, /SUPABASE_SERVICE_ROLE_KEY/)
+  assert.match(routeSource, /auth\.getUser\(\)/)
+  assert.match(routeSource, /\.from\('chat_rooms'\)\s*[\s\S]*\.update\(\{ created_by: nextHostId \}\)/)
+  assert.match(routeSource, /\.from\('room_participants'\)\s*[\s\S]*\.delete\(\)/)
+  assert.match(schema, /Room creators can transfer active rooms to participants/i)
+})
+
 test('map app and bottom sheet use the visual viewport and internal sheet scrolling', () => {
   const pageSource = readProjectFile('app/page.tsx')
   const mapSource = readProjectFile('components/CampusRouteMap.tsx')
@@ -177,11 +208,14 @@ test('map stats are offset from the translucent PWA status bar and room joins di
 
   assert.match(mapSource, /gatita-map-stats/)
   assert.match(cssSource, /\.gatita-map-stats/)
+  assert.match(pageSource, /mapHeaderRef/)
+  assert.match(pageSource, /--map-header-bottom/)
+  assert.match(pageSource, /ResizeObserver/)
   assert.match(pageSource, /gatita-standalone-map/)
   assert.match(pageSource, /gatita-browser-map/)
-  assert.match(cssSource, /env\(safe-area-inset-top\) \+ 3\.75rem/)
+  assert.match(cssSource, /top:\s*calc\(var\(--map-header-bottom/)
   assert.match(cssSource, /html\.gatita-standalone-map \.gatita-map-stats/)
-  assert.match(cssSource, /env\(safe-area-inset-top\) \+ 3\.5rem/)
+  assert.match(cssSource, /--map-stat-gap:\s*0\.625rem/)
   assert.doesNotMatch(cssSource, /9\.25rem/, 'map stat chips should not be pushed deep below the header')
   assert.match(mapSource, /isRoomJoinable/)
   assert.match(mapSource, /isPastDeparture/)

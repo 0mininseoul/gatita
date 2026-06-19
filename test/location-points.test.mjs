@@ -51,6 +51,7 @@ function assertPointInRange(location, bounds) {
 }
 
 test('campus map fixed points use the requested real-world anchors', () => {
+  assert.ok(LOCATION_ORDER.includes('교육대학원'), 'graduate school remains a fixed point')
   assert.ok(LOCATION_ORDER.includes('중앙도서관'), 'central library is a fixed point')
   assert.ok(!LOCATION_ORDER.includes('제3기숙사'), 'third dormitory is no longer a fixed point')
 
@@ -168,6 +169,19 @@ test('campus map room times are displayed without seconds', () => {
   assert.match(source, /formatRoomTime\(selectedOriginStat\.nextTime\)/)
   assert.match(source, /formatRoomTime\(room\.departure_time\)/)
   assert.doesNotMatch(source, /<span>\{room\.departure_time\}<\/span>/)
+})
+
+test('map bottom sheet room cards show destination only beside departure time', () => {
+  const source = readProjectFile('components/CampusRouteMap.tsx')
+  const roomCardStart = source.indexOf('selectedOriginRooms.map')
+  const roomCardEnd = source.indexOf('})}', roomCardStart)
+  const roomCardBlock = source.slice(roomCardStart, roomCardEnd)
+
+  assert.ok(roomCardStart > -1, 'selected origin room list exists')
+  assert.match(roomCardBlock, /formatRoomTime\(room\.departure_time\)/)
+  assert.match(roomCardBlock, /\(\{LOCATIONS\[room\.to_location\]\}\)/)
+  assert.doesNotMatch(roomCardBlock, /LOCATIONS\[room\.from_location\]/, 'origin should not be repeated inside origin sheet cards')
+  assert.doesNotMatch(roomCardBlock, /ArrowRight/, 'compact room cards should not need route arrows')
 })
 
 test('map room loading keeps only rooms within the visible map window', () => {

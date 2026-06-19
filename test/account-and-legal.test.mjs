@@ -93,3 +93,22 @@ test('landing headline uses a more expressive React Bits split text entrance', (
   assert.match(splitTextSource, /GSAPSplitText/)
   assert.match(splitTextSource, /aria-label=\{text\}/)
 })
+
+test('product and design context files document the product UI direction', () => {
+  assert.equal(existsSync(join(process.cwd(), 'PRODUCT.md')), true)
+  assert.equal(existsSync(join(process.cwd(), 'DESIGN.md')), true)
+
+  const product = readProjectFile('PRODUCT.md')
+  const design = readProjectFile('DESIGN.md')
+
+  assert.match(product, /## Register\s+product/)
+  assert.match(product, /가천대학교 학생/)
+  assert.match(product, /모바일 우선/)
+  assert.match(product, /정해진 지점 사이/)
+  assert.match(design, /^---/)
+  assert.match(design, /name:\s*같이타/)
+  assert.match(design, /## 1\. Overview/)
+  assert.match(design, /## 2\. Colors/)
+  assert.match(design, /Paperlogy/)
+  assert.match(design, /#2782ff/)
+})

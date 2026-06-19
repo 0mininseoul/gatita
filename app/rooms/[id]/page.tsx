@@ -26,9 +26,16 @@ export default function ChatRoomPage() {
   const [isConfirmed, setIsConfirmed] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
   const [showParticipants, setShowParticipants] = useState(false)
+  const [showHostGuide, setShowHostGuide] = useState(false)
+  const [hostAppearance, setHostAppearance] = useState('')
+  const [isSubmittingHostGuide, setIsSubmittingHostGuide] = useState(false)
+  const [showHostLeaveModal, setShowHostLeaveModal] = useState(false)
+  const [hostLeaveAgreed, setHostLeaveAgreed] = useState(false)
+  const [nextHostId, setNextHostId] = useState('')
   const [reportReason, setReportReason] = useState('')
   const [reportTarget, setReportTarget] = useState<string>('')
   const [timestampReveal, setTimestampReveal] = useState(0)
+  const hostGuideStorageKey = useMemo(() => `gatita:room-host-guide:${roomId}`, [roomId])
 
   const headerRef = useRef<HTMLElement>(null)
   const messagesScrollRef = useRef<HTMLDivElement>(null)
@@ -237,6 +244,11 @@ export default function ChatRoomPage() {
     '--timestamp-reveal': `${timestampReveal}px`,
     '--timestamp-opacity': `${Math.min(1, timestampReveal / MAX_TIMESTAMP_REVEAL)}`,
   }) as CSSProperties, [timestampReveal])
+  const isRoomCreator = room?.created_by === user?.id
+  const hostTransferCandidates = useMemo(
+    () => participants.filter((participant) => participant.user_id !== user?.id),
+    [participants, user?.id]
+  )
 
   const loadRoom = useCallback(async () => {
     try {
@@ -434,6 +446,21 @@ export default function ChatRoomPage() {
     }
   }, [loadMessages, loadParticipants, room, roomId, supabase, user?.id])
 
+  useEffect(() => {
+    if (loading || !room || !user) return
+    if (room.created_by !== user.id) return
+    if (window.localStorage.getItem(hostGuideStorageKey)) return
+
+    setShowHostGuide(true)
+  }, [hostGuideStorageKey, loading, room, user])
+
+  useEffect(() => {
+    if (!showHostLeaveModal) return
+    if (nextHostId) return
+
+    setNextHostId(hostTransferCandidates[0]?.user_id ?? '')
+  }, [hostTransferCandidates, nextHostId, showHostLeaveModal])
+
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !user) return
 
@@ -495,46 +522,57 @@ export default function ChatRoomPage() {
     }
   }
 
-  const handleLeaveRoom = async () => {
+  const completeLeaveRoom = async (transferHostId?: string) => {
     if (!user) return
 
-    if (!confirm('정말로 채팅방을 나가시겠습니까?')) return
-
     try {
-      // 현재 참여자 수 확인
-      const { data: currentParticipants } = await supabase
-        .from('room_participants')
-        .select('id')
-        .eq('room_id', roomId)
+      const response = await fetch(`/api/rooms/${roomId}/leave`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nextHostId: transferHostId ?? null }),
+      })
+      const result = await response.json().catch(() => null)
 
-      const participantCount = currentParticipants?.length || 0
-
-      // 참여자에서 제거
-      const { error: leaveError } = await supabase
-        .from('room_participants')
-        .delete()
-        .eq('room_id', roomId)
-        .eq('user_id', user.id)
-
-      if (leaveError) throw leaveError
-
-      if (participantCount <= 1) {
-        await supabase
-          .from('chat_rooms')
-          .update({ status: 'closed' })
-          .eq('id', roomId)
-          .eq('created_by', user.id)
-
-        toast.success('채팅방을 나갔습니다')
-      } else {
-        toast.success('채팅방을 나갔습니다')
+      if (!response.ok) {
+        throw new Error(result?.error ?? '채팅방 나가기 중 오류가 발생했습니다')
       }
 
+      toast.success('채팅방을 나갔습니다')
       router.push('/map')
     } catch (error) {
       console.error('Leave room error:', error)
-      toast.error('채팅방 나가기 중 오류가 발생했습니다')
+      toast.error(error instanceof Error ? error.message : '채팅방 나가기 중 오류가 발생했습니다')
     }
+  }
+
+  const handleLeaveRoom = async () => {
+    if (!user || !room) return
+
+    if (isRoomCreator && participants.length >= 2) {
+      setHostLeaveAgreed(false)
+      setNextHostId(hostTransferCandidates[0]?.user_id ?? '')
+      setShowHostLeaveModal(true)
+      return
+    }
+
+    if (!window.confirm('정말로 채팅방을 나가시겠습니까?')) return
+
+    await completeLeaveRoom()
+  }
+
+  const handleConfirmHostLeave = async () => {
+    if (!hostLeaveAgreed) {
+      toast.error('멤버들과 협의가 완료됐는지 확인해주세요')
+      return
+    }
+
+    if (!nextHostId) {
+      toast.error('다음 방장을 선택해주세요')
+      return
+    }
+
+    setShowHostLeaveModal(false)
+    await completeLeaveRoom(nextHostId)
   }
 
   const handleReport = async () => {
@@ -579,6 +617,39 @@ export default function ChatRoomPage() {
       toast.error('계좌 정보를 복사하지 못했습니다')
     }
   }, [creatorPayoutAccount])
+
+  const handleSubmitHostGuide = async () => {
+    if (!user) return
+    if (!hostAppearance.trim()) {
+      toast.error('인상착의를 한 줄로 작성해주세요')
+      return
+    }
+
+    setIsSubmittingHostGuide(true)
+
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .insert({
+          room_id: roomId,
+          user_id: user.id,
+          content: `방장 인상착의: ${hostAppearance.trim()}`,
+        })
+
+      if (error) throw error
+
+      window.localStorage.setItem(hostGuideStorageKey, 'true')
+      setShowHostGuide(false)
+      setHostAppearance('')
+      await loadMessages()
+      toast.success('방장 안내가 저장되었습니다')
+    } catch (error) {
+      console.error('Save host guide error:', error)
+      toast.error('방장 안내 저장 중 오류가 발생했습니다')
+    } finally {
+      setIsSubmittingHostGuide(false)
+    }
+  }
 
   const isParticipant = participants.some(p => p.user_id === user?.id)
 
@@ -822,6 +893,115 @@ export default function ChatRoomPage() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 방장 최초 안내 모달 */}
+      {showHostGuide && (
+        <div className="fixed inset-0 z-50 flex items-end bg-gray-950/35 px-3 pb-3 pt-16">
+          <div className="w-full rounded-2xl bg-white p-4 shadow-2xl">
+            <div className="mb-4">
+              <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">방장 안내</p>
+              <h2 className="mt-1 text-lg font-extrabold text-gray-950">출발 전 확인해주세요</h2>
+            </div>
+
+            <div className="space-y-2 text-sm font-bold leading-5 text-gray-700">
+              <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
+                정산이 필요할 경우 방장이 결제 후 정산한다.
+              </div>
+              <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
+                멤버들과 협의 없이 갑자기 방을 나가면 서비스 이용이 정지될 수 있다.
+              </div>
+            </div>
+
+            <label className="mt-4 block text-xs font-black text-gray-700" htmlFor="host-appearance">
+              본인의 인상착의
+            </label>
+            <input
+              id="host-appearance"
+              type="text"
+              value={hostAppearance}
+              onChange={(event) => setHostAppearance(event.target.value)}
+              placeholder="예: 검은 백팩, 파란 후드"
+              maxLength={60}
+              className="input-field mt-1.5 text-sm"
+            />
+
+            <button
+              type="button"
+              onClick={handleSubmitHostGuide}
+              disabled={!hostAppearance.trim() || isSubmittingHostGuide}
+              className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl bg-gray-950 text-sm font-black text-white transition hover:bg-gray-800 disabled:bg-gray-300"
+            >
+              {isSubmittingHostGuide ? '저장 중...' : '확인했어요'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 방장 나가기 확인 모달 */}
+      {showHostLeaveModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-gray-950/35 px-3 pb-3 pt-16"
+          onClick={() => setShowHostLeaveModal(false)}
+        >
+          <div
+            className="w-full rounded-2xl bg-white p-4 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.08em] text-red-600">방장 나가기</p>
+                <h2 className="mt-1 text-lg font-extrabold text-gray-950">다음 방장을 정해주세요</h2>
+              </div>
+              <button
+                type="button"
+                aria-label="방장 나가기 닫기"
+                onClick={() => setShowHostLeaveModal(false)}
+                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <label className="flex items-start gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 text-sm font-bold text-gray-700">
+              <input
+                type="checkbox"
+                checked={hostLeaveAgreed}
+                onChange={(event) => setHostLeaveAgreed(event.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600"
+              />
+              <span>멤버들과 협의가 완료됐나요?</span>
+            </label>
+
+            <div className="mt-3">
+              <label className="mb-1.5 block text-xs font-black text-gray-700">다음 방장</label>
+              <select
+                value={nextHostId}
+                onChange={(event) => setNextHostId(event.target.value)}
+                className="input-field text-sm font-bold"
+              >
+                <option value="">선택해주세요</option>
+                {hostTransferCandidates.map((participant) => (
+                  <option key={participant.user_id} value={participant.user_id}>
+                    {participant.user?.nickname} ({participant.user?.department})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleConfirmHostLeave}
+              disabled={!hostLeaveAgreed || !nextHostId}
+              className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl bg-red-600 text-sm font-black text-white transition hover:bg-red-700 disabled:bg-gray-300"
+            >
+              나가기
+            </button>
+            <p className="mt-2 text-center text-[11px] font-semibold leading-4 text-gray-400">
+              협의 없이 여러 번 탈주하면 서비스 이용이 정지될 수 있습니다
+            </p>
           </div>
         </div>
       )}

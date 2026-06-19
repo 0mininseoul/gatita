@@ -144,7 +144,18 @@ create policy "Room participants can read creator payout accounts"
 -- Chat rooms: Everyone can read, authenticated users can create
 create policy "Anyone can read chat rooms" on public.chat_rooms for select using (true);
 create policy "Authenticated users can create chat rooms" on public.chat_rooms for insert with check (auth.uid() = created_by);
-create policy "Room creators can update their rooms" on public.chat_rooms for update using (auth.uid() = created_by);
+create policy "Room creators can transfer active rooms to participants"
+  on public.chat_rooms for update
+  using (auth.uid() = created_by)
+  with check (
+    auth.uid() = created_by
+    or exists (
+      select 1
+      from public.room_participants
+      where room_participants.room_id = chat_rooms.id
+        and room_participants.user_id = chat_rooms.created_by
+    )
+  );
 create policy "Room creators can delete their rooms" on public.chat_rooms for delete using (auth.uid() = created_by);
 
 -- Room participants: Everyone can read, users can join/leave

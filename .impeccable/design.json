@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-19T12:30:00+09:00",
+  "title": "Design System: 같이타",
+  "extensions": {
+    "colorMeta": {
+      "primary-blue": {
+        "role": "primary",
+        "displayName": "Campus Action Blue",
+        "canonical": "#2782ff",
+        "tonalRamp": ["#eff5ff", "#dbe8fe", "#bfd6fe", "#93bbfd", "#5d98fa", "#2782ff", "#1f6ef0", "#195fd1", "#1c4cab", "#1d4187"]
+      },
+      "brand-mauve": {
+        "role": "secondary",
+        "displayName": "Soft Brand Mauve",
+        "canonical": "#be97cf",
+        "tonalRamp": ["#f7f1fa", "#eadcf0", "#d8bddf", "#be97cf"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#111827",
+        "tonalRamp": ["#f9fafb", "#f3f4f6", "#e5e7eb", "#d1d5db", "#9ca3af", "#6b7280", "#4b5563", "#374151", "#1f2937", "#111827"]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Paperlogy Display",
+        "purpose": "Landing headline only."
+      },
+      "body": {
+        "displayName": "Paperlogy Product Body",
+        "purpose": "Dense Korean mobile product UI."
+      }
+    },
+    "shadows": [
+      {
+        "name": "map-header-float",
+        "value": "0 12px 34px rgba(17,24,39,0.14)",
+        "purpose": "Floating authenticated map header."
+      },
+      {
+        "name": "bottom-sheet-lift",
+        "value": "0 18px 48px rgba(17,24,39,0.22)",
+        "purpose": "Map bottom sheets and compact panels."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-transition",
+        "value": "160ms ease",
+        "purpose": "Small hover and focus state changes."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main action button for room creation and confirmations.",
+      "html": "<button class=\"ds-btn-primary\">방 생성하기</button>",
+      "css": ".ds-btn-primary{background:#2782ff;color:#ffffff;border:0;border-radius:8px;padding:10px 16px;font-weight:900;font-family:var(--font-paperlogy),-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;transition:background 160ms ease,transform 160ms ease}.ds-btn-primary:hover{background:#1f6ef0}"
+    },
+    {
+      "name": "Map Chip",
+      "kind": "chip",
+      "refersTo": "map-chip",
+      "description": "Non-interactive status chip floating below the map header.",
+      "html": "<div class=\"ds-map-chip\">오늘 예정 방 2개</div>",
+      "css": ".ds-map-chip{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.9);color:#111827;border:1px solid rgba(255,255,255,.75);border-radius:8px;padding:8px 12px;font-size:12px;font-weight:900;box-shadow:0 10px 28px rgba(17,24,39,.12);font-family:var(--font-paperlogy),-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}"
+    }
+  ],
+  "narrative": {
+    "northStar": "캠퍼스 이동 관제판",
+    "overview": "지도와 채팅을 중심으로 작동하는 모바일 관제판이다. 사용자는 현재 출발 가능한 방과 필요한 조율 정보를 빠르게 확인한다.",
+    "keyCharacteristics": ["모바일 우선 지도", "굵고 짧은 한국어 UI", "절제된 파란 액션", "고정된 채팅 크롬"],
+    "rules": [
+      {
+        "name": "The One Accent Rule",
+        "body": "파란색은 선택, 주요 행동, 상태 정보에만 사용한다.",
+        "section": "colors"
+      },
+      {
+        "name": "The Map Must Breathe Rule",
+        "body": "헤더, 칩, 지점 라벨, 줌 컨트롤은 서로 겹치지 않아야 한다.",
+        "section": "elevation"
+      }
+    ],
+    "dos": ["지도 헤더와 상태 칩을 실제 헤더 높이 기준으로 배치한다.", "채팅방에서는 메시지 영역만 스크롤한다."],
+    "donts": ["지도 위 요소를 겹치게 두지 않는다.", "앱 내부를 랜딩처럼 장식 카드로 채우지 않는다."]
+  }
+}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, Clock, Compass, Minus, Plus, Users, X } from 'lucide-react'
+import { Clock, Compass, Minus, Plus, Users, X } from 'lucide-react'
 import {
   getDepartureTimeOptions,
   getDestinationOptions,
@@ -491,14 +491,12 @@ export default function CampusRouteMap({
                         className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
                       >
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2 text-sm font-black text-gray-950">
-                            <Clock className="h-4 w-4 text-primary-600" />
-                            <span>{formatRoomTime(room.departure_time)}</span>
-                          </div>
-                          <div className="mt-1 flex min-w-0 items-center gap-1 text-xs font-bold text-gray-600">
-                            <span className="truncate">{LOCATIONS[room.from_location]}</span>
-                            <ArrowRight className="h-3 w-3 shrink-0 text-gray-400" />
-                            <span className="truncate">{LOCATIONS[room.to_location]}</span>
+                          <div className="flex min-w-0 items-center gap-2 text-sm font-black text-gray-950">
+                            <Clock className="h-4 w-4 shrink-0 text-primary-600" />
+                            <span className="shrink-0">{formatRoomTime(room.departure_time)}</span>
+                            <span className="truncate text-xs font-extrabold text-gray-600">
+                              ({LOCATIONS[room.to_location]})
+                            </span>
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">

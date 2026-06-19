@@ -15,6 +15,12 @@ const MAX_TIMESTAMP_REVEAL = 68
 const HOST_APPEARANCE_MESSAGE_PREFIX = '__gatita_host_appearance__:'
 const LEGACY_HOST_APPEARANCE_MESSAGE_PREFIX = '방장 인상착의:'
 
+type RoomPrivateInfoPayload = {
+  phonesByUserId?: Record<string, string | null>
+  creatorPayoutAccount?: PayoutAccount | null
+  error?: string
+}
+
 function extractHostAppearanceFromMessage(content: string) {
   if (content.startsWith(HOST_APPEARANCE_MESSAGE_PREFIX)) {
     return content.slice(HOST_APPEARANCE_MESSAGE_PREFIX.length).trim()
@@ -317,18 +323,6 @@ export default function ChatRoomPage() {
 
       if (data) {
         setRoom(data as any)
-        const { data: payoutAccount, error: payoutError } = await supabase
-          .from('user_payout_accounts')
-          .select('user_id, bank_name, account_number, account_holder, created_at, updated_at')
-          .eq('user_id', data.created_by)
-          .maybeSingle()
-
-        if (payoutError) {
-          console.error('Load creator payout account error:', payoutError)
-          setCreatorPayoutAccount(null)
-        } else {
-          setCreatorPayoutAccount(payoutAccount)
-        }
       } else {
         router.push('/')
       }
@@ -395,12 +389,30 @@ export default function ChatRoomPage() {
         .from('room_participants')
         .select(`
           *,
-          user:users(nickname, department, phone)
+          user:users(nickname, department)
         `)
         .eq('room_id', roomId)
 
       if (data) {
-        setParticipants(data as any)
+        const privateResponse = await fetch(`/api/rooms/${roomId}/private`)
+        const privateResult = await privateResponse.json().catch(() => null) as RoomPrivateInfoPayload | null
+        const phonesByUserId = privateResponse.ok ? privateResult?.phonesByUserId ?? {} : {}
+
+        if (privateResponse.ok) {
+          setCreatorPayoutAccount(privateResult?.creatorPayoutAccount ?? null)
+        } else {
+          setCreatorPayoutAccount(null)
+        }
+
+        setParticipants(data.map((participant: any) => ({
+          ...participant,
+          user: participant.user
+            ? {
+                ...participant.user,
+                phone: phonesByUserId[participant.user_id] ?? null,
+              }
+            : participant.user,
+        })) as any)
       }
     } catch (error) {
       console.error('Load participants error:', error)
@@ -435,13 +447,20 @@ export default function ChatRoomPage() {
         return
       }
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', authUser.id)
-        .maybeSingle()
+      const profileResponse = await fetch('/api/profile/me')
+      const profileResult = await profileResponse.json().catch(() => null) as {
+        profileCompleted?: boolean
+        user?: User | null
+        error?: string
+      } | null
 
-      if (!userData) {
+      if (!profileResponse.ok) {
+        throw new Error(profileResult?.error ?? '프로필을 확인하지 못했습니다')
+      }
+
+      const userData = profileResult?.user
+
+      if (!profileResult?.profileCompleted || !userData) {
         router.push('/')
         return
       }
@@ -659,13 +678,14 @@ export default function ChatRoomPage() {
     setIsConfirmingParticipation(true)
 
     try {
-      const { error } = await supabase
-        .from('room_participants')
-        .update({ confirmed: true })
-        .eq('room_id', roomId)
-        .eq('user_id', user.id)
+      const response = await fetch(`/api/rooms/${roomId}/confirm`, {
+        method: 'POST',
+      })
+      const result = await response.json().catch(() => null)
 
-      if (error) throw error
+      if (!response.ok) {
+        throw new Error(result?.error ?? '참여 확정 중 오류가 발생했습니다')
+      }
 
       setIsConfirmed(true)
       await loadParticipants()

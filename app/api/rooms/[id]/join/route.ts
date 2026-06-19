@@ -1,32 +1,14 @@
-import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { withAxiomRoute } from '@/lib/axiom/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { isRoomJoinable } from '@/lib/supabase'
 import { createClient } from '@/lib/supabase/server'
-
-function isMissingModerationColumn(error: { code?: string; message?: string } | null) {
-  if (!error) return false
-  return (
-    error.code === '42703'
-    || error.code === 'PGRST204'
-    || /suspended_until|suspension_reason|moderation_updated_at/.test(error.message ?? '')
-  )
-}
 
 async function joinRoom(
   _request: Request,
   { params }: { params: { id: string } },
 ) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const roomId = params.id
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    return NextResponse.json(
-      { error: '채팅방 참여 설정이 아직 연결되지 않았습니다' },
-      { status: 500 },
-    )
-  }
 
   const supabase = createClient()
   const { data, error: authError } = await supabase.auth.getUser()
@@ -36,26 +18,12 @@ async function joinRoom(
     return NextResponse.json({ error: '로그인이 필요합니다' }, { status: 401 })
   }
 
-  const admin = createAdminClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
-
-  let profileResult = await admin
-    .from('users')
-    .select('id, status, suspended_until')
-    .eq('id', authUser.id)
+  const admin = createAdminSupabase()
+  const profileResult = await admin
+    .from('user_private_profiles')
+    .select('user_id, status, suspended_until')
+    .eq('user_id', authUser.id)
     .maybeSingle()
-
-  if (profileResult.error && isMissingModerationColumn(profileResult.error)) {
-    profileResult = await admin
-      .from('users')
-      .select('id, status')
-      .eq('id', authUser.id)
-      .maybeSingle()
-  }
 
   const { data: profile, error: profileError } = profileResult
 
@@ -68,32 +36,21 @@ async function joinRoom(
   }
 
   if (profile.status !== 'active') {
-    const suspendedUntil = 'suspended_until' in profile ? profile.suspended_until : null
+    const suspendedUntil = profile.suspended_until
 
     if (suspendedUntil && new Date(suspendedUntil).getTime() <= Date.now()) {
       const { error: releaseError } = await admin
-        .from('users')
+        .from('user_private_profiles')
         .update({
           status: 'active',
           suspended_until: null,
           suspension_reason: null,
           moderation_updated_at: new Date().toISOString(),
         })
-        .eq('id', authUser.id)
+        .eq('user_id', authUser.id)
 
-      if (releaseError && !isMissingModerationColumn(releaseError)) {
+      if (releaseError) {
         return NextResponse.json({ error: '프로필을 확인하지 못했습니다' }, { status: 500 })
-      }
-
-      if (releaseError && isMissingModerationColumn(releaseError)) {
-        const { error: fallbackReleaseError } = await admin
-          .from('users')
-          .update({ status: 'active' })
-          .eq('id', authUser.id)
-
-        if (fallbackReleaseError) {
-          return NextResponse.json({ error: '프로필을 확인하지 못했습니다' }, { status: 500 })
-        }
       }
     } else {
       return NextResponse.json({ error: '서비스 이용이 정지된 계정입니다' }, { status: 403 })

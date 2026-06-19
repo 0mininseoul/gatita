@@ -1,21 +1,11 @@
-import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { withAxiomRoute } from '@/lib/axiom/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 
 const DELETE_CONFIRMATION_TEXT = '떠나지 말아주세요. 탈퇴하시는 이유를 여쭤봐도 될까요? 열심히 만들었어요 흑흑'
 
 async function deleteAccount(request: Request) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    return NextResponse.json(
-      { error: '계정 삭제 설정이 아직 연결되지 않았습니다' },
-      { status: 500 },
-    )
-  }
-
   let payload: { confirmation?: string }
 
   try {
@@ -36,12 +26,7 @@ async function deleteAccount(request: Request) {
     return NextResponse.json({ error: '로그인이 필요합니다' }, { status: 401 })
   }
 
-  const admin = createAdminClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
+  const admin = createAdminSupabase()
 
   const { error: deleteError } = await admin.auth.admin.deleteUser(user.id)
 

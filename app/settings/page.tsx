@@ -301,7 +301,10 @@ export default function SettingsPage() {
   return (
     <div className="min-h-screen app-bg">
       {/* Header */}
-      <header className="app-header px-4 py-4">
+      <header
+        className="app-header px-4 pb-4"
+        style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}
+      >
         <div className="flex items-center">
           <button
             onClick={() => router.push('/map')}

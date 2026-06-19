@@ -37,6 +37,14 @@ test('settings back action returns to the authenticated map', () => {
   assert.doesNotMatch(source, /onClick=\{\(\) => router\.back\(\)\}/)
 })
 
+test('settings header clears the iOS PWA status bar safe area', () => {
+  const source = readProjectFile('app/settings/page.tsx')
+
+  assert.match(source, /<header\s+className="app-header px-4 pb-4"/)
+  assert.match(source, /paddingTop:\s*'max\(1rem, env\(safe-area-inset-top\)\)'/)
+  assert.doesNotMatch(source, /<header\s+className="app-header px-4 py-4"/)
+})
+
 test('account deletion API verifies the session and deletes the auth user with the service role key', () => {
   const routePath = 'app/api/account/delete/route.ts'
 

@@ -55,6 +55,8 @@ test('profile onboarding uses three phone boxes and keeps account number segment
   const settings = readProjectFile('app', 'settings', 'page.tsx')
   const bankFields = readProjectFile('components', 'BankAccountFields.tsx')
 
+  assert.match(signup, /hasCheckedSessionRef/, 'signup session bootstrap should run only once so parent rerenders do not reset onboarding progress')
+  assert.doesNotMatch(signup, /\[onSuccess,\s*supabase\]/, 'signup session bootstrap must not rerun whenever parent callbacks are recreated')
   assert.match(signup, /PhoneSegmentField/, 'signup should render the segmented phone component')
   assert.match(signup, /const segmentLengths = \[3, 4, 4\]/, 'phone number should use 010 / middle / last boxes')
   assert.match(signup, /grid-cols-\[0\.82fr_auto_1fr_auto_1fr\]/, 'phone boxes should be visually separated into three fields')

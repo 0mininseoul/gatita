@@ -86,9 +86,19 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
 
   const currentStepData = SIGNUP_STEPS[currentStep]
   const stepRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const hasCheckedSessionRef = useRef(false)
+  const onSuccessRef = useRef(onSuccess)
   const isLastStep = currentStep === SIGNUP_STEPS.length - 1
 
+  useEffect(() => {
+    onSuccessRef.current = onSuccess
+  }, [onSuccess])
+
   const checkSession = useCallback(async () => {
+    if (hasCheckedSessionRef.current) return
+
+    hasCheckedSessionRef.current = true
+
     try {
       const { data: { session } } = await supabase.auth.getSession()
 
@@ -112,7 +122,7 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
             }))
             setCurrentStep(0)
           } else {
-            onSuccess()
+            onSuccessRef.current()
           }
         } else {
           toast.error(NON_GACHON_ACCOUNT_MESSAGE)
@@ -122,7 +132,7 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
     } catch (error) {
       console.error('Signup session check error:', error)
     }
-  }, [onSuccess, supabase])
+  }, [supabase])
 
   useEffect(() => {
     checkSession()

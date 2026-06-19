@@ -90,6 +90,7 @@ export default function AdminRoomMonitorPage() {
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [adminAccessError, setAdminAccessError] = useState('')
   const headerRef = useRef<HTMLElement>(null)
   const composerRef = useRef<HTMLDivElement>(null)
   const messagesScrollRef = useRef<HTMLDivElement>(null)
@@ -128,7 +129,9 @@ export default function AdminRoomMonitorPage() {
       const result = await response.json().catch(() => null) as DashboardResponse | { error?: string } | null
 
       if (response.status === 401 || response.status === 403) {
-        router.push('/map')
+        setRoom(null)
+        setMessages([])
+        setAdminAccessError(result && isErrorResponse(result) ? result.error ?? '관리자 접근 권한을 확인하지 못했습니다' : '관리자 접근 권한을 확인하지 못했습니다')
         return
       }
 
@@ -151,14 +154,16 @@ export default function AdminRoomMonitorPage() {
       setMessages(visibleMessages)
       setHostAppearance(latestHostAppearance)
       setLastUpdatedAt(new Date())
+      setAdminAccessError('')
     } catch (error) {
       console.error('Admin room monitor load error:', error)
+      setAdminAccessError(error instanceof Error ? error.message : '채팅방 모니터링 데이터를 불러오지 못했습니다')
       toast.error(error instanceof Error ? error.message : '채팅방 모니터링 데이터를 불러오지 못했습니다')
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [roomId, router])
+  }, [roomId])
 
   useEffect(() => {
     loadMonitor()
@@ -227,9 +232,17 @@ export default function AdminRoomMonitorPage() {
         <div>
           <Eye className="mx-auto mb-4 h-12 w-12 text-gray-400" />
           <h1 className="text-xl font-black text-gray-950">채팅방을 불러오지 못했습니다</h1>
-          <button type="button" onClick={() => loadMonitor()} className="btn-primary mt-4">
-            다시 시도
-          </button>
+          <p className="mx-auto mt-2 max-w-xs text-sm font-semibold leading-5 text-gray-500">
+            {adminAccessError || '관리자 모니터링 데이터를 확인하지 못했습니다'}
+          </p>
+          <div className="mt-4 flex justify-center gap-2">
+            <button type="button" onClick={() => loadMonitor()} className="btn-primary">
+              다시 시도
+            </button>
+            <button type="button" onClick={() => router.push('/admin')} className="btn-secondary">
+              대시보드
+            </button>
+          </div>
         </div>
       </div>
     )

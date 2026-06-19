@@ -113,6 +113,7 @@ export default function AdminPage() {
   const [isMutating, setIsMutating] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedRoomId, setSelectedRoomId] = useState('')
+  const [adminAccessError, setAdminAccessError] = useState('')
 
   const loadDashboard = useCallback(async (roomId = selectedRoomId) => {
     setLoading(true)
@@ -123,7 +124,8 @@ export default function AdminPage() {
       const result = await response.json().catch(() => null)
 
       if (response.status === 401 || response.status === 403) {
-        router.push('/map')
+        setDashboard(null)
+        setAdminAccessError(result?.error ?? '관리자 접근 권한을 확인하지 못했습니다')
         return
       }
 
@@ -131,14 +133,16 @@ export default function AdminPage() {
         throw new Error(result?.error ?? '관리자 데이터를 불러오지 못했습니다')
       }
 
+      setAdminAccessError('')
       setDashboard(result)
     } catch (error) {
       console.error('Admin dashboard load error:', error)
+      setAdminAccessError(error instanceof Error ? error.message : '관리자 데이터를 불러오지 못했습니다')
       toast.error(error instanceof Error ? error.message : '관리자 데이터를 불러오지 못했습니다')
     } finally {
       setLoading(false)
     }
-  }, [router, selectedRoomId])
+  }, [selectedRoomId])
 
   useEffect(() => {
     loadDashboard()
@@ -198,10 +202,19 @@ export default function AdminPage() {
       <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 text-center">
         <div>
           <Shield className="mx-auto mb-4 h-12 w-12 text-rose-500" />
-          <h1 className="text-xl font-black text-gray-950">관리자 데이터를 불러오지 못했습니다</h1>
-          <button type="button" onClick={() => loadDashboard()} className="btn-primary mt-4">
-            다시 시도
-          </button>
+          <p className="text-xs font-black text-primary-600">관리자 접근</p>
+          <h1 className="mt-1 text-xl font-black text-gray-950">관리자 접근 권한을 확인해주세요</h1>
+          <p className="mx-auto mt-2 max-w-xs text-sm font-semibold leading-5 text-gray-500">
+            {adminAccessError || '관리자 데이터를 불러오지 못했습니다'}
+          </p>
+          <div className="mt-4 flex justify-center gap-2">
+            <button type="button" onClick={() => loadDashboard()} className="btn-primary">
+              다시 시도
+            </button>
+            <button type="button" onClick={() => router.push('/map')} className="btn-secondary">
+              지도로
+            </button>
+          </div>
         </div>
       </div>
     )

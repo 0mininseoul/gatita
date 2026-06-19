@@ -354,13 +354,13 @@ export default function HomePage() {
   }, [])
 
   useEffect(() => {
-    if (!hasAuthenticatedSession || !hasEnteredApp) return
+    if (!hasAuthenticatedSession || !hasEnteredApp || authMode === 'signup') return
 
     loadMapRooms()
     const intervalId = window.setInterval(loadMapRooms, 30000)
 
     return () => window.clearInterval(intervalId)
-  }, [hasAuthenticatedSession, hasEnteredApp, loadMapRooms])
+  }, [authMode, hasAuthenticatedSession, hasEnteredApp, loadMapRooms])
 
   const onlineDisplayCount = usePresenceDisplayCount(
     supabase,
@@ -1174,16 +1174,8 @@ export default function HomePage() {
             </div>
 
             <p className="mt-3 text-sm font-semibold leading-5 text-gray-600">
-              {profileDisplayName}님, 지도는 먼저 둘러볼 수 있어요. 고정지점 선택, 나의 방, 설정은 실명과 연락처 등록 후 사용할 수 있습니다.
+              프로필 세팅 이후 &lt;같이타&gt;를 이용할 수 있어요.
             </p>
-
-            <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 px-3 py-3">
-              <div className="grid gap-2 text-xs font-bold leading-5 text-gray-600">
-                <p>실명과 학과는 동행 멤버 확인에 사용돼요.</p>
-                <p>전화번호는 지각, 노쇼, 출발 위치 확인 목적에만 노출될 수 있어요.</p>
-                <p>계좌정보는 방장이 되었을 때 정산을 위해 멤버에게 보일 수 있어요.</p>
-              </div>
-            </div>
 
             <button
               type="button"

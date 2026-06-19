@@ -74,10 +74,11 @@ const SIGNUP_STEPS: SignupStep[] = [
 interface SignupFormProps {
   onSuccess: () => void
   onBackToLanding?: () => void
+  startWithProfileStep?: boolean
 }
 
-export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormProps) {
-  const [currentStep, setCurrentStep] = useState(-1) // -1 = Google login screen, 0+ = profile steps
+export default function SignupForm({ onSuccess, onBackToLanding, startWithProfileStep = false }: SignupFormProps) {
+  const [currentStep, setCurrentStep] = useState(() => startWithProfileStep ? 0 : -1) // -1 = Google login screen, 0+ = profile steps
   const [formData, setFormData] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})

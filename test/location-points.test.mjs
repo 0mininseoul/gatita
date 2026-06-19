@@ -322,6 +322,9 @@ test('profileless authenticated users see the map first and complete profile fro
   assert.match(source, /const handleOpenMyRooms[\s\S]*requiresProfile[\s\S]*setShowProfileRequiredModal\(true\)/)
   assert.match(source, /aria-label="설정"[\s\S]*requiresProfile[\s\S]*setShowProfileRequiredModal\(true\)/)
   assert.match(signup, /if \(onBackToLanding\)[\s\S]*onBackToLanding\(\)[\s\S]*return[\s\S]*await supabase\.auth\.signOut\(\)/)
+  assert.match(signup, /startWithProfileStep\?: boolean/, 'profile setup form should support skipping the legacy Google welcome screen')
+  assert.match(signup, /useState\(\(\) => startWithProfileStep \? 0 : -1\)/, 'authenticated profile setup should start at the first profile step')
+  assert.match(source, /<SignupForm[\s\S]*startWithProfileStep=\{hasAuthenticatedSession\}/, 'profile setup entry from the authenticated map should not flash the landing signup screen')
 })
 
 test('landing exposes email password login only through the test login query', () => {

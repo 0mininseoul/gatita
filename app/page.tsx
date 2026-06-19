@@ -1206,6 +1206,7 @@ export default function HomePage() {
     return (
       <>
         <SignupForm
+          startWithProfileStep={hasAuthenticatedSession}
           onSuccess={() => {
             setAuthMode(null)
             router.push('/map')

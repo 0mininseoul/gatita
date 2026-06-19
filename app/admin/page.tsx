@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { AlertTriangle, CheckCircle, Eye, Flag, MessageCircle, RefreshCw, Search, Shield, Users } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
+import { LOCATIONS, type LocationType } from '@/lib/supabase'
 
 type TabType = 'overview' | 'reports' | 'users' | 'rooms' | 'messages'
 
@@ -36,7 +37,13 @@ type AdminReport = {
   created_at: string
   reporter?: { nickname?: string; email?: string; department?: string } | null
   reported?: { nickname?: string; email?: string; department?: string } | null
-  room?: { title?: string; from_location?: string; to_location?: string } | null
+  room?: {
+    title?: string
+    from_location?: LocationType
+    to_location?: LocationType
+    departure_date?: string
+    departure_time?: string
+  } | null
 }
 
 type AdminRoom = {
@@ -45,6 +52,8 @@ type AdminRoom = {
   departure_date: string
   departure_time: string
   max_participants: number
+  from_location: LocationType
+  to_location: LocationType
   status: 'active' | 'closed'
   created_at: string
   creator?: { nickname?: string; department?: string } | null
@@ -87,6 +96,28 @@ function statusClass(status: string) {
   return 'bg-rose-50 text-rose-700 ring-rose-100'
 }
 
+function formatAdminDate(date: string) {
+  const [, month, day] = date.split('-')
+  return `${Number(month)}/${Number(day)}`
+}
+
+function formatAdminRoomTitle(room: {
+  title?: string
+  from_location?: LocationType
+  to_location?: LocationType
+  departure_date?: string
+  departure_time?: string
+}) {
+  if (!room.departure_date || !room.departure_time || !room.from_location || !room.to_location) {
+    return room.title ?? '방 정보 없음'
+  }
+
+  const fromLabel = LOCATIONS[room.from_location] ?? room.from_location
+  const toLabel = LOCATIONS[room.to_location] ?? room.to_location
+
+  return `[${formatAdminDate(room.departure_date)}] ${room.departure_time.slice(0, 5)} ${fromLabel}→${toLabel}`
+}
+
 function StatCard({
   label,
   value,
@@ -112,6 +143,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [isMutating, setIsMutating] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [roomDateFilter, setRoomDateFilter] = useState('')
   const [selectedRoomId, setSelectedRoomId] = useState('')
   const [adminAccessError, setAdminAccessError] = useState('')
 
@@ -188,6 +220,15 @@ export default function AdminPage() {
   const activeRooms = dashboard?.rooms.filter((room) => room.status === 'active') ?? []
   const pendingReports = dashboard?.reports.filter((report) => report.status === 'pending') ?? []
   const suspendedUsers = dashboard?.users.filter((user) => user.status === 'suspended') ?? []
+  const roomDateOptions = useMemo(() => {
+    const dates = Array.from(new Set((dashboard?.rooms ?? []).map((room) => room.departure_date)))
+    return dates.sort((a, b) => b.localeCompare(a))
+  }, [dashboard?.rooms])
+  const filteredRooms = useMemo(() => {
+    if (!dashboard) return []
+    if (!roomDateFilter) return dashboard.rooms
+    return dashboard.rooms.filter((room) => room.departure_date === roomDateFilter)
+  }, [dashboard, roomDateFilter])
 
   if (loading && !dashboard) {
     return (
@@ -309,7 +350,7 @@ export default function AdminPage() {
                       }}
                       className="block w-full text-left hover:text-primary-700"
                     >
-                      <p className="font-black text-gray-950">{room.title}</p>
+                      <p className="font-black text-gray-950">{formatAdminRoomTitle(room)}</p>
                       <p className="text-xs font-semibold text-gray-500">
                         {room.participants?.length ?? 0}/{room.max_participants}명 · {room.creator?.nickname ?? '개설자 미상'}
                       </p>
@@ -342,7 +383,7 @@ export default function AdminPage() {
                       신고 대상: {report.reported?.nickname ?? '알 수 없음'} · 신고자: {report.reporter?.nickname ?? '알 수 없음'}
                     </p>
                     <p className="text-xs font-semibold text-gray-500">
-                      {format(new Date(report.created_at), 'yyyy-MM-dd HH:mm')} · {report.room?.title ?? '방 정보 없음'}
+                      {format(new Date(report.created_at), 'yyyy-MM-dd HH:mm')} · {formatAdminRoomTitle(report.room ?? {})}
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -442,46 +483,86 @@ export default function AdminPage() {
         )}
 
         {activeTab === 'rooms' && (
-          <section className="mt-5 grid gap-3 md:grid-cols-2">
-            {dashboard.rooms.map((room) => (
-              <article key={room.id} className="rounded-lg border border-gray-200 bg-white p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h2 className="font-black text-gray-950">{room.title}</h2>
-                    <p className="mt-1 text-xs font-semibold text-gray-500">
-                      {room.creator?.nickname ?? '개설자 미상'} · {format(new Date(`${room.departure_date}T${room.departure_time}+09:00`), 'MM-dd HH:mm')}
-                    </p>
+          <section className="mt-5">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-3">
+              <div>
+                <h2 className="text-base font-black text-gray-950">방 목록</h2>
+                <p className="text-xs font-semibold text-gray-500">
+                  {roomDateFilter ? `${formatAdminDate(roomDateFilter)} 출발 방 ${filteredRooms.length}개` : `전체 방 ${filteredRooms.length}개`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={roomDateFilter}
+                  onChange={(event) => setRoomDateFilter(event.target.value)}
+                  list="admin-room-date-options"
+                  className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm font-bold text-gray-950 outline-none focus:border-primary-600"
+                />
+                <datalist id="admin-room-date-options">
+                  {roomDateOptions.map((date) => (
+                    <option key={date} value={date} />
+                  ))}
+                </datalist>
+                {roomDateFilter && (
+                  <button
+                    type="button"
+                    onClick={() => setRoomDateFilter('')}
+                    className="h-10 rounded-lg border border-gray-200 px-3 text-xs font-black text-gray-700 transition hover:bg-gray-50"
+                  >
+                    전체
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              {filteredRooms.map((room) => (
+                <article key={room.id} className="rounded-lg border border-gray-200 bg-white p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h2 className="font-black text-gray-950">{formatAdminRoomTitle(room)}</h2>
+                      <p className="mt-1 text-xs font-semibold text-gray-500">
+                        {room.creator?.nickname ?? '개설자 미상'} · 생성 {format(new Date(room.created_at), 'MM-dd HH:mm')}
+                      </p>
+                    </div>
+                    <span className={`inline-flex rounded-full px-2 py-1 text-xs font-black ring-1 ${statusClass(room.status)}`}>
+                      {STATUS_LABELS[room.status]}
+                    </span>
                   </div>
-                  <span className={`inline-flex rounded-full px-2 py-1 text-xs font-black ring-1 ${statusClass(room.status)}`}>
-                    {STATUS_LABELS[room.status]}
-                  </span>
-                </div>
-                <div className="mt-3 flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm font-black">
-                  <span>참여자 {room.participants?.length ?? 0}/{room.max_participants}</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedRoomId(room.id)
-                        setActiveTab('messages')
-                        loadDashboard(room.id)
-                      }}
-                      className="text-primary-600"
-                    >
-                      대화 보기
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => router.push(`/admin/rooms/${room.id}`)}
-                      className="inline-flex items-center gap-1 text-gray-950"
-                    >
-                      <Eye className="h-4 w-4" />
-                      모니터링
-                    </button>
+                  <div className="mt-3 flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm font-black">
+                    <span>참여자 {room.participants?.length ?? 0}/{room.max_participants}</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedRoomId(room.id)
+                          setActiveTab('messages')
+                          loadDashboard(room.id)
+                        }}
+                        className="text-primary-600"
+                      >
+                        대화 보기
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/admin/rooms/${room.id}`)}
+                        className="inline-flex items-center gap-1 text-gray-950"
+                      >
+                        <Eye className="h-4 w-4" />
+                        모니터링
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              ))}
+            </div>
+
+            {filteredRooms.length === 0 && (
+              <div className="rounded-lg border border-dashed border-gray-200 bg-white px-4 py-10 text-center text-sm font-bold text-gray-500">
+                선택한 날짜의 방이 없습니다
+              </div>
+            )}
           </section>
         )}
 
@@ -499,7 +580,7 @@ export default function AdminPage() {
               >
                 <option value="">채팅방 선택</option>
                 {dashboard.rooms.map((room) => (
-                  <option key={room.id} value={room.id}>{room.title}</option>
+                  <option key={room.id} value={room.id}>{formatAdminRoomTitle(room)}</option>
                 ))}
               </select>
             </div>

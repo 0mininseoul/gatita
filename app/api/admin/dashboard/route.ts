@@ -108,7 +108,7 @@ export async function GET(request: Request) {
         created_at,
         reporter:reporter_id(nickname, email, department),
         reported:reported_id(nickname, email, department),
-        room:room_id(title, from_location, to_location)
+        room:room_id(title, from_location, to_location, departure_date, departure_time)
       `)
       .order('created_at', { ascending: false }),
     admin

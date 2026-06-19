@@ -44,6 +44,7 @@ export default function ChatRoomPage() {
   const [selectedCallParticipant, setSelectedCallParticipant] = useState<RoomParticipant | null>(null)
   const [showHostGuide, setShowHostGuide] = useState(false)
   const [hostAppearance, setHostAppearance] = useState('')
+  const [hostAppearanceLoaded, setHostAppearanceLoaded] = useState(false)
   const [hostAppearanceDraft, setHostAppearanceDraft] = useState('')
   const [showRoomGuide, setShowRoomGuide] = useState(false)
   const [isSubmittingHostGuide, setIsSubmittingHostGuide] = useState(false)
@@ -63,6 +64,8 @@ export default function ChatRoomPage() {
   const messagesScrollRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<HTMLDivElement>(null)
+  const isComposerFocusedRef = useRef(false)
+  const visualViewportBaselineRef = useRef(0)
   const timestampDragRef = useRef({
     isTracking: false,
     startX: 0,
@@ -100,8 +103,18 @@ export default function ChatRoomPage() {
   const syncChatChrome = useCallback(() => {
     const root = document.documentElement
     const visualViewport = window.visualViewport
-    const keyboardInset = visualViewport
-      ? Math.max(0, window.innerHeight - visualViewport.height)
+    const viewportHeight = visualViewport?.height ?? window.innerHeight
+
+    if (
+      !isComposerFocusedRef.current
+      || visualViewportBaselineRef.current === 0
+      || viewportHeight > visualViewportBaselineRef.current
+    ) {
+      visualViewportBaselineRef.current = viewportHeight
+    }
+
+    const keyboardInset = isComposerFocusedRef.current
+      ? Math.max(0, visualViewportBaselineRef.current - viewportHeight)
       : 0
     const headerHeight = headerRef.current?.getBoundingClientRect().height ?? 0
     const composerHeight = composerRef.current?.getBoundingClientRect().height ?? 0
@@ -213,6 +226,8 @@ export default function ChatRoomPage() {
   }, [loading, messages.length, room, scrollToBottom, syncAndPinChat, user])
 
   const handleComposerFocus = useCallback(() => {
+    isComposerFocusedRef.current = true
+
     const syncKeyboardViewport = () => {
       syncAndPinChat()
       pinLatestMessageIfScrollable()
@@ -224,6 +239,12 @@ export default function ChatRoomPage() {
     window.setTimeout(syncKeyboardViewport, 160)
     window.setTimeout(syncKeyboardViewport, 240)
   }, [pinLatestMessageIfScrollable, syncAndPinChat])
+
+  const handleComposerBlur = useCallback(() => {
+    isComposerFocusedRef.current = false
+    syncAndPinChat()
+    window.setTimeout(syncAndPinChat, 80)
+  }, [syncAndPinChat])
 
   const handleComposerInputPointerDown = useCallback((event: ReactPointerEvent<HTMLInputElement>) => {
     if (event.pointerType !== 'touch') return
@@ -329,6 +350,7 @@ export default function ChatRoomPage() {
       if (latestHostAppearance) {
         setHostAppearance(latestHostAppearance)
       }
+      setHostAppearanceLoaded(true)
 
       if (authorIds.length > 0) {
         const { data: authors, error: authorError } = await supabase
@@ -353,6 +375,7 @@ export default function ChatRoomPage() {
       setMessages(messagesWithAuthors as Message[])
     } catch (error) {
       console.error('Load messages error:', error)
+      setHostAppearanceLoaded(true)
     }
   }, [roomId, supabase])
 
@@ -481,10 +504,15 @@ export default function ChatRoomPage() {
   useEffect(() => {
     if (loading || !room || !user) return
     if (room.created_by !== user.id) return
+    if (!hostAppearanceLoaded) return
+    if (hostAppearance.trim()) {
+      window.localStorage.setItem(hostGuideStorageKey, 'true')
+      return
+    }
     if (window.localStorage.getItem(hostGuideStorageKey)) return
 
     setShowHostGuide(true)
-  }, [hostGuideStorageKey, loading, room, user])
+  }, [hostAppearance, hostAppearanceLoaded, hostGuideStorageKey, loading, room, user])
 
   useEffect(() => {
     if (loading || !room || !user) return
@@ -850,30 +878,38 @@ export default function ChatRoomPage() {
         onPointerCancel={handleMessagesPointerEnd}
         onPointerLeave={handleMessagesPointerEnd}
       >
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`chat-message-row flex w-full min-w-0 ${message.user_id === user.id ? 'justify-end' : 'justify-start'}`}
-          >
-            <div className={`chat-message-bubble-stack min-w-0 max-w-[min(78vw,18rem)] ${message.user_id === user.id ? 'ml-7' : 'mr-7'}`}>
-              {message.user_id !== user.id && (
-                <p className="mb-0.5 truncate px-1 text-xs text-gray-500">
-                  {message.user?.nickname} ({message.user?.department})
-                </p>
-              )}
-              <div
-                className={`chat-message max-w-full ${
-                  message.user_id === user.id ? 'chat-message-own' : 'chat-message-other'
-                }`}
-              >
-                {message.content}
+        {messages.map((message, index) => {
+          const isOwnMessage = message.user_id === user.id
+          const previousMessage = messages[index - 1]
+          const nextMessage = messages[index + 1]
+          const startsMessageGroup = !previousMessage || previousMessage.user_id !== message.user_id
+          const endsMessageGroup = !nextMessage || nextMessage.user_id !== message.user_id
+
+          return (
+            <div
+              key={message.id}
+              className={`chat-message-row flex w-full min-w-0 ${startsMessageGroup ? 'is-new-author' : 'is-same-author'} ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
+            >
+              <div className={`chat-message-bubble-stack min-w-0 max-w-[min(78vw,18rem)] ${isOwnMessage ? 'ml-7' : 'mr-7'}`}>
+                {!isOwnMessage && startsMessageGroup && (
+                  <p className="chat-message-author">
+                    {message.user?.nickname} ({message.user?.department})
+                  </p>
+                )}
+                <div
+                  className={`chat-message max-w-full ${
+                    isOwnMessage ? 'chat-message-own' : 'chat-message-other'
+                  } ${startsMessageGroup ? 'chat-message-group-start' : 'chat-message-group-follow'} ${endsMessageGroup ? 'chat-message-group-end' : 'chat-message-group-continue'}`}
+                >
+                  {message.content}
+                </div>
               </div>
+              <time className="chat-message-time" dateTime={message.created_at}>
+                {format(new Date(message.created_at), 'HH:mm')}
+              </time>
             </div>
-            <time className="chat-message-time" dateTime={message.created_at}>
-              {format(new Date(message.created_at), 'HH:mm')}
-            </time>
-          </div>
-        ))}
+          )
+        })}
         <div ref={messagesEndRef} />
       </div>
 
@@ -888,6 +924,7 @@ export default function ChatRoomPage() {
               onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
               onPointerDown={handleComposerInputPointerDown}
               onFocus={handleComposerFocus}
+              onBlur={handleComposerBlur}
               placeholder="메시지를 입력하세요..."
               className="min-w-0 flex-1 rounded-full border border-gray-200 px-4 py-2 focus:border-primary-600 focus:ring-2 focus:ring-primary-100"
             />
@@ -979,25 +1016,24 @@ export default function ChatRoomPage() {
       {/* 방장 최초 안내 모달 */}
       {showHostGuide && (
         <div className="fixed inset-0 z-50 flex items-end bg-gray-950/35 px-3 pb-3 pt-16">
-          <div className="w-full rounded-2xl bg-white p-4 shadow-2xl">
+          <div className="chat-guide-sheet w-full rounded-2xl bg-white p-4 shadow-2xl">
+            <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-gray-200" />
             <div className="mb-4">
-              <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">방장 안내</p>
-              <h2 className="mt-1 text-lg font-extrabold text-gray-950">출발 전 확인해주세요</h2>
+              <p className="text-xs font-black text-primary-600">방장 안내</p>
+              <h2 className="mt-1 text-xl font-black leading-tight text-gray-950">출발 전 체크</h2>
             </div>
 
-            <div className="space-y-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-[11px] font-medium leading-4 text-gray-600">
-              <div className="flex gap-2.5">
-                <span className="shrink-0">💳</span>
+            <div className="chat-guide-card">
+              <div className="chat-guide-line">
+                <span className="chat-guide-icon">💳</span>
                 <p>정산이 필요할 경우 방장이 결제 후 정산해요.</p>
               </div>
-              <div className="flex gap-1.5">
-                <span className="shrink-0">🤝</span>
-                <p className="whitespace-nowrap text-[9.5px] leading-4 tracking-[-0.08em]">
-                  출발 5분 전부터는 갑자기 방을 나가면 서비스 이용이 정지될 수 있어요
-                </p>
+              <div className="chat-guide-line">
+                <span className="chat-guide-icon">🤝</span>
+                <p>출발 5분 전부터는 갑자기 방을 나가면 서비스 이용이 정지될 수 있어요.</p>
               </div>
-              <div className="flex gap-2.5">
-                <span className="shrink-0">📞</span>
+              <div className="chat-guide-line">
+                <span className="chat-guide-icon">📞</span>
                 <p>
                   방장과 멤버들은 서로 전화번호가 노출될 수 있어요.
                   <br />
@@ -1006,8 +1042,8 @@ export default function ChatRoomPage() {
               </div>
             </div>
 
-            <label className="mt-4 flex items-center gap-2 text-xs font-black text-gray-700" htmlFor="host-appearance">
-              <span className="text-base">🧍</span>
+            <label className="mt-4 flex items-center gap-2 text-sm font-black text-gray-800" htmlFor="host-appearance">
+              <span className="text-lg">🧍</span>
               방장 인상착의
             </label>
             <input
@@ -1017,14 +1053,14 @@ export default function ChatRoomPage() {
               onChange={(event) => setHostAppearanceDraft(event.target.value)}
               placeholder="예: 검은 백팩, 파란 후드"
               maxLength={60}
-              className="input-field mt-1.5 text-sm"
+              className="input-field mt-2 text-sm"
             />
 
             <button
               type="button"
               onClick={handleSubmitHostGuide}
               disabled={!hostAppearanceDraft.trim() || isSubmittingHostGuide}
-              className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl bg-gray-950 text-sm font-black text-white transition hover:bg-gray-800 disabled:bg-gray-300"
+              className="mt-4 inline-flex h-12 w-full items-center justify-center rounded-xl bg-gray-950 text-sm font-black text-white transition hover:bg-gray-800 disabled:bg-gray-300"
             >
               {isSubmittingHostGuide ? '저장 중...' : '확인했어요'}
             </button>
@@ -1035,34 +1071,47 @@ export default function ChatRoomPage() {
       {/* 입장 안내 모달 */}
       {showRoomGuide && (
         <div className="fixed inset-0 z-50 flex items-end bg-gray-950/35 px-3 pb-3 pt-16">
-          <div className="w-full rounded-2xl bg-white p-4 shadow-2xl">
+          <div className="chat-guide-sheet w-full rounded-2xl bg-white p-4 shadow-2xl">
+            <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-gray-200" />
             <div className="mb-4">
-              <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">입장 안내</p>
-              <h2 className="mt-1 text-lg font-extrabold text-gray-950">동행 전 확인해주세요</h2>
+              <p className="text-xs font-black text-primary-600">입장 안내</p>
+              <h2 className="mt-1 text-xl font-black leading-tight text-gray-950">동행 전 체크</h2>
             </div>
 
-            <div className="space-y-2 text-xs font-medium leading-4 text-gray-600">
-              <div className="rounded-xl border border-primary-100 bg-primary-50 px-3 py-2.5">
-                <p className="text-xs font-black text-primary-700">🧍 방장 인상착의</p>
-                <p className="mt-1 text-sm font-black text-gray-950">
-                  {hostAppearance || '방장이 아직 인상착의를 입력하지 않았습니다.'}
+            <div className="mb-3 rounded-xl border border-primary-100 bg-primary-50 px-3 py-3">
+              <p className="text-xs font-black text-primary-700">🧍 방장 인상착의</p>
+              <p className="mt-1 text-base font-black leading-6 text-gray-950">
+                {hostAppearance || '방장이 아직 인상착의를 입력하지 않았습니다.'}
+              </p>
+            </div>
+
+            <div className="chat-guide-card">
+              <div className="chat-guide-line">
+                <span className="chat-guide-icon">✅</span>
+                <p>동행할 거라면 상단의 참여 확정하기를 꼭 눌러주세요.</p>
+              </div>
+              <div className="chat-guide-line">
+                <span className="chat-guide-icon">🧭</span>
+                <p>꼭 도착지까지 가지 않아도 참여할 수 있어요. 중간에 헤어질 예정이면 채팅에서 먼저 알려주세요.</p>
+              </div>
+              <div className="chat-guide-line">
+                <span className="chat-guide-icon">⏰</span>
+                <p>출발 5분 전부터는 갑자기 방을 나가면 서비스 이용이 정지될 수 있어요.</p>
+              </div>
+              <div className="chat-guide-line">
+                <span className="chat-guide-icon">📞</span>
+                <p>
+                  방장과 멤버들은 서로 전화번호가 노출될 수 있어요.
+                  <br />
+                  지각, 노쇼, 출발 위치 확인 등 동행 목적에만 사용해주세요.
                 </p>
-              </div>
-              <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
-                🧭 꼭 도착지까지 가지 않아도 동행에 참여할 수 있어요. 중간에 헤어질 예정이면 채팅에서 먼저 알려주세요.
-              </div>
-              <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
-                ⏰ 출발 5분 전부터는 갑자기 방을 나가면 서비스 이용이 정지될 수 있어요
-              </div>
-              <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5">
-                방장과 멤버들은 서로 전화번호가 노출될 수 있어요. 지각, 노쇼, 출발 위치 확인 등 동행 목적에만 사용해주세요.
               </div>
             </div>
 
             <button
               type="button"
               onClick={closeRoomGuide}
-              className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl bg-gray-950 text-sm font-black text-white transition hover:bg-gray-800"
+              className="mt-4 inline-flex h-12 w-full items-center justify-center rounded-xl bg-gray-950 text-sm font-black text-white transition hover:bg-gray-800"
             >
               확인했어요
             </button>

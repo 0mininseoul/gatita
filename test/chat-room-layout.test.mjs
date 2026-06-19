@@ -20,6 +20,8 @@ test('chat room uses fixed messenger chrome with document scroll locking', () =>
 
   assert.match(source, /headerRef/)
   assert.match(source, /composerRef/)
+  assert.match(source, /isComposerFocusedRef/)
+  assert.match(source, /visualViewportBaselineRef/)
   assert.match(source, /--chat-keyboard-inset/)
   assert.match(source, /className="chat-room-header/)
   assert.match(source, /className="chat-messages/)
@@ -45,6 +47,7 @@ test('chat room CSS keeps the header fixed while the keyboard only moves the low
   assert.match(messagesBlock, /padding-bottom:\s*0\.75rem;/)
   assert.doesNotMatch(messagesBlock, /padding-bottom:[^;]*--chat-keyboard-inset/)
   assert.match(composerBlock, /bottom:\s*var\(--chat-keyboard-inset\);/)
+  assert.match(composerBlock, /padding-bottom:\s*max\(0\.5rem, calc\(env\(safe-area-inset-bottom\) \* 0\.38\)\);/)
 })
 
 test('chat bubbles use compact mobile messenger spacing', () => {
@@ -93,6 +96,9 @@ test('chat keyboard viewport sync does not animate the message list on every key
   assert.doesNotMatch(source, /setProperty\('--chat-viewport-offset-top'/)
   assert.doesNotMatch(source, /visualViewport\?\.addEventListener\('scroll'/)
   assert.doesNotMatch(source, /visualViewport\.height - viewportOffsetTop/)
+  assert.doesNotMatch(source, /window\.innerHeight - visualViewport\.height/)
+  assert.match(source, /visualViewportBaselineRef\.current - viewportHeight/)
+  assert.match(source, /isComposerFocusedRef\.current/)
 })
 
 test('chat room syncs chrome and scrolls history immediately after initial render', () => {
@@ -120,6 +126,34 @@ test('chat history loads message rows even if embedded author loading is unavail
   assert.doesNotMatch(loadBlock, /user:users\(nickname, department\)/)
 })
 
+test('chat message author labels are shown only at the start of consecutive user groups', () => {
+  const source = readProjectFile('app/rooms/[id]/page.tsx')
+
+  assert.match(source, /messages\.map\(\(message, index\) =>/)
+  assert.match(source, /previousMessage = messages\[index - 1\]/)
+  assert.match(source, /nextMessage = messages\[index \+ 1\]/)
+  assert.match(source, /startsMessageGroup = !previousMessage \|\| previousMessage\.user_id !== message\.user_id/)
+  assert.match(source, /!isOwnMessage && startsMessageGroup &&/)
+  assert.match(source, /chat-message-author/)
+  assert.match(source, /is-same-author/)
+})
+
+test('chat guide modals use aligned compact checklist rows', () => {
+  const css = readProjectFile('app/globals.css')
+  const page = readProjectFile('app/rooms/[id]/page.tsx')
+  const guideLineBlock = cssBlock(css, '.chat-guide-line')
+
+  assert.match(css, /\.chat-guide-sheet/)
+  assert.match(css, /\.chat-guide-card/)
+  assert.match(css, /\.chat-guide-icon/)
+  assert.match(guideLineBlock, /grid-template-columns:\s*1\.7rem minmax\(0, 1fr\);/)
+  assert.match(guideLineBlock, /letter-spacing:\s*0;/)
+  assert.match(guideLineBlock, /font-size:\s*0\.78rem;/)
+  assert.match(page, /동행 전 체크/)
+  assert.match(page, /출발 전 체크/)
+  assert.doesNotMatch(page, /tracking-\[-0\.08em\]/)
+})
+
 test('chat room hides participant chips behind a participant sheet and shows creator payout account', () => {
   const source = readProjectFile('app/rooms/[id]/page.tsx')
 
@@ -145,7 +179,8 @@ test('chat room folds phone privacy guidance into the entry guide and confirms b
   assert.match(source, /방장과 멤버들은 서로 전화번호가 노출될 수 있어요\.\s*<br \/>/)
   assert.match(source, /지각, 노쇼, 출발 위치 확인 등 동행 목적에만 사용해주세요\./)
   assert.doesNotMatch(source, /📞 방장과 멤버들은 서로 전화번호가 노출될 수 있습니다/)
-  assert.match(source, /className="space-y-2 text-xs font-medium leading-4 text-gray-600"/)
+  assert.match(source, /chat-guide-card/)
+  assert.match(source, /chat-guide-line/)
   assert.match(source, /selectedCallParticipant/)
   assert.match(source, /showCallConsentModal/)
   assert.match(source, /전화번호가 그대로 전달될 수 있어요/)
@@ -174,12 +209,15 @@ test('room creators see a first-room guide and submit a one-line appearance note
   assert.match(source, /정산이 필요할 경우 방장이 결제 후 정산해요/)
   assert.match(source, /출발 5분 전부터는 갑자기 방을 나가면 서비스 이용이 정지될 수 있어요/)
   assert.match(source, /방장과 멤버들은 서로 전화번호가 노출될 수 있어요\.\s*<br \/>/)
-  assert.match(source, /className="space-y-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-\[11px\] font-medium leading-4 text-gray-600"/)
-  assert.match(source, /whitespace-nowrap text-\[9\.5px\] leading-4 tracking-\[-0\.08em\]/)
+  assert.match(source, /chat-guide-sheet/)
+  assert.match(source, /chat-guide-card/)
+  assert.match(source, /chat-guide-line/)
+  assert.doesNotMatch(source, /whitespace-nowrap text-\[9\.5px\] leading-4 tracking-\[-0\.08em\]/)
   assert.doesNotMatch(source, /<p className="text-sm font-black text-gray-950">정산<\/p>/)
   assert.doesNotMatch(source, /<p className="text-sm font-black text-gray-950">약속<\/p>/)
   assert.doesNotMatch(source, /<p className="text-sm font-black text-gray-950">전화번호<\/p>/)
   assert.match(source, /hostAppearance/)
+  assert.match(source, /hostAppearanceLoaded/)
   assert.match(source, /hostAppearanceDraft/)
   assert.match(source, /방장 인상착의/)
   assert.match(source, /HOST_APPEARANCE_MESSAGE_PREFIX/)
@@ -197,9 +235,11 @@ test('host appearance is hidden from chat and shown in entry guide and participa
   assert.match(source, /showRoomGuide/)
   assert.match(source, /gatita:room-entry-guide:/)
   assert.match(source, /방장 인상착의/)
+  assert.match(source, /참여 확정하기를 꼭 눌러주세요/)
   assert.match(source, /꼭 도착지까지 가지 않아도/)
   assert.match(source, /출발 5분 전부터는 갑자기 방을 나가면 서비스 이용이 정지될 수 있어요/)
   assert.match(source, /setShowRoomGuide\(true\)/)
+  assert.match(source, /if \(hostAppearance\.trim\(\)\) \{/)
   assert.match(source, /participant\.user_id === room\.created_by && hostAppearance/)
 })
 

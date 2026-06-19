@@ -311,6 +311,12 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
     }
 
     if (currentStep === 0) {
+      if (onBackToLanding) {
+        setErrors({})
+        onBackToLanding()
+        return
+      }
+
       await supabase.auth.signOut()
       setGoogleEmail('')
       setFormData({})
@@ -483,6 +489,12 @@ export default function SignupForm({ onSuccess, onBackToLanding }: SignupFormPro
                 <div className="mb-4 rounded-xl border border-primary-100 bg-primary-50 px-3 py-2 text-sm font-bold text-primary-700">
                   학과는 Google 계정 정보에서 {formData.department}(으)로 자동 등록됩니다.
                 </div>
+              )}
+
+              {step.id === 'account_number' && (
+                <p className="mb-4 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-800">
+                  방장으로 참여하면 계좌번호가 같은 방 멤버에게 노출될 수 있습니다.
+                </p>
               )}
 
               {/* Next button only at the current step */}

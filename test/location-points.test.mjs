@@ -256,6 +256,39 @@ test('landing and authenticated map use separate URL paths', () => {
   assert.match(chatSource, /router\.push\('\/map'\)/)
 })
 
+test('profileless authenticated users see the map first and complete profile from gated actions', () => {
+  const source = readProjectFile('app/page.tsx')
+  const signup = readProjectFile('components/auth/SignupForm.tsx')
+  const noProfileStart = source.indexOf('} else {\n          setUser(null)\n          setAuthMode(null)')
+  const noProfileEnd = source.indexOf('\n        }', noProfileStart)
+  const noProfileBlock = source.slice(noProfileStart, noProfileEnd)
+
+  assert.match(source, /const \[hasAuthenticatedSession, setHasAuthenticatedSession\]/)
+  assert.match(source, /const \[pendingProfileName, setPendingProfileName\]/)
+  assert.match(source, /extractGachonProfileFromMetadata/, 'map greeting should use Google profile metadata before local profile exists')
+  assert.match(source, /setPendingProfileName\(getGoogleAccountName\(email, session\.user\.user_metadata\)\)/)
+  assert.match(source, /const requiresProfile = hasAuthenticatedSession && !user/)
+  assert.match(source, /const showLanding = !loading && authMode !== 'signup' && \(!hasAuthenticatedSession \|\| !hasEnteredApp\)/)
+  assert.match(source, /if \(showLanding\) \{/)
+  assert.doesNotMatch(source, /if \(!user \|\| !hasEnteredApp\) \{/)
+
+  assert.ok(noProfileStart > -1, 'missing profile branch exists')
+  assert.match(noProfileBlock, /await loadMapRooms\(\)/, 'missing profile branch should still load the map')
+  assert.match(noProfileBlock, /enterMap\(\)/, 'missing profile branch should route into map UI')
+  assert.doesNotMatch(noProfileBlock, /setAuthMode\('signup'\)/, 'missing profile branch should not auto-open profile setup')
+
+  assert.match(source, /router\.replace\('\/map'\)/, 'OAuth completion should normalize the URL to the map route')
+  assert.match(source, /hasShownProfileRequiredPromptRef/, 'profile completion prompt should be shown once on initial map entry')
+  assert.match(source, /프로필 세팅을 먼저 완료해주세요/)
+  assert.match(source, /aria-label="프로필 안내 닫기"/)
+  assert.match(source, /onClick=\{openProfileSetup\}/)
+  assert.match(source, /\{profileDisplayName\}님, 안녕하세요!/)
+  assert.match(source, /handleFromLocationChange[\s\S]*requiresProfile[\s\S]*setShowProfileRequiredModal\(true\)/)
+  assert.match(source, /const handleOpenMyRooms[\s\S]*requiresProfile[\s\S]*setShowProfileRequiredModal\(true\)/)
+  assert.match(source, /aria-label="설정"[\s\S]*requiresProfile[\s\S]*setShowProfileRequiredModal\(true\)/)
+  assert.match(signup, /if \(onBackToLanding\)[\s\S]*onBackToLanding\(\)[\s\S]*return[\s\S]*await supabase\.auth\.signOut\(\)/)
+})
+
 test('landing exposes email password login only through the test login query', () => {
   const source = readProjectFile('app/page.tsx')
 

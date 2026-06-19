@@ -17,7 +17,7 @@ import {
   isRestrictedRoutePair,
 } from '@/lib/supabase'
 import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
-import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
+import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, extractGachonProfileFromMetadata, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
 import { isInstalled } from '@/lib/pwa'
 import { ArrowRight, Clock, MessageSquareText, Share2, Star, Settings, LogOut, Users, X } from 'lucide-react'
 import { format } from 'date-fns'
@@ -48,8 +48,18 @@ function GoogleIcon({ className = 'w-5 h-5' }: { className?: string }) {
   )
 }
 
+function getGoogleAccountName(email?: string | null, metadata?: Record<string, unknown> | null) {
+  const googleProfile = extractGachonProfileFromMetadata(metadata)
+
+  return googleProfile.name || email?.split('@')[0] || ''
+}
+
 export default function HomePage() {
   const [user, setUser] = useState<User | null>(null)
+  const [hasAuthenticatedSession, setHasAuthenticatedSession] = useState(false)
+  const [pendingProfileEmail, setPendingProfileEmail] = useState('')
+  const [pendingProfileName, setPendingProfileName] = useState('')
+  const [showProfileRequiredModal, setShowProfileRequiredModal] = useState(false)
   const [loading, setLoading] = useState(true)
   const [authMode, setAuthMode] = useState<AuthMode>(null)
   const [fromLocation, setFromLocation] = useState<LocationType | ''>('')
@@ -69,6 +79,7 @@ export default function HomePage() {
   const [testPassword, setTestPassword] = useState('')
   const [isStartingTestLogin, setIsStartingTestLogin] = useState(false)
   const lastAuthErrorAtRef = useRef(0)
+  const hasShownProfileRequiredPromptRef = useRef(false)
   const mapHeaderRef = useRef<HTMLElement>(null)
   const router = useRouter()
 
@@ -94,6 +105,10 @@ export default function HomePage() {
   const rejectNonGachonAccount = useCallback(async () => {
     showAuthError(NON_GACHON_ACCOUNT_MESSAGE)
     setUser(null)
+    setHasAuthenticatedSession(false)
+    setPendingProfileEmail('')
+    setPendingProfileName('')
+    setShowProfileRequiredModal(false)
     setAuthMode(null)
     setHasEnteredApp(false)
 
@@ -217,6 +232,14 @@ export default function HomePage() {
     }
 
     try {
+      const enterMap = () => {
+        if (!enterApp) return
+
+        setHasEnteredApp(true)
+        if (window.location.pathname !== '/map') {
+          router.replace('/map')
+        }
+      }
       const timeout = new Promise<never>((_, reject) => {
         window.setTimeout(() => reject(new Error('getSession timeout')), 15000)
       })
@@ -236,6 +259,10 @@ export default function HomePage() {
           return
         }
 
+        setHasAuthenticatedSession(true)
+        setPendingProfileEmail(email ?? '')
+        setPendingProfileName(getGoogleAccountName(email, session.user.user_metadata))
+
         const { data: userData } = await supabase
           .from('users')
           .select('*')
@@ -246,12 +273,24 @@ export default function HomePage() {
           setAuthNotice(null)
           setUser(userData)
           await loadMapRooms()
-          if (enterApp) setHasEnteredApp(true)
+          enterMap()
         } else {
-          setAuthMode('signup')
+          setUser(null)
+          setAuthMode(null)
+          await loadMapRooms()
+          enterMap()
         }
       } else if (window.location.pathname === '/map') {
+        setHasAuthenticatedSession(false)
+        setPendingProfileEmail('')
+        setPendingProfileName('')
+        setUser(null)
         router.replace('/')
+      } else {
+        setHasAuthenticatedSession(false)
+        setPendingProfileEmail('')
+        setPendingProfileName('')
+        setUser(null)
       }
     } catch (error) {
       console.error('Auth check error:', error)
@@ -286,6 +325,10 @@ export default function HomePage() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
         setUser(null)
+        setHasAuthenticatedSession(false)
+        setPendingProfileEmail('')
+        setPendingProfileName('')
+        setShowProfileRequiredModal(false)
         setAuthMode(null)
         setHasEnteredApp(false)
       }
@@ -311,13 +354,13 @@ export default function HomePage() {
   }, [])
 
   useEffect(() => {
-    if (!user || !hasEnteredApp) return
+    if (!hasAuthenticatedSession || !hasEnteredApp) return
 
     loadMapRooms()
     const intervalId = window.setInterval(loadMapRooms, 30000)
 
     return () => window.clearInterval(intervalId)
-  }, [hasEnteredApp, loadMapRooms, user])
+  }, [hasAuthenticatedSession, hasEnteredApp, loadMapRooms])
 
   const onlineDisplayCount = usePresenceDisplayCount(
     supabase,
@@ -325,7 +368,26 @@ export default function HomePage() {
     user
   )
 
-  const showLanding = !loading && authMode !== 'signup' && (!user || !hasEnteredApp)
+  const requiresProfile = hasAuthenticatedSession && !user
+  const profileDisplayName = user?.nickname || pendingProfileName || pendingProfileEmail.split('@')[0] || '가천대'
+  const showLanding = !loading && authMode !== 'signup' && (!hasAuthenticatedSession || !hasEnteredApp)
+
+  useEffect(() => {
+    if (!requiresProfile) {
+      hasShownProfileRequiredPromptRef.current = false
+      return
+    }
+
+    if (!hasEnteredApp || authMode === 'signup') return
+    if (hasShownProfileRequiredPromptRef.current) return
+
+    hasShownProfileRequiredPromptRef.current = true
+    const timerId = window.setTimeout(() => {
+      setShowProfileRequiredModal(true)
+    }, 300)
+
+    return () => window.clearTimeout(timerId)
+  }, [authMode, hasEnteredApp, requiresProfile])
 
   // iOS Safari keeps scroll position across auth state changes and reports
   // dynamic viewport units differently as the bottom bar expands/collapses.
@@ -387,7 +449,7 @@ export default function HomePage() {
   }, [showLanding])
 
   useEffect(() => {
-    if (!user || !hasEnteredApp) return
+    if (!hasAuthenticatedSession || !hasEnteredApp) return
 
     const root = document.documentElement
     const body = document.body
@@ -462,10 +524,11 @@ export default function HomePage() {
         standaloneDisplayQuery.removeListener(applyMapDisplayMode)
       }
     }
-  }, [hasEnteredApp, user])
+  }, [hasAuthenticatedSession, hasEnteredApp])
 
   useEffect(() => {
-    if (!user || !hasEnteredApp) return
+    if (!hasAuthenticatedSession || !hasEnteredApp) return
+    if (requiresProfile) return
     if (isInstalled()) return
     if (window.localStorage.getItem(PWA_ONBOARDING_STORAGE_KEY)) return
 
@@ -474,7 +537,7 @@ export default function HomePage() {
     }, 600)
 
     return () => window.clearTimeout(timerId)
-  }, [hasEnteredApp, user])
+  }, [hasAuthenticatedSession, hasEnteredApp, requiresProfile])
 
   const validateRouteSelection = (from: LocationType | '', to: LocationType | '') => {
     if (!from || !to) {
@@ -496,6 +559,11 @@ export default function HomePage() {
   }
 
   const handleFromLocationChange = (location: LocationType | '') => {
+    if (requiresProfile) {
+      setShowProfileRequiredModal(true)
+      return
+    }
+
     setFromLocation(location)
   }
 
@@ -509,7 +577,11 @@ export default function HomePage() {
     departureTime: string
   }) => {
     if (!user || !supabase) {
-      toast.error('로그인이 필요합니다')
+      if (requiresProfile) {
+        setShowProfileRequiredModal(true)
+      } else {
+        toast.error('로그인이 필요합니다')
+      }
       return
     }
 
@@ -571,7 +643,12 @@ export default function HomePage() {
   }
 
   const handleJoinMapRoom = async (roomId: string) => {
-    if (!user || !supabase) return
+    if (!user || !supabase) {
+      if (requiresProfile) {
+        setShowProfileRequiredModal(true)
+      }
+      return
+    }
 
     try {
       const room = mapRooms.find((mapRoom) => mapRoom.id === roomId)
@@ -614,6 +691,10 @@ export default function HomePage() {
     try {
       await supabase.auth.signOut()
       setUser(null)
+      setHasAuthenticatedSession(false)
+      setPendingProfileEmail('')
+      setPendingProfileName('')
+      setShowProfileRequiredModal(false)
       router.push('/')
       toast.success('로그아웃되었습니다')
     } catch (error) {
@@ -670,6 +751,10 @@ export default function HomePage() {
         return
       }
 
+      setHasAuthenticatedSession(true)
+      setPendingProfileEmail(email ?? '')
+      setPendingProfileName(getGoogleAccountName(email, data.user.user_metadata))
+
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('*')
@@ -677,8 +762,13 @@ export default function HomePage() {
         .single()
 
       if (userError || !userData) {
-        await supabase.auth.signOut()
-        throw userError || new Error('테스트 프로필을 찾지 못했습니다')
+        setUser(null)
+        setAuthMode(null)
+        setHasEnteredApp(true)
+        router.push('/map')
+        await loadMapRooms()
+        toast.success('지도에서 프로필을 완료해주세요')
+        return
       }
 
       setUser(userData)
@@ -700,8 +790,18 @@ export default function HomePage() {
   }
 
   const handleOpenMyRooms = () => {
+    if (requiresProfile) {
+      setShowProfileRequiredModal(true)
+      return
+    }
+
     setShowMyRooms(true)
     loadMyRooms()
+  }
+
+  const openProfileSetup = () => {
+    setShowProfileRequiredModal(false)
+    setAuthMode('signup')
   }
 
   const dismissPwaOnboarding = useCallback(() => {
@@ -756,7 +856,7 @@ export default function HomePage() {
     )
   }
 
-  if (!user || !hasEnteredApp) {
+  if (showLanding) {
     return (
       <main className="landing-page">
         {standaloneLaunchSplash}
@@ -773,7 +873,7 @@ export default function HomePage() {
 
         <div className="landing-content">
 
-          <NavigationBar onFindClick={user ? handleEnterApp : handleFindClick} />
+          <NavigationBar onFindClick={hasAuthenticatedSession ? handleEnterApp : handleFindClick} />
 
           <div className="landing-hero">
             <SplitText
@@ -806,17 +906,17 @@ export default function HomePage() {
               position: 'relative',
               width: '100%',
               maxWidth: '320px',
-              marginTop: user ? '1rem' : '6rem',
+              marginTop: hasAuthenticatedSession ? '1rem' : '6rem',
             }}>
-              {!user && (
+              {!hasAuthenticatedSession && (
                 <span id="gachon-account-hint" className="cta-bubble">
                   {GACHON_ACCOUNT_HINT}
                 </span>
               )}
               <button
-                onClick={user ? handleEnterApp : handleGoogleStart}
-                disabled={!user && isStartingGoogle}
-                aria-describedby={!user ? 'gachon-account-hint' : undefined}
+                onClick={hasAuthenticatedSession ? handleEnterApp : handleGoogleStart}
+                disabled={!hasAuthenticatedSession && isStartingGoogle}
+                aria-describedby={!hasAuthenticatedSession ? 'gachon-account-hint' : undefined}
                 style={{
                   width: '100%',
                   minHeight: '3.25rem',
@@ -828,31 +928,31 @@ export default function HomePage() {
                   border: '1px solid #e5e7eb',
                   borderRadius: '8px',
                   boxShadow: '0 10px 28px rgba(17, 24, 39, 0.10)',
-                  cursor: (!user && isStartingGoogle) ? 'not-allowed' : 'pointer',
+                  cursor: (!hasAuthenticatedSession && isStartingGoogle) ? 'not-allowed' : 'pointer',
                   transition: 'transform 0.2s, opacity 0.2s',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '0.625rem',
-                  opacity: (!user && isStartingGoogle) ? 0.7 : 1,
+                  opacity: (!hasAuthenticatedSession && isStartingGoogle) ? 0.7 : 1,
                 }}
                 onMouseOver={e => {
-                  if (!(!user && isStartingGoogle)) e.currentTarget.style.transform = 'scale(1.03)'
+                  if (!(!hasAuthenticatedSession && isStartingGoogle)) e.currentTarget.style.transform = 'scale(1.03)'
                 }}
                 onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
               >
-                {!user && <GoogleIcon />}
-                {user ? '바로 시작하기' : (isStartingGoogle ? 'Google로 이동 중...' : 'Google로 3초 안에 시작하기')}
+                {!hasAuthenticatedSession && <GoogleIcon />}
+                {hasAuthenticatedSession ? '바로 시작하기' : (isStartingGoogle ? 'Google로 이동 중...' : 'Google로 3초 안에 시작하기')}
               </button>
             </div>
 
-            {authNotice && !user && (
+            {authNotice && !hasAuthenticatedSession && (
               <div role="alert" className="auth-notice">
                 {authNotice}
               </div>
             )}
 
-            {showTestLogin && !user && (
+            {showTestLogin && !hasAuthenticatedSession && (
               <form
                 className="mt-5 w-full max-w-[320px] rounded-lg border border-white/55 bg-white/90 p-3 shadow-[0_12px_30px_rgba(17,24,39,0.16)] backdrop-blur"
                 onSubmit={(event) => {
@@ -1043,6 +1143,59 @@ export default function HomePage() {
         </div>
       )}
 
+      {showProfileRequiredModal && (
+        <div
+          className="absolute inset-0 z-[70] flex items-end bg-gray-950/30 px-3 pb-3 pt-24"
+          onClick={() => setShowProfileRequiredModal(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="profile-required-title"
+            className="mx-auto w-full max-w-sm rounded-lg border border-white/80 bg-white p-4 shadow-[0_18px_48px_rgba(17,24,39,0.24)]"
+            style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-black tracking-[0.02em] text-primary-600">프로필 미완료</p>
+                <h2 id="profile-required-title" className="mt-1 text-lg font-black leading-6 text-gray-950">
+                  프로필 세팅을 먼저 완료해주세요
+                </h2>
+              </div>
+              <button
+                type="button"
+                aria-label="프로필 안내 닫기"
+                onClick={() => setShowProfileRequiredModal(false)}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <p className="mt-3 text-sm font-semibold leading-5 text-gray-600">
+              {profileDisplayName}님, 지도는 먼저 둘러볼 수 있어요. 고정지점 선택, 나의 방, 설정은 실명과 연락처 등록 후 사용할 수 있습니다.
+            </p>
+
+            <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 px-3 py-3">
+              <div className="grid gap-2 text-xs font-bold leading-5 text-gray-600">
+                <p>실명과 학과는 동행 멤버 확인에 사용돼요.</p>
+                <p>전화번호는 지각, 노쇼, 출발 위치 확인 목적에만 노출될 수 있어요.</p>
+                <p>계좌정보는 방장이 되었을 때 정산을 위해 멤버에게 보일 수 있어요.</p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={openProfileSetup}
+              className="mt-4 h-12 w-full rounded-lg bg-gray-950 text-sm font-black text-white transition hover:bg-gray-800"
+            >
+              프로필 세팅하기
+            </button>
+          </div>
+        </div>
+      )}
+
       <header
         ref={mapHeaderRef}
         className="pointer-events-none absolute inset-x-0 top-0 z-40 px-3"
@@ -1060,7 +1213,7 @@ export default function HomePage() {
             />
             <div className="min-w-0">
               <h1 className="text-base font-black text-gray-950">같이타</h1>
-              <p className="truncate text-xs font-semibold text-gray-600">{user.nickname}님, 안녕하세요!</p>
+              <p className="truncate text-xs font-semibold text-gray-600">{profileDisplayName}님, 안녕하세요!</p>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -1075,12 +1228,19 @@ export default function HomePage() {
             <button
               type="button"
               aria-label="설정"
-              onClick={() => router.push('/settings')}
+              onClick={() => {
+                if (requiresProfile) {
+                  setShowProfileRequiredModal(true)
+                  return
+                }
+
+                router.push('/settings')
+              }}
               className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition hover:bg-gray-100 hover:text-gray-950"
             >
               <Settings className="h-5 w-5" />
             </button>
-            {user.is_admin && (
+            {user?.is_admin && (
               <button
                 type="button"
                 aria-label="관리자 페이지"

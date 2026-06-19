@@ -261,6 +261,20 @@ test('map header exposes my rooms list from the user membership query', () => {
   assert.match(source, /router\.push\(`\/rooms\/\$\{room\.id\}`\)/, 'my rooms list should navigate to the room')
 })
 
+test('map header omits the redundant logout action in favor of settings', () => {
+  const source = readProjectFile('app/page.tsx')
+  const headerStart = source.indexOf('ref={mapHeaderRef}')
+  const headerEnd = source.indexOf('</header>', headerStart)
+  const headerBlock = source.slice(headerStart, headerEnd)
+
+  assert.ok(headerStart > -1, 'map header exists')
+  assert.ok(headerEnd > headerStart, 'map header block can be inspected')
+  assert.match(headerBlock, /aria-label="설정"/, 'settings should remain the logout entry point')
+  assert.doesNotMatch(headerBlock, /aria-label="로그아웃"/, 'map header should not render a logout button')
+  assert.doesNotMatch(headerBlock, /<LogOut\b/, 'map header should not render the logout icon')
+  assert.doesNotMatch(source, /const handleLogout = async/, 'map page should not keep a dedicated logout handler')
+})
+
 test('landing and authenticated map use separate URL paths', () => {
   const homeSource = readProjectFile('app/page.tsx')
   const mapRouteSource = readProjectFile('app/map/page.tsx')

@@ -19,7 +19,7 @@ async function getMyProfile() {
   const [publicProfileResult, privateProfileResult, payoutResult] = await Promise.all([
     admin
       .from('users')
-      .select('id, nickname, nickname_updated_at, department, created_at, updated_at')
+      .select('id, nickname, nickname_updated_at, department, avatar_url, created_at, updated_at')
       .eq('id', authUser.id)
       .maybeSingle(),
     admin

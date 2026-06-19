@@ -62,6 +62,7 @@ export function BankSelectField({
   const [isOpen, setIsOpen] = useState(false)
   const [isCustomBankMode, setIsCustomBankMode] = useState(false)
   const [customBankName, setCustomBankName] = useState('')
+  const containerRef = useRef<HTMLDivElement | null>(null)
   const selectedBank = getBankOption(value)
   const customValue = value && !selectedBank ? value : ''
 
@@ -70,6 +71,16 @@ export function BankSelectField({
 
     setCustomBankName(customValue)
   }, [customValue, isOpen])
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    const timeoutId = window.setTimeout(() => {
+      containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }, 0)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [isOpen])
 
   const onCustomBankChange = (nextValue: string) => {
     const trimmedValue = nextValue.trim()
@@ -86,7 +97,7 @@ export function BankSelectField({
   }
 
   return (
-    <div className="relative">
+    <div ref={containerRef} className="space-y-2">
       <button
         type="button"
         onClick={() => setIsOpen((next) => !next)}
@@ -101,7 +112,7 @@ export function BankSelectField({
       </button>
 
       {isOpen && !disabled && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-64 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg">
+        <div data-bank-dropdown-list className="rounded-xl border border-gray-200 bg-white shadow-lg">
           {BANK_OPTIONS.map((bank) => (
             <button
               key={bank.id}
@@ -237,7 +248,7 @@ export function AccountNumberSegmentField({
               className={`h-12 min-w-0 w-full rounded-lg border bg-white px-2 text-center text-sm font-black tracking-normal text-gray-950 outline-none transition focus:border-primary-600 focus:ring-2 focus:ring-primary-100 disabled:bg-gray-50 disabled:text-gray-400 ${
                 error ? 'border-red-500' : 'border-gray-200'
               }`}
-              placeholder={'0'.repeat(Math.min(length, 4))}
+              placeholder={'0'.repeat(length)}
             />
             {index < segments.length - 1 && (
               <span className="shrink-0 text-sm font-black text-gray-400">-</span>

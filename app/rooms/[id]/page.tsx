@@ -1103,45 +1103,55 @@ export default function ChatRoomPage() {
             </div>
 
             <div className="max-h-[42vh] space-y-2 overflow-y-auto">
-              {participants.map(participant => (
-                <div
-                  key={participant.id}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5"
-                >
-                  <div className="min-w-0">
-                    <div className="flex min-w-0 items-center gap-1.5">
-                      <p className="truncate text-sm font-bold text-gray-950">{participant.user?.nickname}</p>
-                      {participant.user_id === room.created_by && (
-                        <span className="shrink-0 rounded-full bg-primary-100 px-2 py-0.5 text-[10px] font-bold text-primary-700">
-                          방장
-                        </span>
-                      )}
-                      {participant.user_id !== room.created_by && participant.confirmed && (
-                        <span className="shrink-0 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700">확정</span>
-                      )}
-                    </div>
-                    <p className="mt-0.5 truncate text-xs text-gray-500">{participant.user?.department}</p>
-                    {participant.user_id === room.created_by && hostAppearance && (
-                      <p className="mt-1 max-w-[13rem] rounded-lg bg-white px-2 py-1 text-[11px] font-bold leading-4 text-gray-600">
-                        🧍 {hostAppearance}
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleCallParticipant(participant)}
-                    aria-label={`${participant.user?.nickname ?? '참여자'}에게 전화하기`}
-                    disabled={!participant.user?.phone}
-                    className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
-                      participant.user?.phone
-                        ? 'bg-primary-600 text-white hover:bg-primary-700'
-                        : 'bg-gray-200 text-gray-400'
+              {participants.map(participant => {
+                const isCurrentUserParticipant = participant.user_id === user?.id
+
+                return (
+                  <div
+                    key={participant.id}
+                    className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 ${
+                      isCurrentUserParticipant
+                        ? 'border-primary-100 bg-primary-50'
+                        : 'border-gray-100 bg-gray-50'
                     }`}
                   >
-                    <Phone className="h-5 w-5" />
-                  </button>
-                </div>
-              ))}
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <p className="truncate text-sm font-bold text-gray-950">
+                          {isCurrentUserParticipant ? `(나) ${participant.user?.nickname ?? '나'}` : participant.user?.nickname}
+                        </p>
+                        {participant.user_id === room.created_by && (
+                          <span className="shrink-0 rounded-full bg-primary-100 px-2 py-0.5 text-[10px] font-bold text-primary-700">
+                            방장
+                          </span>
+                        )}
+                        {participant.user_id !== room.created_by && participant.confirmed && (
+                          <span className="shrink-0 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700">확정</span>
+                        )}
+                      </div>
+                      <p className="mt-0.5 truncate text-xs text-gray-500">{participant.user?.department}</p>
+                      {participant.user_id === room.created_by && hostAppearance && (
+                        <p className="mt-1 max-w-[13rem] rounded-lg bg-white px-2 py-1 text-[11px] font-bold leading-4 text-gray-600">
+                          🧍 {hostAppearance}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCallParticipant(participant)}
+                      aria-label={`${participant.user?.nickname ?? '참여자'}에게 전화하기`}
+                      disabled={!participant.user?.phone}
+                      className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                        participant.user?.phone
+                          ? 'bg-primary-600 text-white hover:bg-primary-700'
+                          : 'bg-gray-200 text-gray-400'
+                      }`}
+                    >
+                      <Phone className="h-5 w-5" />
+                    </button>
+                  </div>
+                )
+              })}
             </div>
           </div>
         </div>

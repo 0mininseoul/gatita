@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
@@ -8,13 +8,20 @@ import { PayoutAccount, User } from '@/lib/supabase'
 import { isAccountNumberCompleteForBank } from '@/lib/banks'
 import { AccountNumberSegmentField, BankSelectField } from '@/components/BankAccountFields'
 import { identifyAnalyticsUser, trackEvent } from '@/lib/analytics/client'
-import { ArrowLeft, User as UserIcon, AlertCircle, Bug, Check, Mail, Trash2, X } from 'lucide-react'
+import { ArrowLeft, User as UserIcon, AlertCircle, Bug, Camera, Check, Mail, Trash2, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 type DeleteStep = 'idle' | 'overview' | 'confirm'
 type PayoutAccountForm = Pick<PayoutAccount, 'bank_name' | 'account_number' | 'account_holder'>
 
 const ADMIN_CONTACT_EMAIL = 'ym5373@gachon.ac.kr'
+const PROFILE_PHOTO_BUCKET = 'profile-photos'
+const PROFILE_PHOTO_MAX_BYTES = 2 * 1024 * 1024
+const PROFILE_PHOTO_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+}
 const DELETE_CONFIRMATION_TEXT = '떠나지 말아주세요. 탈퇴하시는 이유를 여쭤봐도 될까요? 열심히 만들었어요 흑흑'
 const EMPTY_PAYOUT_ACCOUNT_FORM: PayoutAccountForm = {
   bank_name: '',
@@ -33,6 +40,8 @@ export default function SettingsPage() {
   const [newNickname, setNewNickname] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [nicknameError, setNicknameError] = useState('')
+  const [isSavingPhoto, setIsSavingPhoto] = useState(false)
+  const [photoError, setPhotoError] = useState('')
   const [payoutAccount, setPayoutAccount] = useState<PayoutAccount | null>(null)
   const [accountForm, setAccountForm] = useState<PayoutAccountForm>(EMPTY_PAYOUT_ACCOUNT_FORM)
   const [accountError, setAccountError] = useState('')
@@ -41,6 +50,7 @@ export default function SettingsPage() {
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
   const [deleteAcknowledged, setDeleteAcknowledged] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const photoInputRef = useRef<HTMLInputElement | null>(null)
   const supabase = useMemo(() => createClient(), [])
 
   const checkAuthAndLoadData = useCallback(async () => {
@@ -182,6 +192,60 @@ export default function SettingsPage() {
       toast.error('닉네임 변경 중 오류가 발생했습니다')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleProfilePhotoChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+
+    if (!file || !user) return
+
+    const extension = PROFILE_PHOTO_EXTENSIONS[file.type]
+
+    if (!extension) {
+      setPhotoError('JPG, PNG, WEBP 이미지만 등록할 수 있습니다')
+      return
+    }
+
+    if (file.size > PROFILE_PHOTO_MAX_BYTES) {
+      setPhotoError('프로필 사진은 2MB 이하로 등록해주세요')
+      return
+    }
+
+    setIsSavingPhoto(true)
+    setPhotoError('')
+
+    try {
+      const filePath = `${user.id}/avatar.${extension}`
+      const { error: uploadError } = await supabase.storage.from(PROFILE_PHOTO_BUCKET).upload(filePath, file, {
+        upsert: true,
+        contentType: file.type,
+        cacheControl: '60',
+      })
+
+      if (uploadError) throw uploadError
+
+      const { data: publicUrlData } = supabase.storage.from(PROFILE_PHOTO_BUCKET).getPublicUrl(filePath)
+      const nextAvatarUrl = `${publicUrlData.publicUrl}?v=${Date.now()}`
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ avatar_url: nextAvatarUrl })
+        .eq('id', user.id)
+
+      if (updateError) throw updateError
+
+      setUser(prev => prev ? { ...prev, avatar_url: nextAvatarUrl } : prev)
+      trackEvent('profile_updated', {
+        field: 'avatar_url',
+      })
+      toast.success('프로필 사진이 저장되었습니다')
+    } catch (error) {
+      console.error('Profile photo save error:', error)
+      setPhotoError('프로필 사진 저장 중 오류가 발생했습니다')
+      toast.error('프로필 사진 저장 중 오류가 발생했습니다')
+    } finally {
+      setIsSavingPhoto(false)
     }
   }
 
@@ -349,16 +413,42 @@ export default function SettingsPage() {
       <div className="container mx-auto px-4 py-6">
         {/* 프로필 정보 */}
         <div className="card p-6 mb-6">
-          <div className="flex items-center mb-6">
-            <div
-              className="w-16 h-16 rounded-full flex items-center justify-center mr-4"
-              style={{ backgroundImage: 'var(--brand-gradient)', boxShadow: '0 8px 20px rgba(39, 130, 255, 0.28)' }}
-            >
-              <UserIcon className="w-8 h-8 text-white" />
+          <div className="mb-6 flex items-center">
+            <div className="mr-4 flex flex-col items-center gap-2">
+              <div
+                className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-white"
+                style={{ backgroundImage: user.avatar_url ? undefined : 'var(--brand-gradient)', boxShadow: '0 8px 20px rgba(39, 130, 255, 0.28)' }}
+              >
+                {user.avatar_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={user.avatar_url} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <UserIcon className="h-8 w-8 text-white" />
+                )}
+              </div>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleProfilePhotoChange}
+              />
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={isSavingPhoto}
+                className="inline-flex items-center rounded-full border border-primary-100 bg-primary-50 px-2.5 py-1 text-[11px] font-bold text-primary-700 transition hover:bg-primary-100 disabled:bg-gray-100 disabled:text-gray-400"
+              >
+                <Camera className="mr-1 h-3 w-3" />
+                {isSavingPhoto ? '저장 중' : user.avatar_url ? '사진 변경' : '프로필 사진 등록'}
+              </button>
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900">{user.nickname}</h2>
               <p className="text-gray-600">{user.department}</p>
+              {photoError && (
+                <p className="mt-2 text-xs font-semibold text-red-500">{photoError}</p>
+              )}
             </div>
           </div>
 
@@ -596,7 +686,6 @@ export default function SettingsPage() {
         <div className="card p-6 mb-6">
           <h3 className="text-lg font-semibold mb-4">관리자 문의</h3>
           <div>
-            <p className="mb-4 text-sm text-gray-600">문의 유형을 선택하면 기본 메일 앱이 열립니다.</p>
             <div className="grid grid-cols-2 gap-2">
               <a
                 href={contactMailHref}

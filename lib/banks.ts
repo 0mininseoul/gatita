@@ -16,7 +16,7 @@ export const BANK_OPTIONS: BankOption[] = [
     name: '카카오뱅크',
     icon: 'K',
     color: '#ffe500',
-    logoSrc: 'https://www.kakaobank.com/favicon.ico',
+    logoSrc: '/bank-logos/kakaobank.svg',
     segments: [4, 2, 7],
     placeholder: 'XXXX-XX-XXXXXXX',
   },

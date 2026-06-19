@@ -179,6 +179,15 @@ test('campus map room times are displayed without seconds', () => {
   assert.doesNotMatch(source, /<span>\{room\.departure_time\}<\/span>/)
 })
 
+test('map presence display count rotates a random one to five person offset', () => {
+  const source = readProjectFile('lib/usePresenceDisplayCount.ts')
+
+  assert.match(source, /function getRandomPresenceOffset/)
+  assert.match(source, /Math\.floor\(Math\.random\(\) \* 5\) \+ 1/)
+  assert.match(source, /setDisplayOffset\(getRandomPresenceOffset\(\)\)/)
+  assert.doesNotMatch(source, /current === 1 \? 2 : 1/, 'presence offset should no longer alternate only between +1 and +2')
+})
+
 test('map bottom sheet room cards show destination only beside departure time', () => {
   const source = readProjectFile('components/CampusRouteMap.tsx')
   const roomCardStart = source.indexOf('selectedOriginRooms.map')

@@ -7,17 +7,21 @@ type PresenceUser = {
   nickname?: string
 }
 
+function getRandomPresenceOffset() {
+  return Math.floor(Math.random() * 5) + 1
+}
+
 export function usePresenceDisplayCount(
   supabase: any,
   channelName: string | null,
   user: PresenceUser | null
 ) {
   const [peerCount, setPeerCount] = useState(0)
-  const [displayOffset, setDisplayOffset] = useState(1)
+  const [displayOffset, setDisplayOffset] = useState(() => getRandomPresenceOffset())
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
-      setDisplayOffset((current) => (current === 1 ? 2 : 1))
+      setDisplayOffset(getRandomPresenceOffset())
     }, 20000)
 
     return () => window.clearInterval(intervalId)

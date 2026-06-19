@@ -39,11 +39,11 @@ const SIGNUP_STEPS: SignupStep[] = [
   },
   {
     id: 'bank_name',
-    label: '정산 받을 은행을 입력해주세요',
+    label: '동행 시 정산 받을 은행을 입력해주세요',
     placeholder: '토스뱅크',
     type: 'text',
     required: true,
-    description: '방장이 되면 같은 방 참여자에게 공개됩니다'
+    description: '방을 개설하면 같은 방 참여자에게 공개될 수 있습니다'
   },
   {
     id: 'account_number',
@@ -51,7 +51,7 @@ const SIGNUP_STEPS: SignupStep[] = [
     placeholder: '1234-5678-9012',
     type: 'text',
     required: true,
-    description: '방장이 되면 같은 방 참여자에게 공개됩니다'
+    description: '방을 개설하면 같은 방 참여자에게 공개될 수 있습니다'
   },
   {
     id: 'account_holder',
@@ -59,7 +59,7 @@ const SIGNUP_STEPS: SignupStep[] = [
     placeholder: '홍길동',
     type: 'text',
     required: true,
-    description: '방장이 되면 같은 방 참여자에게 공개됩니다'
+    description: '방을 개설하면 같은 방 참여자에게 공개될 수 있습니다'
   },
   {
     id: 'nickname',
@@ -468,7 +468,11 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
             >
               {/* Question */}
               <div className="mb-4">
-                <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                <h1 className={`mb-2 font-bold text-gray-900 ${
+                  step.id === 'bank_name'
+                    ? 'whitespace-nowrap text-[20px] leading-7'
+                    : 'text-2xl'
+                }`}>
                   {step.label}
                 </h1>
                 {step.description && (
@@ -518,12 +522,6 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
                 <div className="mb-4 rounded-xl border border-primary-100 bg-primary-50 px-3 py-2 text-sm font-bold text-primary-700">
                   학과는 Google 계정 정보에서 {formData.department}(으)로 자동 등록됩니다.
                 </div>
-              )}
-
-              {step.id === 'account_number' && (
-                <p className="mb-4 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-800">
-                  방장으로 참여하면 계좌번호가 같은 방 멤버에게 노출될 수 있습니다.
-                </p>
               )}
 
               {isCurrent && isLastStep && (

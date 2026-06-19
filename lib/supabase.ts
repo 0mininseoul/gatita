@@ -42,6 +42,7 @@ export type PublicProfile = {
   nickname: string
   nickname_updated_at?: string | null
   department: string
+  avatar_url?: string | null
   created_at: string
   updated_at: string
 }

@@ -27,7 +27,33 @@ test('settings contact card opens the user mail app without rendering the admin 
   assert.match(source, /mailto:\$\{ADMIN_CONTACT_EMAIL\}/)
   assert.match(source, /문의하기/)
   assert.match(source, /버그 제보/)
+  assert.doesNotMatch(source, /문의 유형을 선택하면 기본 메일 앱이 열립니다\./)
   assert.doesNotMatch(source, /ym5373@gachon\.ac\.kr 로 메일 주세요/)
+})
+
+test('settings lets users register a profile photo from a storage-backed public avatar URL', () => {
+  const source = readProjectFile('app/settings/page.tsx')
+  const types = readProjectFile('lib/supabase.ts')
+  const schema = readProjectFile('supabase_schema.sql')
+  const migration = readProjectFile('supabase/migrations/20260619224027_add_profile_photos.sql')
+  const profileRoute = readProjectFile('app/api/profile/me/route.ts')
+
+  assert.match(source, /PROFILE_PHOTO_BUCKET/)
+  assert.match(source, /profile-photos/)
+  assert.match(source, /handleProfilePhotoChange/)
+  assert.match(source, /\.storage\.from\(PROFILE_PHOTO_BUCKET\)\.upload/)
+  assert.match(source, /getPublicUrl/)
+  assert.match(source, /\.from\('users'\)[\s\S]*\.update\(\{\s*avatar_url: nextAvatarUrl/)
+  assert.match(source, /프로필 사진 등록|사진 변경/)
+  assert.match(types, /avatar_url\?: string \| null/)
+  assert.match(profileRoute, /id, nickname, nickname_updated_at, department, avatar_url, created_at, updated_at/)
+  assert.match(schema, /avatar_url text/)
+  assert.match(schema, /profile-photos/)
+  assert.match(migration, /storage\.buckets/)
+  assert.match(migration, /storage\.objects/)
+  assert.match(migration, /Users can upload own profile photo/)
+  assert.match(migration, /Users can update own profile photo/)
+  assert.match(migration, /Users can delete own profile photo/)
 })
 
 test('settings back action returns to the authenticated map', () => {

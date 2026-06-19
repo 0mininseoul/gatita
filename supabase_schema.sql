@@ -18,6 +18,7 @@ create table public.users (
   nickname varchar(50) unique not null,
   nickname_updated_at timestamp with time zone,
   department varchar(100) not null,
+  avatar_url text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -142,9 +143,9 @@ alter table public.favorites enable row level security;
 grant usage on schema public to authenticated;
 grant usage on type public.location_type to authenticated;
 
-grant select (id, nickname, nickname_updated_at, department, created_at, updated_at)
+grant select (id, nickname, nickname_updated_at, department, avatar_url, created_at, updated_at)
   on table public.users to authenticated;
-grant update (nickname, nickname_updated_at) on table public.users to authenticated;
+grant update (nickname, nickname_updated_at, avatar_url) on table public.users to authenticated;
 grant select on table public.user_private_profiles to authenticated;
 grant select, insert, update on table public.user_payout_accounts to authenticated;
 grant select, insert, update, delete on table public.chat_rooms to authenticated;
@@ -164,6 +165,60 @@ create policy "Users can update own public profile"
   to authenticated
   using ((select auth.uid()) = id)
   with check ((select auth.uid()) = id);
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'profile-photos',
+  'profile-photos',
+  true,
+  2097152,
+  array['image/jpeg', 'image/png', 'image/webp']
+)
+on conflict (id) do update
+set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+create policy "Users can read own profile photo object"
+  on storage.objects
+  for select
+  to authenticated
+  using (
+    bucket_id = 'profile-photos'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+  );
+
+create policy "Users can upload own profile photo"
+  on storage.objects
+  for insert
+  to authenticated
+  with check (
+    bucket_id = 'profile-photos'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+  );
+
+create policy "Users can update own profile photo"
+  on storage.objects
+  for update
+  to authenticated
+  using (
+    bucket_id = 'profile-photos'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+  )
+  with check (
+    bucket_id = 'profile-photos'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+  );
+
+create policy "Users can delete own profile photo"
+  on storage.objects
+  for delete
+  to authenticated
+  using (
+    bucket_id = 'profile-photos'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+  );
 
 create policy "Users can read own private profile"
   on public.user_private_profiles

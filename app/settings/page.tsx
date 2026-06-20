@@ -16,7 +16,13 @@ type PayoutAccountForm = Pick<PayoutAccount, 'bank_name' | 'account_number' | 'a
 
 const ADMIN_CONTACT_EMAIL = 'ym5373@gachon.ac.kr'
 const PROFILE_PHOTO_BUCKET = 'profile-photos'
-const PROFILE_PHOTO_MAX_BYTES = 2 * 1024 * 1024
+const PROFILE_PHOTO_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
+const PROFILE_PHOTO_STORAGE_MAX_BYTES = 2 * 1024 * 1024
+const PROFILE_PHOTO_MAX_DIMENSION = 1024
+const PROFILE_PHOTO_QUALITY_STEPS = [0.82, 0.72, 0.62, 0.52, 0.44, 0.36]
+const PROFILE_PHOTO_DIMENSION_STEPS = [1, 0.85, 0.7, 0.56]
+const PROFILE_PHOTO_COMPRESSED_CONTENT_TYPE = 'image/webp'
+const PROFILE_PHOTO_FALLBACK_CONTENT_TYPE = 'image/jpeg'
 const PROFILE_PHOTO_EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
@@ -31,6 +37,97 @@ const EMPTY_PAYOUT_ACCOUNT_FORM: PayoutAccountForm = {
 
 const createMailHref = (subject: string, body: string) =>
   `mailto:${ADMIN_CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+
+const loadProfilePhotoImage = (objectUrl: string) =>
+  new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('이미지를 불러오지 못했습니다'))
+    image.src = objectUrl
+  })
+
+const encodeCanvas = (canvas: HTMLCanvasElement, contentType: string, quality: number) =>
+  new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error('이미지를 압축하지 못했습니다'))
+        return
+      }
+
+      resolve(blob)
+    }, contentType, quality)
+  })
+
+const createCompressedFile = (source: File, blob: Blob, contentType: string) => {
+  const extension = PROFILE_PHOTO_EXTENSIONS[contentType] ?? 'jpg'
+  const baseName = source.name.replace(/\.[^.]+$/, '') || 'avatar'
+
+  return {
+    file: new File([blob], `${baseName}.${extension}`, {
+      type: contentType,
+      lastModified: Date.now(),
+    }),
+    contentType,
+    extension,
+  }
+}
+
+const compressProfilePhoto = async (file: File, previewUrl: string) => {
+  if (file.size <= PROFILE_PHOTO_STORAGE_MAX_BYTES) {
+    return createCompressedFile(file, file, file.type)
+  }
+
+  const image = await loadProfilePhotoImage(previewUrl)
+  const sourceWidth = image.naturalWidth || image.width
+  const sourceHeight = image.naturalHeight || image.height
+
+  if (!sourceWidth || !sourceHeight) {
+    throw new Error('이미지 크기를 확인하지 못했습니다')
+  }
+
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d')
+
+  if (!context) {
+    throw new Error('이미지를 압축할 수 없는 브라우저입니다')
+  }
+
+  for (const dimensionStep of PROFILE_PHOTO_DIMENSION_STEPS) {
+    const dimensionLimit = PROFILE_PHOTO_MAX_DIMENSION * dimensionStep
+    const scale = Math.min(1, dimensionLimit / Math.max(sourceWidth, sourceHeight))
+    const width = Math.max(1, Math.round(sourceWidth * scale))
+    const height = Math.max(1, Math.round(sourceHeight * scale))
+
+    canvas.width = width
+    canvas.height = height
+    context.clearRect(0, 0, width, height)
+    context.fillStyle = '#ffffff'
+    context.fillRect(0, 0, width, height)
+    context.drawImage(image, 0, 0, width, height)
+
+    for (const quality of PROFILE_PHOTO_QUALITY_STEPS) {
+      let blob: Blob
+      let contentType = PROFILE_PHOTO_COMPRESSED_CONTENT_TYPE
+
+      try {
+        blob = await encodeCanvas(canvas, PROFILE_PHOTO_COMPRESSED_CONTENT_TYPE, quality)
+        if (blob.type !== PROFILE_PHOTO_COMPRESSED_CONTENT_TYPE) {
+          blob = await encodeCanvas(canvas, PROFILE_PHOTO_FALLBACK_CONTENT_TYPE, quality)
+          contentType = PROFILE_PHOTO_FALLBACK_CONTENT_TYPE
+        }
+      } catch {
+        blob = await encodeCanvas(canvas, PROFILE_PHOTO_FALLBACK_CONTENT_TYPE, quality)
+        contentType = PROFILE_PHOTO_FALLBACK_CONTENT_TYPE
+      }
+
+      if (blob.size <= PROFILE_PHOTO_STORAGE_MAX_BYTES) {
+        return createCompressedFile(file, blob, contentType)
+      }
+    }
+  }
+
+  throw new Error('이미지를 2MB 이하로 압축하지 못했습니다')
+}
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -51,6 +148,9 @@ export default function SettingsPage() {
   const [deleteAcknowledged, setDeleteAcknowledged] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const photoInputRef = useRef<HTMLInputElement | null>(null)
+  const persistedAvatarUrlRef = useRef<string | null>(null)
+  const photoPreviewUrlRef = useRef<string | null>(null)
+  const photoUploadIdRef = useRef(0)
   const supabase = useMemo(() => createClient(), [])
 
   const checkAuthAndLoadData = useCallback(async () => {
@@ -78,6 +178,7 @@ export default function SettingsPage() {
 
       if (profileResult?.profileCompleted && userData) {
         setUser(userData)
+        persistedAvatarUrlRef.current = userData.avatar_url ?? null
         identifyAnalyticsUser(userData.id, {
           profile_completed: true,
           is_admin: userData.is_admin,
@@ -113,6 +214,14 @@ export default function SettingsPage() {
   useEffect(() => {
     checkAuthAndLoadData()
   }, [checkAuthAndLoadData])
+
+  useEffect(() => {
+    return () => {
+      if (photoPreviewUrlRef.current) {
+        URL.revokeObjectURL(photoPreviewUrlRef.current)
+      }
+    }
+  }, [])
 
   const canChangeNickname = (lastUpdated?: string) => {
     if (!lastUpdated) return true // 한 번도 변경한 적 없으면 가능
@@ -201,30 +310,45 @@ export default function SettingsPage() {
 
     if (!file || !user) return
 
-    const extension = PROFILE_PHOTO_EXTENSIONS[file.type]
+    const isSupportedImage = Boolean(PROFILE_PHOTO_EXTENSIONS[file.type])
 
-    if (!extension) {
+    if (!isSupportedImage) {
       setPhotoError('JPG, PNG, WEBP 이미지만 등록할 수 있습니다')
       return
     }
 
-    if (file.size > PROFILE_PHOTO_MAX_BYTES) {
-      setPhotoError('프로필 사진은 2MB 이하로 등록해주세요')
+    if (file.size > PROFILE_PHOTO_UPLOAD_MAX_BYTES) {
+      setPhotoError('프로필 사진은 10MB 이하로 등록해주세요')
       return
     }
 
+    const uploadId = photoUploadIdRef.current + 1
+    const previewUrl = URL.createObjectURL(file)
+    const previousAvatarUrl = persistedAvatarUrlRef.current
+    photoUploadIdRef.current = uploadId
+
+    if (photoPreviewUrlRef.current) {
+      URL.revokeObjectURL(photoPreviewUrlRef.current)
+    }
+
+    photoPreviewUrlRef.current = previewUrl
+    setUser(prev => prev ? { ...prev, avatar_url: previewUrl } : prev)
     setIsSavingPhoto(true)
     setPhotoError('')
 
     try {
-      const filePath = `${user.id}/avatar.${extension}`
-      const { error: uploadError } = await supabase.storage.from(PROFILE_PHOTO_BUCKET).upload(filePath, file, {
+      const compressedProfilePhoto = await compressProfilePhoto(file, previewUrl)
+      if (photoUploadIdRef.current !== uploadId) return
+
+      const filePath = `${user.id}/avatar.${compressedProfilePhoto.extension}`
+      const { error: uploadError } = await supabase.storage.from(PROFILE_PHOTO_BUCKET).upload(filePath, compressedProfilePhoto.file, {
         upsert: true,
-        contentType: file.type,
+        contentType: compressedProfilePhoto.contentType,
         cacheControl: '60',
       })
 
       if (uploadError) throw uploadError
+      if (photoUploadIdRef.current !== uploadId) return
 
       const { data: publicUrlData } = supabase.storage.from(PROFILE_PHOTO_BUCKET).getPublicUrl(filePath)
       const nextAvatarUrl = `${publicUrlData.publicUrl}?v=${Date.now()}`
@@ -235,17 +359,31 @@ export default function SettingsPage() {
 
       if (updateError) throw updateError
 
-      setUser(prev => prev ? { ...prev, avatar_url: nextAvatarUrl } : prev)
+      if (photoUploadIdRef.current === uploadId) {
+        persistedAvatarUrlRef.current = nextAvatarUrl
+        setUser(prev => prev ? { ...prev, avatar_url: nextAvatarUrl } : prev)
+      }
       trackEvent('profile_updated', {
         field: 'avatar_url',
       })
       toast.success('프로필 사진이 저장되었습니다')
     } catch (error) {
       console.error('Profile photo save error:', error)
-      setPhotoError('프로필 사진 저장 중 오류가 발생했습니다')
-      toast.error('프로필 사진 저장 중 오류가 발생했습니다')
+      if (photoUploadIdRef.current === uploadId) {
+        setUser(prev => prev ? { ...prev, avatar_url: previousAvatarUrl } : prev)
+        setPhotoError(error instanceof Error ? error.message : '프로필 사진 저장 중 오류가 발생했습니다')
+      }
+      toast.error(error instanceof Error ? error.message : '프로필 사진 저장 중 오류가 발생했습니다')
     } finally {
-      setIsSavingPhoto(false)
+      if (photoUploadIdRef.current === uploadId) {
+        setIsSavingPhoto(false)
+        if (photoPreviewUrlRef.current === previewUrl) {
+          URL.revokeObjectURL(previewUrl)
+          photoPreviewUrlRef.current = null
+        }
+      } else {
+        URL.revokeObjectURL(previewUrl)
+      }
     }
   }
 

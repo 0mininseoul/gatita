@@ -132,18 +132,14 @@ test('destination options exclude the selected origin and too-close routes', () 
   assert.ok(!graduateSchoolDestinations.includes('중앙도서관'))
 })
 
-test('departure time options use five minute intervals through 01:00', () => {
-  assert.deepEqual(
-    getDepartureTimeOptions(new Date('2026-06-18T20:48:00+09:00')),
-    [
-      '20:50', '20:55', '21:00', '21:05', '21:10', '21:15', '21:20', '21:25', '21:30', '21:35',
-      '21:40', '21:45', '21:50', '21:55', '22:00', '22:05', '22:10', '22:15', '22:20', '22:25',
-      '22:30', '22:35', '22:40', '22:45', '22:50', '22:55', '23:00', '23:05', '23:10', '23:15',
-      '23:20', '23:25', '23:30', '23:35', '23:40', '23:45', '23:50', '23:55', '00:00', '00:05',
-      '00:10', '00:15', '00:20', '00:25', '00:30', '00:35', '00:40', '00:45', '00:50', '00:55',
-      '01:00',
-    ]
-  )
+test('departure time options use one minute intervals through 01:00', () => {
+  const options = getDepartureTimeOptions(new Date('2026-06-18T20:48:00+09:00'))
+
+  assert.equal(options[0], '20:49')
+  assert.equal(options.at(-1), '01:00')
+  assert.ok(options.includes('20:50'))
+  assert.ok(options.includes('00:59'))
+  assert.equal(options.length, 252)
   assert.deepEqual(
     getDepartureTimeOptions(new Date('2026-06-18T23:56:00+09:00'), 10),
     ['00:00', '00:10', '00:20', '00:30', '00:40', '00:50', '01:00']
@@ -153,8 +149,21 @@ test('departure time options use five minute intervals through 01:00', () => {
 test('legacy rooms create modal also uses future departure time options', () => {
   const source = readProjectFile('app/rooms/page.tsx')
 
-  assert.match(source, /getDepartureTimeOptions\(new Date\(\), 5\)/)
+  assert.match(source, /getDepartureTimeOptions\(new Date\(\), 1\)/)
   assert.doesNotMatch(source, /type="time"/)
+})
+
+test('map room creation separates hour and minute dropdowns with one minute options', () => {
+  const source = readProjectFile('components/CampusRouteMap.tsx')
+
+  assert.match(source, /getDepartureTimeOptions\(new Date\(\), 1\)/)
+  assert.match(source, /draftDepartureHour/)
+  assert.match(source, /draftDepartureMinute/)
+  assert.match(source, /departureHourOptions/)
+  assert.match(source, /departureMinuteOptions/)
+  assert.match(source, /aria-label="출발 예정 시"/)
+  assert.match(source, /aria-label="출발 예정 분"/)
+  assert.doesNotMatch(source, /setDraftDepartureTime/)
 })
 
 test('departure date follows the selected post-midnight time', () => {
@@ -310,11 +319,14 @@ test('profileless authenticated users see the map first and complete profile fro
   assert.match(source, /setPendingProfileName\(getGoogleAccountName\(email, session\.user\.user_metadata\)\)/)
   assert.match(source, /const requiresProfile = hasAuthenticatedSession && !user/)
   assert.match(source, /const showLanding = !loading && authMode !== 'signup' && \(!hasAuthenticatedSession \|\| !hasEnteredApp\)/)
+  assert.match(source, /usePathname/)
+  assert.match(source, /const isMapRoute = pathname === '\/map'/)
+  assert.match(source, /if \(loading && !isMapRoute\)/, 'map route should render the map shell instead of a second loading screen')
   assert.match(source, /if \(showLanding\) \{/)
   assert.doesNotMatch(source, /if \(!user \|\| !hasEnteredApp\) \{/)
 
   assert.ok(noProfileStart > -1, 'missing profile branch exists')
-  assert.match(noProfileBlock, /await loadMapRooms\(\)/, 'missing profile branch should still load the map')
+  assert.match(noProfileBlock, /void loadMapRooms\(\)/, 'missing profile branch should load map rooms in the background')
   assert.match(noProfileBlock, /enterMap\(false\)/, 'missing profile branch should route into map UI')
   assert.doesNotMatch(noProfileBlock, /setAuthMode\('signup'\)/, 'missing profile branch should not auto-open profile setup')
 
@@ -381,6 +393,7 @@ test('service worker refreshes navigations before falling back to cached app she
   const source = readProjectFile('public/sw.js')
 
   assert.match(source, /gatita-v1\.0\.1/)
+  assert.match(source, /'\/map'/, 'PWA start URL should be cached as an app shell')
   assert.match(source, /event\.request\.mode === 'navigate'/)
   assert.match(source, /fetch\(event\.request\)/)
   assert.match(source, /cache\.put\(event\.request, responseToCache\)/)
@@ -408,10 +421,20 @@ test('iOS PWA startup images are generated and registered for current iPhones', 
   assert.match(layout, /\?v=\$\{SPLASH_ASSET_VERSION\}/)
   assert.match(layout, /device-width: 440px/)
   assert.match(layout, /device-height: 956px/)
-  assert.match(pageSource, /showStandaloneSplash/)
-  assert.match(pageSource, /gatita-pwa-launch-splash/)
   assert.match(pageSource, /isInstalled\(\)/)
-  assert.match(pageSource, /setShowStandaloneSplash\(false\)/)
+  assert.doesNotMatch(pageSource, /showStandaloneSplash/)
+  assert.doesNotMatch(pageSource, /gatita-pwa-launch-splash/)
+  assert.doesNotMatch(pageSource, /setShowStandaloneSplash/)
+  assert.equal(
+    (layout.match(/device-width: 440px\) and \(device-height: 956px/g) ?? []).length,
+    1,
+    'each iOS startup media query should be registered once'
+  )
+  assert.equal(
+    (layout.match(/device-width: 402px\) and \(device-height: 874px/g) ?? []).length,
+    1,
+    'same-resolution iPhones should not register competing startup images'
+  )
   assert.match(splashScript, /Google Chrome\.app/)
   assert.match(splashScript, /Paperlogy-9Black\.woff2/)
   assert.match(splashScript, /pageHtml/)

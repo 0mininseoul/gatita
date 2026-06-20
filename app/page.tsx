@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
+import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import {
   ChatRoom,
@@ -26,9 +27,10 @@ import toast from 'react-hot-toast'
 
 import CampusRouteMap, { CampusMapRoom } from '@/components/CampusRouteMap'
 import SignupForm from '@/components/auth/SignupForm'
-import Grainient from '@/components/Grainient'
-import SplitText from '@/components/SplitText'
 import NavigationBar from '@/components/NavigationBar'
+
+const Grainient = dynamic(() => import('@/components/Grainient'), { ssr: false })
+const SplitText = dynamic(() => import('@/components/SplitText'), { ssr: false })
 
 type AuthMode = 'signup' | null
 
@@ -137,7 +139,6 @@ export default function HomePage() {
   const [isStartingGoogle, setIsStartingGoogle] = useState(false)
   const [hasEnteredApp, setHasEnteredApp] = useState(false)
   const [showPwaOnboarding, setShowPwaOnboarding] = useState(false)
-  const [showStandaloneSplash, setShowStandaloneSplash] = useState(false)
   const [authNotice, setAuthNotice] = useState<string | null>(null)
   const [showTestLogin, setShowTestLogin] = useState(false)
   const [testEmail, setTestEmail] = useState('')
@@ -150,6 +151,8 @@ export default function HomePage() {
   const hasShownProfileRequiredPromptRef = useRef(false)
   const mapHeaderRef = useRef<HTMLElement>(null)
   const router = useRouter()
+  const pathname = usePathname()
+  const isMapRoute = pathname === '/map'
 
   const supabase = useMemo(() => {
     try {
@@ -402,8 +405,8 @@ export default function HomePage() {
               })
             }
           }
-          await loadMapRooms()
           enterMap(true)
+          void loadMapRooms()
         } else {
           setUser(null)
           setModerationStatus(null)
@@ -421,8 +424,8 @@ export default function HomePage() {
               profile_completed: false,
             })
           }
-          await loadMapRooms()
           enterMap(false)
+          void loadMapRooms()
         }
       } else if (window.location.pathname === '/map') {
         setHasAuthenticatedSession(false)
@@ -495,6 +498,10 @@ export default function HomePage() {
   }, [])
 
   useEffect(() => {
+    router.prefetch('/map')
+  }, [router])
+
+  useEffect(() => {
     if (!isInstalled()) return
 
     if (!window.localStorage.getItem(PWA_INSTALLED_DETECTED_STORAGE_KEY)) {
@@ -504,12 +511,6 @@ export default function HomePage() {
       })
     }
 
-    setShowStandaloneSplash(true)
-    const timerId = window.setTimeout(() => {
-      setShowStandaloneSplash(false)
-    }, 900)
-
-    return () => window.clearTimeout(timerId)
   }, [])
 
   useEffect(() => {
@@ -1175,29 +1176,12 @@ export default function HomePage() {
     toast.error('먼저 로그인하셔야 합니다.');
   };
 
-  const standaloneLaunchSplash = showStandaloneSplash ? (
-    <div className="gatita-pwa-launch-splash fixed inset-0 z-[120] flex flex-col items-center justify-center bg-[#f9fcff]">
-      <Image
-        src="/brand/gatita-logo.png"
-        alt=""
-        width={128}
-        height={128}
-        priority
-        className="h-28 w-28 object-contain drop-shadow-[0_16px_36px_rgba(31,78,200,0.18)]"
-      />
-      <div className="mt-5 text-5xl font-black leading-none tracking-[0] text-gray-950">
-        같이타
-      </div>
-    </div>
-  ) : null
-
-  if (loading) {
+  if (loading && !isMapRoute) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4"></div>
         <p className="text-gray-900 text-lg">로딩 중...</p>
         <p className="text-gray-500 text-sm mt-2">잠시만 기다려주세요</p>
-        {standaloneLaunchSplash}
       </div>
     )
   }
@@ -1214,7 +1198,6 @@ export default function HomePage() {
           }}
           onBackToLanding={() => setAuthMode(null)}
         />
-        {standaloneLaunchSplash}
       </>
     )
   }
@@ -1222,7 +1205,6 @@ export default function HomePage() {
   if (showLanding) {
     return (
       <main className="landing-page">
-        {standaloneLaunchSplash}
         <div className="landing-background">
           <Grainient
             className="landing-grainient"
@@ -1371,7 +1353,6 @@ export default function HomePage() {
       className="relative w-screen overflow-hidden bg-[#e7edf4]"
       style={{ height: 'var(--app-viewport-height)' }}
     >
-      {standaloneLaunchSplash}
       <CampusRouteMap
         rooms={mapRooms}
         onlineCount={onlineDisplayCount}

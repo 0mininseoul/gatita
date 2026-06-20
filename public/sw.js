@@ -1,6 +1,7 @@
 const CACHE_NAME = 'gatita-v1.0.1'
 const urlsToCache = [
   '/',
+  '/map',
   '/manifest.json',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png'

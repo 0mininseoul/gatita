@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import Image from 'next/image'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { ChatRoom, User, Message, RoomParticipant, PayoutAccount, LOCATIONS } from '@/lib/supabase'
@@ -349,7 +350,7 @@ export default function ChatRoomPage() {
         .at(-1) ?? ''
       const visibleMessageRows = messageRows.filter((message) => !extractHostAppearanceFromMessage(message.content))
       const authorIds = Array.from(new Set(visibleMessageRows.map((message) => message.user_id)))
-      const authorsById = new Map<string, Pick<User, 'id' | 'nickname' | 'department'>>()
+      const authorsById = new Map<string, Pick<User, 'id' | 'nickname' | 'department' | 'avatar_url'>>()
 
       if (latestHostAppearance) {
         setHostAppearance(latestHostAppearance)
@@ -359,14 +360,14 @@ export default function ChatRoomPage() {
       if (authorIds.length > 0) {
         const { data: authors, error: authorError } = await supabase
           .from('users')
-          .select('id, nickname, department')
+          .select('id, nickname, department, avatar_url')
           .in('id', authorIds)
 
         if (authorError) {
           console.error('Load message authors error:', authorError)
         } else {
           authors?.forEach((author) => {
-            authorsById.set(author.id, author as Pick<User, 'id' | 'nickname' | 'department'>)
+            authorsById.set(author.id, author as Pick<User, 'id' | 'nickname' | 'department' | 'avatar_url'>)
           })
         }
       }
@@ -389,7 +390,7 @@ export default function ChatRoomPage() {
         .from('room_participants')
         .select(`
           *,
-          user:users(nickname, department)
+          user:users(nickname, department, avatar_url)
         `)
         .eq('room_id', roomId)
 
@@ -625,7 +626,7 @@ export default function ChatRoomPage() {
     setNextHostId(hostTransferCandidates[0]?.user_id ?? '')
   }, [hostTransferCandidates, nextHostId, showHostLeaveModal])
 
-  const handleSendMessage = async () => {
+  const handleSendMessage = useCallback(async () => {
     if (!newMessage.trim() || !user) return
 
     const tempMessage = {
@@ -670,7 +671,14 @@ export default function ChatRoomPage() {
       console.error('Send message error:', error)
       toast.error('메시지 전송 중 오류가 발생했습니다')
     }
-  }
+  }, [broadcastRoomSync, isRoomCreator, loadMessages, newMessage, roomId, supabase, user])
+
+  const handleSendButtonPointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType !== 'touch') return
+
+    event.preventDefault()
+    void handleSendMessage()
+  }, [handleSendMessage])
 
   const handleConfirmParticipation = async () => {
     if (!user || isConfirmed || isConfirmingParticipation) return
@@ -1064,6 +1072,7 @@ export default function ChatRoomPage() {
             />
             <button
               onClick={handleSendMessage}
+              onPointerDown={handleSendButtonPointerDown}
               disabled={!newMessage.trim()}
               className="shrink-0 rounded-full bg-primary-600 p-2 text-white hover:bg-primary-700 disabled:bg-gray-300"
             >
@@ -1115,26 +1124,42 @@ export default function ChatRoomPage() {
                         : 'border-gray-100 bg-gray-50'
                     }`}
                   >
-                    <div className="min-w-0">
-                      <div className="flex min-w-0 items-center gap-1.5">
-                        <p className="truncate text-sm font-bold text-gray-950">
-                          {isCurrentUserParticipant ? `(나) ${participant.user?.nickname ?? '나'}` : participant.user?.nickname}
-                        </p>
-                        {participant.user_id === room.created_by && (
-                          <span className="shrink-0 rounded-full bg-primary-100 px-2 py-0.5 text-[10px] font-bold text-primary-700">
-                            방장
-                          </span>
-                        )}
-                        {participant.user_id !== room.created_by && participant.confirmed && (
-                          <span className="shrink-0 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700">확정</span>
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-sm font-black text-primary-700 ring-1 ring-gray-100">
+                        {participant.user?.avatar_url ? (
+                          <Image
+                            src={participant.user.avatar_url}
+                            alt=""
+                            width={40}
+                            height={40}
+                            unoptimized
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span>{(participant.user?.nickname ?? '나').slice(0, 1)}</span>
                         )}
                       </div>
-                      <p className="mt-0.5 truncate text-xs text-gray-500">{participant.user?.department}</p>
-                      {participant.user_id === room.created_by && hostAppearance && (
-                        <p className="mt-1 max-w-[13rem] rounded-lg bg-white px-2 py-1 text-[11px] font-bold leading-4 text-gray-600">
-                          🧍 {hostAppearance}
-                        </p>
-                      )}
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <p className="truncate text-sm font-bold text-gray-950">
+                            {isCurrentUserParticipant ? `(나) ${participant.user?.nickname ?? '나'}` : participant.user?.nickname}
+                          </p>
+                          {participant.user_id === room.created_by && (
+                            <span className="shrink-0 rounded-full bg-primary-100 px-2 py-0.5 text-[10px] font-bold text-primary-700">
+                              방장
+                            </span>
+                          )}
+                          {participant.user_id !== room.created_by && participant.confirmed && (
+                            <span className="shrink-0 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700">확정</span>
+                          )}
+                        </div>
+                        <p className="mt-0.5 truncate text-xs text-gray-500">{participant.user?.department}</p>
+                        {participant.user_id === room.created_by && hostAppearance && (
+                          <p className="mt-1 max-w-[13rem] rounded-lg bg-white px-2 py-1 text-[11px] font-bold leading-4 text-gray-600">
+                            🧍 {hostAppearance}
+                          </p>
+                        )}
+                      </div>
                     </div>
                     <button
                       type="button"
@@ -1170,7 +1195,7 @@ export default function ChatRoomPage() {
             <div className="chat-guide-card">
               <div className="chat-guide-line">
                 <span className="chat-guide-icon">💳</span>
-                <p>정산이 필요할 경우 방장이 결제 후 정산해요.</p>
+                <p>정산이 필요할 경우 방장이 결제 후 정산해요.<br />채팅방 상단에는 방장의 계좌번호가 나올 거예요.</p>
               </div>
               <div className="chat-guide-line">
                 <span className="chat-guide-icon">🤝</span>
@@ -1179,7 +1204,7 @@ export default function ChatRoomPage() {
               <div className="chat-guide-line">
                 <span className="chat-guide-icon">📞</span>
                 <p>
-                  방장과 멤버들은 서로 전화번호가 노출될 수 있어요. 지각, 노쇼, 출발 위치 확인 등 동행 목적에만 사용해주세요.
+                  방장과 멤버들은 서로 전화번호가 노출될 수 있어요.<br />지각, 노쇼, 출발 위치 확인 등 동행 목적에만 사용해주세요.
                 </p>
               </div>
             </div>

@@ -151,8 +151,8 @@ test('chat guide modals use aligned compact checklist rows', () => {
   assert.match(guideLineBlock, /grid-template-columns:\s*1\.15rem minmax\(0, 1fr\);/)
   assert.match(guideLineBlock, /align-items:\s*center;/, 'guide row icon and text should be vertically centered')
   assert.match(guideLineBlock, /letter-spacing:\s*0;/)
-  assert.match(guideLineBlock, /font-size:\s*0\.59rem;/)
-  assert.match(guideLineBlock, /line-height:\s*1\.42;/)
+  assert.match(guideLineBlock, /font-size:\s*clamp\(0\.64rem, 2\.42vw, 0\.72rem\);/)
+  assert.match(guideLineBlock, /line-height:\s*1\.44;/)
   assert.match(guideIconBlock, /width:\s*1\.15rem;/, 'guide icon column should be compact enough to give text more room')
   assert.match(guideIconBlock, /align-items:\s*center;/)
   assert.match(page, /동행 전 체크/)
@@ -170,8 +170,10 @@ test('chat room hides participant chips behind a participant sheet and shows cre
   assert.match(source, /showParticipants/, 'participants should be shown from an explicit header action')
   assert.match(source, /참여자/, 'chat header should include participant list affordance')
   assert.match(source, /handleCallParticipant/, 'participant list should allow guarded phone calls')
+  assert.match(source, /user:users\(nickname, department, avatar_url\)/, 'participant query should include public profile photos')
+  assert.match(source, /participant\.user\?\.avatar_url/, 'participant sheet should render profile photos')
+  assert.match(source, /className="h-full w-full object-cover"/, 'participant profile photos should be cropped as circular avatars')
   assert.doesNotMatch(source, /href=\{`tel:\$\{participant\.user\?\.phone\}`\}/, 'participant sheet should not expose direct tel links before consent')
-  assert.match(source, /user:users\(nickname, department\)/, 'participant query should read public profile fields only')
   assert.match(source, /\/api\/rooms\/\$\{roomId\}\/private/, 'phone numbers and creator payout account should load through a room-scoped server API')
   assert.doesNotMatch(source, /user:users\(nickname, department, phone\)/, 'participant query must not expose phone numbers through public profile joins')
   assert.doesNotMatch(source, /\.from\('user_payout_accounts'\)/, 'chat room must not read creator payout accounts directly from the browser')
@@ -268,6 +270,7 @@ test('room creators see a first-room guide and submit a one-line appearance note
   assert.match(source, /🤝/)
   assert.match(source, /📞/)
   assert.match(source, /정산이 필요할 경우 방장이 결제 후 정산해요/)
+  assert.match(source, /채팅방 상단에는 방장의 계좌번호가 나올 거예요/)
   assert.match(source, /출발 5분 전부터는 갑자기 방을 나가면 서비스 이용이 정지될 수 있어요/)
   assert.match(source, /방장과 멤버들은 서로 전화번호가 노출될 수 있어요\./)
   assert.match(source, /지각, 노쇼, 출발 위치 확인 등 동행 목적에만 사용해주세요\./)
@@ -285,6 +288,17 @@ test('room creators see a first-room guide and submit a one-line appearance note
   assert.match(source, /HOST_APPEARANCE_MESSAGE_PREFIX/)
   assert.match(source, /content: `\$\{HOST_APPEARANCE_MESSAGE_PREFIX\}\$\{hostAppearanceDraft\.trim\(\)\}`/)
   assert.doesNotMatch(source, /content: `방장 인상착의: \$\{hostAppearance/)
+})
+
+test('chat send button submits on touch pointerdown while the keyboard is open', () => {
+  const source = readProjectFile('app/rooms/[id]/page.tsx')
+
+  assert.match(source, /const handleSendMessage = useCallback\(async \(\) =>/)
+  assert.match(source, /handleSendButtonPointerDown/)
+  assert.match(source, /event\.pointerType !== 'touch'/)
+  assert.match(source, /event\.preventDefault\(\)/)
+  assert.match(source, /void handleSendMessage\(\)/)
+  assert.match(source, /onPointerDown=\{handleSendButtonPointerDown\}/)
 })
 
 test('host appearance is hidden from chat and shown in entry guide and participant sheet', () => {

@@ -181,14 +181,28 @@ export default function CampusRouteMap({
   const [focusedLocation, setFocusedLocation] = useState<LocationType | null>(selectedFrom || null)
   const [isCreateMode, setIsCreateMode] = useState(false)
   const [draftDestination, setDraftDestination] = useState<LocationType | ''>('')
-  const [draftDepartureTime, setDraftDepartureTime] = useState('')
+  const [draftDepartureHour, setDraftDepartureHour] = useState('')
+  const [draftDepartureMinute, setDraftDepartureMinute] = useState('')
 
   const { originStats } = useMemo(() => buildStats(rooms), [rooms])
   const destinationOptions = useMemo(() => getDestinationOptions(selectedFrom), [selectedFrom])
   const departureTimeOptions = useMemo(
-    () => isCreateMode ? getDepartureTimeOptions(new Date(), 5) : [],
+    () => isCreateMode ? getDepartureTimeOptions(new Date(), 1) : [],
     [isCreateMode]
   )
+  const departureHourOptions = useMemo(
+    () => Array.from(new Set(departureTimeOptions.map((time) => time.slice(0, 2)))),
+    [departureTimeOptions]
+  )
+  const departureMinuteOptions = useMemo(
+    () => departureTimeOptions
+      .filter((time) => time.startsWith(`${draftDepartureHour}:`))
+      .map((time) => time.slice(3, 5)),
+    [departureTimeOptions, draftDepartureHour]
+  )
+  const draftDepartureTime = draftDepartureHour && draftDepartureMinute
+    ? `${draftDepartureHour}:${draftDepartureMinute}`
+    : ''
   const selectedOriginRooms = useMemo(
     () => selectedFrom
       ? rooms
@@ -209,7 +223,8 @@ export default function CampusRouteMap({
     setFocusedLocation(null)
     setIsCreateMode(false)
     setDraftDestination('')
-    setDraftDepartureTime('')
+    setDraftDepartureHour('')
+    setDraftDepartureMinute('')
   }, [onSelectFrom])
 
   const handleZoomIn = useCallback(() => {
@@ -345,7 +360,8 @@ export default function CampusRouteMap({
       setFocusedLocation(null)
       setIsCreateMode(false)
       setDraftDestination('')
-      setDraftDepartureTime('')
+      setDraftDepartureHour('')
+      setDraftDepartureMinute('')
     }
   }, [selectedFrom])
 
@@ -354,7 +370,8 @@ export default function CampusRouteMap({
 
     setIsCreateMode(false)
     setDraftDestination('')
-    setDraftDepartureTime('')
+    setDraftDepartureHour('')
+    setDraftDepartureMinute('')
   }, [selectedFrom])
 
   useEffect(() => {
@@ -364,8 +381,16 @@ export default function CampusRouteMap({
   }, [destinationOptions, draftDestination])
 
   useEffect(() => {
-    if (isCreateMode && !draftDepartureTime && departureTimeOptions.length > 0) {
-      setDraftDepartureTime(departureTimeOptions[0])
+    if (!isCreateMode || departureTimeOptions.length === 0) return
+
+    const firstTime = departureTimeOptions[0]
+    const firstHour = firstTime.slice(0, 2)
+    const firstMinute = firstTime.slice(3, 5)
+    const currentTime = draftDepartureTime
+
+    if (!currentTime || !departureTimeOptions.includes(currentTime)) {
+      setDraftDepartureHour(firstHour)
+      setDraftDepartureMinute(firstMinute)
     }
   }, [departureTimeOptions, draftDepartureTime, isCreateMode])
 
@@ -459,9 +484,7 @@ export default function CampusRouteMap({
       )}
 
       {mapStatus === 'loading' && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-sm">
-          <div className="loading-spinner" />
-        </div>
+        <div className="pointer-events-none absolute inset-0 bg-[#e7edf4]" />
       )}
 
       {isSheetOpen && (
@@ -571,21 +594,49 @@ export default function CampusRouteMap({
                     </div>
                     <div>
                       <label className="mb-1.5 block text-xs font-black text-gray-700">출발예정시간</label>
-                      <select
-                        value={draftDepartureTime}
-                        onChange={(event) => setDraftDepartureTime(event.target.value)}
-                        className="input-field bg-white py-2.5 text-sm font-bold"
-                      >
-                        {departureTimeOptions.length > 0 ? (
-                          departureTimeOptions.map((time) => (
-                            <option key={time} value={time}>
-                              {time}
-                            </option>
-                          ))
-                        ) : (
-                          <option value="">오늘 선택 가능한 시간이 없습니다</option>
-                        )}
-                      </select>
+                      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                        <select
+                          aria-label="출발 예정 시"
+                          value={draftDepartureHour}
+                          onChange={(event) => {
+                            const nextHour = event.target.value
+                            const nextMinute = departureTimeOptions
+                              .find((time) => time.startsWith(`${nextHour}:`))
+                              ?.slice(3, 5) ?? ''
+
+                            setDraftDepartureHour(nextHour)
+                            setDraftDepartureMinute(nextMinute)
+                          }}
+                          className="input-field bg-white py-2.5 text-sm font-bold"
+                        >
+                          {departureHourOptions.length > 0 ? (
+                            departureHourOptions.map((hour) => (
+                              <option key={hour} value={hour}>
+                                {hour}시
+                              </option>
+                            ))
+                          ) : (
+                            <option value="">시</option>
+                          )}
+                        </select>
+                        <span className="text-xs font-black text-gray-400">:</span>
+                        <select
+                          aria-label="출발 예정 분"
+                          value={draftDepartureMinute}
+                          onChange={(event) => setDraftDepartureMinute(event.target.value)}
+                          className="input-field bg-white py-2.5 text-sm font-bold"
+                        >
+                          {departureMinuteOptions.length > 0 ? (
+                            departureMinuteOptions.map((minute) => (
+                              <option key={minute} value={minute}>
+                                {minute}분
+                              </option>
+                            ))
+                          ) : (
+                            <option value="">분</option>
+                          )}
+                        </select>
+                      </div>
                     </div>
                   </div>
                   <button

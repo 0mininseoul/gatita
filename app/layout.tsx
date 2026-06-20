@@ -39,14 +39,6 @@ const iosStartupImages = [
     media: 'screen and (device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)',
   },
   {
-    url: splashImageUrl('iphone-16-pro-max'),
-    media: 'screen and (device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)',
-  },
-  {
-    url: splashImageUrl('iphone-16-pro'),
-    media: 'screen and (device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)',
-  },
-  {
     url: splashImageUrl('iphone-15-pro-max'),
     media: 'screen and (device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)',
   },
@@ -142,6 +134,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko" className={paperlogy.variable} style={{ colorScheme: 'only light' }}>
+      <head>
+        <link rel="preconnect" href="https://dapi.kakao.com" />
+        <link rel="preconnect" href="https://t1.daumcdn.net" crossOrigin="" />
+      </head>
       <body className="antialiased">
         <div id="root" className="min-h-screen app-bg">
           {children}
@@ -149,6 +145,9 @@ export default function RootLayout({
         <AnalyticsProvider />
         <Toaster
           position="top-center"
+          containerStyle={{
+            top: 'max(1rem, calc(env(safe-area-inset-top) + 0.875rem))',
+          }}
           toastOptions={{
             duration: 800,
             style: {

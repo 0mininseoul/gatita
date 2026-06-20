@@ -204,7 +204,7 @@ function formatLocalDate(date: Date) {
   return `${year}-${month}-${day}`
 }
 
-export function getDepartureTimeOptions(now = new Date(), intervalMinutes = 5) {
+export function getDepartureTimeOptions(now = new Date(), intervalMinutes = 1) {
   const options: string[] = []
   const nextTime = new Date(now)
   const currentMinutes = nextTime.getMinutes()

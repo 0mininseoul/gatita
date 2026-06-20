@@ -556,7 +556,7 @@ function CreateRoomModal({ fromLocation, toLocation, selectedDate, user, onClose
                 className="input-field"
               >
                 <option value="">출발 시간 선택</option>
-                {getDepartureTimeOptions(new Date(), 5).map((time) => (
+                {getDepartureTimeOptions(new Date(), 1).map((time) => (
                   <option key={time} value={time}>
                     {time}
                   </option>

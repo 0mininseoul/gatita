@@ -71,6 +71,28 @@ test('settings header clears the iOS PWA status bar safe area', () => {
   assert.doesNotMatch(source, /<header\s+className="app-header px-4 py-4"/)
 })
 
+test('settings uses a compact row-based product layout', () => {
+  const source = readProjectFile('app/settings/page.tsx')
+  const css = readProjectFile('app/globals.css')
+
+  assert.match(source, /settings-shell/)
+  assert.match(source, /settings-hero/)
+  assert.match(source, /settings-section/)
+  assert.match(source, /settings-list/)
+  assert.match(source, /settings-row/)
+  assert.match(source, /settings-avatar-button/)
+  assert.match(source, /settings-action-row/)
+  assert.match(source, /프로필 요약/)
+  assert.match(source, /기본 정보/)
+  assert.match(source, /정산 계좌/)
+  assert.doesNotMatch(source, /className="card p-6 mb-6"/, 'settings should not stack oversized generic cards')
+  assert.match(css, /\.settings-shell/)
+  assert.match(css, /\.settings-hero/)
+  assert.match(css, /\.settings-section/)
+  assert.match(css, /\.settings-row/)
+  assert.match(css, /\.settings-avatar-button/)
+})
+
 test('account deletion API verifies the session and deletes the auth user with the service role key', () => {
   const routePath = 'app/api/account/delete/route.ts'
 

@@ -391,6 +391,12 @@ export default function SettingsPage() {
     '[같이타] 버그 제보',
     '발생한 문제와 사용 환경을 적어주세요.\n\n1. 어떤 화면에서 발생했나요?\n2. 어떤 동작을 했나요?\n3. 기대한 동작은 무엇인가요?\n',
   )
+  const profileRows = [
+    { label: '실명', value: user.name },
+    { label: '이메일', value: user.email },
+    { label: '전화번호', value: user.phone },
+    { label: '학과', value: user.department },
+  ]
 
   return (
     <div className="min-h-screen app-bg">
@@ -410,220 +416,161 @@ export default function SettingsPage() {
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-6">
-        {/* 프로필 정보 */}
-        <div className="card p-6 mb-6">
-          <div className="mb-6 flex items-center">
-            <div className="mr-4 flex flex-col items-center gap-2">
-              <div
-                className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-white"
-                style={{ backgroundImage: user.avatar_url ? undefined : 'var(--brand-gradient)', boxShadow: '0 8px 20px rgba(39, 130, 255, 0.28)' }}
-              >
-                {user.avatar_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={user.avatar_url} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <UserIcon className="h-8 w-8 text-white" />
-                )}
+      <main className="settings-shell">
+        <section className="settings-hero" aria-labelledby="settings-profile-title">
+          <div className="relative shrink-0">
+            <div
+              className="settings-avatar"
+              style={{ backgroundImage: user.avatar_url ? undefined : 'var(--brand-gradient)' }}
+            >
+              {user.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={user.avatar_url} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <UserIcon className="h-6 w-6 text-white" />
+              )}
+            </div>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleProfilePhotoChange}
+            />
+            <button
+              type="button"
+              aria-label={user.avatar_url ? '프로필 사진 변경' : '프로필 사진 등록'}
+              onClick={() => photoInputRef.current?.click()}
+              disabled={isSavingPhoto}
+              className="settings-avatar-button"
+            >
+              {isSavingPhoto ? <span className="loading-spinner h-3.5 w-3.5 border" /> : <Camera className="h-3.5 w-3.5" />}
+            </button>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="settings-kicker">프로필 요약</p>
+            <h2 id="settings-profile-title" className="truncate text-[1.15rem] font-black leading-tight text-gray-950">
+              {user.nickname}
+            </h2>
+            <p className="mt-0.5 truncate text-xs font-bold text-gray-500">{user.department}</p>
+            {photoError && (
+              <p className="mt-1 text-[11px] font-bold text-red-500">{photoError}</p>
+            )}
+          </div>
+        </section>
+
+        <section className="settings-section" aria-labelledby="settings-profile-info">
+          <div className="settings-section-heading">
+            <h3 id="settings-profile-info">기본 정보</h3>
+            <p>동행 확인에 필요한 정보입니다</p>
+          </div>
+          <div className="settings-list">
+            {profileRows.map((row) => (
+              <div key={row.label} className="settings-row">
+                <div className="min-w-0">
+                  <p className="settings-row-label">{row.label}</p>
+                </div>
+                <span className="settings-row-value">{row.value}</span>
               </div>
-              <input
-                ref={photoInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="hidden"
-                onChange={handleProfilePhotoChange}
-              />
+            ))}
+          </div>
+        </section>
+
+        <section className="settings-section" aria-labelledby="settings-nickname">
+          <div className="settings-section-heading settings-section-heading-row">
+            <div>
+              <h3 id="settings-nickname">닉네임</h3>
+              <p>변경 후 2주간 재변경할 수 없습니다</p>
+            </div>
+            {!isEditing && (
               <button
                 type="button"
-                onClick={() => photoInputRef.current?.click()}
-                disabled={isSavingPhoto}
-                className="inline-flex items-center rounded-full border border-primary-100 bg-primary-50 px-2.5 py-1 text-[11px] font-bold text-primary-700 transition hover:bg-primary-100 disabled:bg-gray-100 disabled:text-gray-400"
+                onClick={() => setIsEditing(true)}
+                disabled={!canChange}
+                className="settings-mini-button"
               >
-                <Camera className="mr-1 h-3 w-3" />
-                {isSavingPhoto ? '저장 중' : user.avatar_url ? '사진 변경' : '프로필 사진 등록'}
+                변경
               </button>
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900">{user.nickname}</h2>
-              <p className="text-gray-600">{user.department}</p>
-              {photoError && (
-                <p className="mt-2 text-xs font-semibold text-red-500">{photoError}</p>
-              )}
-            </div>
+            )}
           </div>
 
-          <div className="space-y-6">
-            {/* 실명 (변경 불가) */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                실명
-              </label>
+          {isEditing ? (
+            <div className="space-y-2">
               <input
                 type="text"
-                value={user.name}
-                disabled
-                className="input-field bg-gray-50 text-gray-500 cursor-not-allowed"
+                value={newNickname}
+                onChange={(e) => {
+                  setNewNickname(e.target.value)
+                  setNicknameError('')
+                }}
+                className={`input-field settings-input ${nicknameError ? 'border-red-500' : ''}`}
+                placeholder="새 닉네임"
+                maxLength={10}
               />
-              <p className="text-xs text-gray-500 mt-1">
-                실명은 변경할 수 없습니다
-              </p>
-            </div>
-
-            {/* 이메일 (변경 불가) */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                이메일
-              </label>
-              <input
-                type="email"
-                value={user.email}
-                disabled
-                className="input-field bg-gray-50 text-gray-500 cursor-not-allowed"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                이메일은 변경할 수 없습니다
-              </p>
-            </div>
-
-            {/* 전화번호 (변경 불가) */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                전화번호
-              </label>
-              <input
-                type="tel"
-                value={user.phone}
-                disabled
-                className="input-field bg-gray-50 text-gray-500 cursor-not-allowed"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                전화번호는 변경할 수 없습니다
-              </p>
-            </div>
-
-            {/* 닉네임 (변경 가능, 제한 있음) */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                닉네임
-              </label>
-              {isEditing ? (
-                <div>
-                  <input
-                    type="text"
-                    value={newNickname}
-                    onChange={(e) => {
-                      setNewNickname(e.target.value)
-                      setNicknameError('')
-                    }}
-                    className={`input-field ${nicknameError ? 'border-red-500' : ''}`}
-                    placeholder="새 닉네임을 입력하세요"
-                    maxLength={10}
-                  />
-                  {nicknameError && (
-                    <div className="flex items-center mt-2 text-red-500 text-sm">
-                      <AlertCircle className="w-4 h-4 mr-1" />
-                      {nicknameError}
-                    </div>
-                  )}
-                  <div className="flex space-x-2 mt-3">
-                    <button
-                      onClick={handleNicknameChange}
-                      disabled={isSaving || !newNickname.trim()}
-                      className="btn-primary text-sm px-4 py-2 flex items-center"
-                    >
-                      {isSaving ? (
-                        <>
-                          <div className="loading-spinner mr-2" />
-                          저장 중...
-                        </>
-                      ) : (
-                        <>
-                          <Check className="w-4 h-4 mr-1" />
-                          저장
-                        </>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setIsEditing(false)
-                        setNewNickname(user.nickname)
-                        setNicknameError('')
-                      }}
-                      className="btn-secondary text-sm px-4 py-2"
-                      disabled={isSaving}
-                    >
-                      취소
-                    </button>
-                  </div>
+              {nicknameError && (
+                <div className="settings-error">
+                  <AlertCircle className="h-4 w-4" />
+                  {nicknameError}
                 </div>
-              ) : (
-                <div>
-                  <div className="flex items-center justify-between">
-                    <input
-                      type="text"
-                      value={user.nickname}
-                      disabled
-                      className="input-field bg-gray-50 text-gray-500 cursor-not-allowed flex-1 mr-3"
-                    />
-                    <button
-                      onClick={() => setIsEditing(true)}
-                      disabled={!canChange}
-                      className={`px-4 py-2 text-sm font-medium rounded-lg ${
-                        canChange 
-                          ? 'bg-primary-600 hover:bg-primary-700 text-white' 
-                          : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                      }`}
-                    >
-                      변경
-                    </button>
-                  </div>
-                  
-                  {!canChange && nextChangeDate && (
-                    <div className="flex items-center mt-2 text-red-500 text-sm">
-                      <AlertCircle className="w-4 h-4 mr-1" />
-                      {nextChangeDate.toLocaleDateString('ko-KR')} 이후 변경 가능합니다
-                    </div>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={handleNicknameChange}
+                  disabled={isSaving || !newNickname.trim()}
+                  className="btn-primary settings-save-button"
+                >
+                  {isSaving ? (
+                    <span className="inline-flex items-center justify-center">
+                      <span className="loading-spinner mr-2 h-4 w-4" />
+                      저장 중
+                    </span>
+                  ) : (
+                    <>
+                      <Check className="mr-1.5 h-4 w-4" />
+                      저장
+                    </>
                   )}
-                  
-                  <p className="text-xs text-gray-500 mt-1">
-                    변경 후 2주간 재변경 불가
-                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditing(false)
+                    setNewNickname(user.nickname)
+                    setNicknameError('')
+                  }}
+                  className="btn-secondary settings-save-button"
+                  disabled={isSaving}
+                >
+                  취소
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="settings-row settings-row-standalone">
+                <p className="settings-row-label">현재 닉네임</p>
+                <span className="settings-row-value">{user.nickname}</span>
+              </div>
+              {!canChange && nextChangeDate && (
+                <div className="settings-error mt-2">
+                  <AlertCircle className="h-4 w-4" />
+                  {nextChangeDate.toLocaleDateString('ko-KR')} 이후 변경 가능합니다
                 </div>
               )}
             </div>
+          )}
+        </section>
 
-            {/* 학과 (변경 불가) */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                학과
-              </label>
-              <input
-                type="text"
-                value={user.department}
-                disabled
-                className="input-field bg-gray-50 text-gray-500 cursor-not-allowed"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                학과는 가입 후 변경할 수 없습니다
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* 계좌 정보 */}
-        <div className="card p-6 mb-6">
-          <div className="mb-5">
-            <h3 className="text-lg font-semibold text-gray-900">계좌 정보</h3>
-            <p className="mt-1 text-sm text-gray-600">
-              내가 만든 방에서는 방장 계좌로 참여자에게 공개됩니다.
-            </p>
+        <section className="settings-section" aria-labelledby="settings-payout">
+          <div className="settings-section-heading">
+            <h3 id="settings-payout">정산 계좌</h3>
+            <p>방을 개설하면 같은 방 참여자에게 공개될 수 있습니다</p>
           </div>
 
-          <div className="space-y-4">
+          <div className="settings-field-stack">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                계좌은행명
-              </label>
+              <p className="settings-field-label">은행</p>
               <BankSelectField
                 value={accountForm.bank_name}
                 onChange={(value) => handleAccountFieldChange('bank_name', value)}
@@ -631,9 +578,7 @@ export default function SettingsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                계좌번호
-              </label>
+              <p className="settings-field-label">계좌번호</p>
               <AccountNumberSegmentField
                 bankName={accountForm.bank_name}
                 value={accountForm.account_number}
@@ -642,22 +587,21 @@ export default function SettingsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                계좌주 이름
-              </label>
+              <label className="settings-field-label" htmlFor="settings-account-holder">계좌주</label>
               <input
+                id="settings-account-holder"
                 type="text"
                 value={accountForm.account_holder}
                 onChange={(event) => handleAccountFieldChange('account_holder', event.target.value)}
-                className="input-field"
-                placeholder="계좌주 이름을 입력하세요"
+                className="input-field settings-input"
+                placeholder="계좌주 이름"
                 disabled={isSavingAccount}
               />
             </div>
 
             {accountError && (
-              <div className="flex items-center text-sm text-red-500">
-                <AlertCircle className="w-4 h-4 mr-1" />
+              <div className="settings-error">
+                <AlertCircle className="h-4 w-4" />
                 {accountError}
               </div>
             )}
@@ -666,12 +610,12 @@ export default function SettingsPage() {
               type="button"
               onClick={handlePayoutAccountSave}
               disabled={isSavingAccount}
-              className="btn-primary w-full py-3 text-sm"
+              className="btn-primary settings-save-button w-full"
             >
               {isSavingAccount ? (
                 <span className="inline-flex items-center justify-center">
-                  <span className="loading-spinner mr-2" />
-                  저장 중...
+                  <span className="loading-spinner mr-2 h-4 w-4" />
+                  저장 중
                 </span>
               ) : payoutAccount ? (
                 '계좌 정보 수정'
@@ -680,62 +624,53 @@ export default function SettingsPage() {
               )}
             </button>
           </div>
-        </div>
+        </section>
 
-        {/* 관리자 문의 */}
-        <div className="card p-6 mb-6">
-          <h3 className="text-lg font-semibold mb-4">관리자 문의</h3>
-          <div>
-            <div className="grid grid-cols-2 gap-2">
-              <a
-                href={contactMailHref}
-                className="inline-flex items-center justify-center rounded-xl border border-primary-100 bg-primary-50 px-3 py-3 text-sm font-bold text-primary-700 transition hover:bg-primary-100"
-              >
-                <Mail className="mr-2 h-4 w-4" />
-                문의하기
-              </a>
-              <a
-                href={bugReportMailHref}
-                className="inline-flex items-center justify-center rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-bold text-gray-800 transition hover:bg-gray-50"
-              >
-                <Bug className="mr-2 h-4 w-4" />
-                버그 제보
-              </a>
-            </div>
+        <section className="settings-section settings-section-tight" aria-labelledby="settings-contact">
+          <div className="settings-section-heading">
+            <h3 id="settings-contact">관리자 문의</h3>
           </div>
-        </div>
+          <div className="grid grid-cols-2 gap-2">
+            <a href={contactMailHref} className="settings-action-row settings-action-row-primary">
+              <Mail className="h-4 w-4" />
+              문의하기
+            </a>
+            <a href={bugReportMailHref} className="settings-action-row">
+              <Bug className="h-4 w-4" />
+              버그 제보
+            </a>
+          </div>
+        </section>
 
-        {/* 로그아웃 버튼 */}
-        <div className="card p-6">
+        <section className="settings-section settings-section-tight">
           <button
+            type="button"
             onClick={handleLogout}
-            className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl transition-colors"
+            className="settings-danger-row"
           >
             로그아웃
           </button>
-        </div>
+        </section>
 
-        {/* 하단 정보 */}
-        <div className="text-center text-sm text-gray-500 mt-8">
+        <footer className="settings-footer">
           <p>같이타 v1.0.0</p>
-          <p className="mt-2">가천대 통학 동행 플랫폼</p>
-          <div className="mt-4 flex items-center justify-center gap-4 text-xs">
-            <Link href="/privacy" className="underline hover:text-gray-700">
+          <div className="mt-3 flex items-center justify-center gap-4">
+            <Link href="/privacy" className="underline underline-offset-2 hover:text-gray-700">
               개인정보처리방침
             </Link>
-            <Link href="/terms" className="underline hover:text-gray-700">
+            <Link href="/terms" className="underline underline-offset-2 hover:text-gray-700">
               서비스약관
             </Link>
           </div>
           <button
             type="button"
             onClick={() => setDeleteStep('overview')}
-            className="mt-6 text-[11px] font-medium text-gray-400 underline decoration-gray-300 underline-offset-2 transition hover:text-red-600 hover:decoration-red-300"
+            className="mt-5 text-[11px] font-medium text-gray-400 underline decoration-gray-300 underline-offset-2 transition hover:text-red-600 hover:decoration-red-300"
           >
             탈퇴하기
           </button>
-        </div>
-      </div>
+        </footer>
+      </main>
 
       {deleteStep !== 'idle' && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-4 pb-4 pt-16 sm:items-center sm:pb-16">

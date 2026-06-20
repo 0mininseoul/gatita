@@ -67,7 +67,8 @@ test('settings lets users edit payout account while keeping phone immutable', ()
   assert.match(banks, /name:\s*'카카오뱅크'[\s\S]*segments:\s*\[4,\s*2,\s*7\]/, 'KakaoBank should use XXXX-XX-XXXXXXX')
   assert.match(banks, /logoSrc:\s*['"]\/bank-logos\/kakaobank\.svg['"]/, 'KakaoBank should use a reliable local brand icon')
   assert.match(settings, /account_holder/, 'settings should render account holder input')
-  assert.match(settings, /disabled[\s\S]*value=\{(?:user|profile)\.phone\}|value=\{(?:user|profile)\.phone\}[\s\S]*disabled/, 'phone number should remain immutable in settings')
+  assert.match(settings, /\{\s*label:\s*'전화번호',\s*value:\s*user\.phone\s*\}/, 'phone number should remain immutable as a read-only settings row')
+  assert.doesNotMatch(settings, /type="tel"[\s\S]*onChange/, 'settings should not expose an editable phone input')
 })
 
 test('profile onboarding uses three phone boxes and keeps account number segmentation stable', () => {

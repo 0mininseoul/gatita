@@ -435,6 +435,295 @@
     box-shadow: 0 6px 22px rgba(31, 78, 200, 0.05);
   }
 
+  .settings-shell {
+    width: min(100%, 30rem);
+    margin: 0 auto;
+    padding: 0.65rem 1rem max(1.75rem, calc(env(safe-area-inset-bottom) + 0.875rem));
+  }
+
+  .settings-hero,
+  .settings-section {
+    border: 1px solid rgba(214, 221, 234, 0.78);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 8px 22px rgba(31, 41, 70, 0.055);
+  }
+
+  .settings-hero {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.72rem;
+  }
+
+  .settings-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #f1f5fb;
+    box-shadow: 0 8px 18px rgba(39, 130, 255, 0.22);
+  }
+
+  .settings-avatar-button {
+    position: absolute;
+    right: -0.1rem;
+    bottom: -0.1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.65rem;
+    height: 1.65rem;
+    border: 1px solid rgba(214, 221, 234, 0.94);
+    border-radius: 999px;
+    background: #fbfcff;
+    color: #1f6ef0;
+    box-shadow: 0 5px 12px rgba(31, 41, 70, 0.12);
+    transition: transform 180ms ease, background-color 180ms ease, color 180ms ease;
+  }
+
+  .settings-avatar-button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    background: #eff6ff;
+  }
+
+  .settings-avatar-button:disabled {
+    color: #9aa4b2;
+    background: #f3f5f8;
+  }
+
+  .settings-kicker {
+    margin-bottom: 0.15rem;
+    color: #1f6ef0;
+    font-size: 0.7rem;
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  .settings-section {
+    margin-top: 0.55rem;
+    padding: 0.72rem;
+  }
+
+  .settings-section-tight {
+    padding: 0.64rem;
+  }
+
+  .settings-section-heading {
+    margin-bottom: 0.48rem;
+  }
+
+  .settings-section-heading-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .settings-section-heading h3 {
+    color: #101622;
+    font-size: 0.9rem;
+    font-weight: 900;
+    line-height: 1.2;
+  }
+
+  .settings-section-heading p {
+    margin-top: 0.15rem;
+    color: #667085;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  .settings-list {
+    overflow: hidden;
+    border: 1px solid rgba(229, 233, 240, 0.96);
+    border-radius: 8px;
+    background: #fbfcff;
+  }
+
+  .settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.85rem;
+    min-height: 2.42rem;
+    padding: 0.52rem 0.65rem;
+    border-top: 1px solid rgba(229, 233, 240, 0.88);
+  }
+
+  .settings-row:first-child {
+    border-top: 0;
+  }
+
+  .settings-row-standalone {
+    border: 1px solid rgba(229, 233, 240, 0.96);
+    border-radius: 8px;
+    background: #fbfcff;
+  }
+
+  .settings-row-label {
+    color: #667085;
+    font-size: 0.72rem;
+    font-weight: 850;
+    line-height: 1.15;
+  }
+
+  .settings-row-value {
+    min-width: 0;
+    max-width: 68%;
+    overflow: hidden;
+    color: #101622;
+    font-size: 0.78rem;
+    font-weight: 850;
+    line-height: 1.2;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .settings-mini-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 3.1rem;
+    min-height: 1.9rem;
+    padding: 0 0.7rem;
+    border-radius: 8px;
+    background: #2782ff;
+    color: #fbfcff;
+    font-size: 0.78rem;
+    font-weight: 900;
+    transition: background-color 180ms ease, transform 180ms ease;
+  }
+
+  .settings-mini-button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    background: #1f6ef0;
+  }
+
+  .settings-mini-button:disabled {
+    background: #e5e9f0;
+    color: #9aa4b2;
+  }
+
+  .settings-field-stack {
+    display: grid;
+    gap: 0.58rem;
+  }
+
+  .settings-field-label {
+    display: block;
+    margin-bottom: 0.3rem;
+    color: #667085;
+    font-size: 0.73rem;
+    font-weight: 850;
+    line-height: 1.15;
+  }
+
+  .settings-input {
+    min-height: 2.55rem;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 800;
+  }
+
+  .settings-save-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    min-height: 2.55rem;
+    padding: 0.55rem 0.85rem;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 900;
+  }
+
+  .settings-error {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: #e5484d;
+    font-size: 0.75rem;
+    font-weight: 800;
+    line-height: 1.35;
+  }
+
+  .settings-action-row,
+  .settings-danger-row {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    min-height: 2.48rem;
+    border-radius: 8px;
+    font-size: 0.84rem;
+    font-weight: 900;
+    transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, transform 180ms ease;
+  }
+
+  .settings-action-row {
+    border: 1px solid rgba(229, 233, 240, 0.96);
+    background: #fbfcff;
+    color: #101622;
+  }
+
+  .settings-action-row-primary {
+    border-color: rgba(39, 130, 255, 0.18);
+    background: #eff6ff;
+    color: #1f6ef0;
+  }
+
+  .settings-action-row:hover,
+  .settings-danger-row:hover {
+    transform: translateY(-1px);
+  }
+
+  .settings-action-row:hover {
+    background: #f5f8fc;
+  }
+
+  .settings-action-row-primary:hover {
+    background: #e4f0ff;
+  }
+
+  .settings-danger-row {
+    width: 100%;
+    border: 1px solid rgba(239, 68, 68, 0.16);
+    background: #fff6f6;
+    color: #d92d20;
+  }
+
+  .settings-danger-row:hover {
+    background: #ffeded;
+  }
+
+  .settings-footer {
+    padding: 0.9rem 0 0.25rem;
+    color: #7b8494;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-align: center;
+  }
+
+  .settings-section .input-field {
+    min-height: 2.55rem;
+    padding: 0.58rem 0.82rem;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 800;
+  }
+
+  .settings-section input[aria-label^="계좌번호"] {
+    height: 2.55rem;
+    border-radius: 8px;
+    font-size: 0.78rem;
+  }
+
   /* Gradient floating action button */
   .fab {
     @apply text-white rounded-full flex items-center justify-center transition-transform duration-200;

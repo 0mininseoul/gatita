@@ -418,7 +418,10 @@ test('iOS PWA startup images are generated and registered for current iPhones', 
     'iphone-16-pro-max.png',
     'iphone-16-pro.png',
     'iphone-15-pro-max.png',
+    'iphone-14-plus.png',
     'iphone-14.png',
+    'iphone-15.png',
+    'iphone-13-mini.png',
     'iphone-se.png',
   ]
 
@@ -442,6 +445,10 @@ test('iOS PWA startup images are generated and registered for current iPhones', 
     1,
     'same-resolution iPhones should not register competing startup images'
   )
+  // 흰 화면 원인이던 누락 크기들이 등록되어야 한다 (393×852 = 14Pro/15/15Pro/16)
+  assert.match(layout, /device-width: 393px\) and \(device-height: 852px/)
+  assert.match(layout, /device-width: 428px\) and \(device-height: 926px/)
+  assert.match(layout, /device-width: 360px\) and \(device-height: 780px/)
   assert.match(splashScript, /Google Chrome\.app/)
   assert.match(splashScript, /Paperlogy-9Black\.woff2/)
   assert.match(splashScript, /pageHtml/)

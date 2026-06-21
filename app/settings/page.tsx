@@ -591,12 +591,12 @@ export default function SettingsPage() {
           </div>
           <div className="min-w-0 flex-1">
             <p className="settings-kicker">프로필 요약</p>
-            <h2 id="settings-profile-title" className="truncate text-[1.15rem] font-black leading-tight text-gray-950">
+            <h2 id="settings-profile-title" className="truncate text-[1.15rem] font-extrabold leading-tight text-gray-950">
               {user.nickname}
             </h2>
-            <p className="mt-0.5 truncate text-xs font-bold text-gray-500">{user.department}</p>
+            <p className="mt-0.5 truncate text-xs font-medium text-gray-500">{user.department}</p>
             {photoError && (
-              <p className="mt-1 text-[11px] font-bold text-red-500">{photoError}</p>
+              <p className="mt-1 text-[11px] font-semibold text-red-500">{photoError}</p>
             )}
           </div>
         </section>

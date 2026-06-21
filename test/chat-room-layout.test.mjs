@@ -140,7 +140,7 @@ test('chat message author labels are shown only at the start of consecutive user
   assert.match(source, /messages\.map\(\(message, index\) =>/)
   assert.match(source, /previousMessage = messages\[index - 1\]/)
   assert.match(source, /nextMessage = messages\[index \+ 1\]/)
-  assert.match(source, /startsMessageGroup = !previousMessage \|\| previousMessage\.user_id !== message\.user_id/)
+  assert.match(source, /startsMessageGroup = showDateDivider \|\| !previousMessage \|\| previousMessage\.user_id !== message\.user_id/)
   assert.match(source, /!isOwnMessage && startsMessageGroup &&/)
   assert.match(source, /chat-message-author/)
   assert.match(source, /is-same-author/)

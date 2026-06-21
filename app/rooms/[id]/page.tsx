@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, Fragment, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import Image from 'next/image'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
@@ -17,7 +17,7 @@ import {
 import { formatAccountNumberForBank } from '@/lib/banks'
 import { identifyAnalyticsUser, trackEvent } from '@/lib/analytics/client'
 import { ArrowLeft, Users, Clock, Send, Flag, X, LogOut, Phone, CreditCard, Copy } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, isSameDay } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import toast from 'react-hot-toast'
 
@@ -72,6 +72,7 @@ export default function ChatRoomPage() {
   const messagesScrollRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<HTMLDivElement>(null)
+  const composerInputRef = useRef<HTMLInputElement>(null)
   const isComposerFocusedRef = useRef(false)
   const visualViewportBaselineRef = useRef(0)
   const timestampDragRef = useRef({
@@ -798,12 +799,25 @@ export default function ChatRoomPage() {
     }
   }, [isRoomCreator, newMessage, roomId, supabase, user])
 
+  // 전송 후에도 메시지를 계속 입력할 수 있도록 입력창 포커스를 유지(키패드 닫힘 방지)
+  const focusComposerInput = useCallback(() => {
+    composerInputRef.current?.focus({ preventScroll: true })
+  }, [])
+
   const handleSendButtonPointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     if (event.pointerType !== 'touch') return
 
+    // 전송 버튼 탭이 입력창의 포커스를 빼앗지 않게 해 키패드가 닫히지 않도록 한다
     event.preventDefault()
     void handleSendMessage()
-  }, [handleSendMessage])
+    focusComposerInput()
+  }, [focusComposerInput, handleSendMessage])
+
+  const handleSendButtonClick = useCallback(() => {
+    void handleSendMessage()
+    // 데스크톱 클릭·폴백 경로에서도 입력창 포커스를 유지한다
+    focusComposerInput()
+  }, [focusComposerInput, handleSendMessage])
 
   const handleConfirmParticipation = async () => {
     if (!user || isConfirmed || isConfirmingParticipation) return
@@ -1159,32 +1173,42 @@ export default function ChatRoomPage() {
           const isOwnMessage = message.user_id === user.id
           const previousMessage = messages[index - 1]
           const nextMessage = messages[index + 1]
-          const startsMessageGroup = !previousMessage || previousMessage.user_id !== message.user_id
-          const endsMessageGroup = !nextMessage || nextMessage.user_id !== message.user_id
+          const messageDate = new Date(message.created_at)
+          // 이전 메시지와 날짜가 다르면(또는 첫 메시지면) 카카오톡처럼 날짜 구분선을 먼저 그린다
+          const showDateDivider = !previousMessage || !isSameDay(new Date(previousMessage.created_at), messageDate)
+          const nextStartsNewDay = !!nextMessage && !isSameDay(messageDate, new Date(nextMessage.created_at))
+          const startsMessageGroup = showDateDivider || !previousMessage || previousMessage.user_id !== message.user_id
+          const endsMessageGroup = nextStartsNewDay || !nextMessage || nextMessage.user_id !== message.user_id
 
           return (
-            <div
-              key={message.id}
-              className={`chat-message-row flex w-full min-w-0 ${startsMessageGroup ? 'is-new-author' : 'is-same-author'} ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
-            >
-              <div className={`chat-message-bubble-stack min-w-0 max-w-[min(78vw,18rem)] ${isOwnMessage ? 'ml-7' : 'mr-7'}`}>
-                {!isOwnMessage && startsMessageGroup && (
-                  <p className="chat-message-author">
-                    {message.user?.nickname} ({message.user?.department})
-                  </p>
-                )}
-                <div
-                  className={`chat-message max-w-full ${
-                    isOwnMessage ? 'chat-message-own' : 'chat-message-other'
-                  } ${startsMessageGroup ? 'chat-message-group-start' : 'chat-message-group-follow'} ${endsMessageGroup ? 'chat-message-group-end' : 'chat-message-group-continue'}`}
-                >
-                  {message.content}
+            <Fragment key={message.id}>
+              {showDateDivider && (
+                <div className="chat-date-divider" role="separator">
+                  <span>{format(messageDate, 'yyyy년 M월 d일 EEEE', { locale: ko })}</span>
                 </div>
+              )}
+              <div
+                className={`chat-message-row flex w-full min-w-0 ${startsMessageGroup ? 'is-new-author' : 'is-same-author'} ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
+              >
+                <div className={`chat-message-bubble-stack min-w-0 max-w-[min(78vw,18rem)] ${isOwnMessage ? 'ml-7' : 'mr-7'}`}>
+                  {!isOwnMessage && startsMessageGroup && (
+                    <p className="chat-message-author">
+                      {message.user?.nickname} ({message.user?.department})
+                    </p>
+                  )}
+                  <div
+                    className={`chat-message max-w-full ${
+                      isOwnMessage ? 'chat-message-own' : 'chat-message-other'
+                    } ${startsMessageGroup ? 'chat-message-group-start' : 'chat-message-group-follow'} ${endsMessageGroup ? 'chat-message-group-end' : 'chat-message-group-continue'}`}
+                  >
+                    {message.content}
+                  </div>
+                </div>
+                <time className="chat-message-time" dateTime={message.created_at}>
+                  {format(messageDate, 'HH:mm')}
+                </time>
               </div>
-              <time className="chat-message-time" dateTime={message.created_at}>
-                {format(new Date(message.created_at), 'HH:mm')}
-              </time>
-            </div>
+            </Fragment>
           )
         })}
         <div ref={messagesEndRef} />
@@ -1195,6 +1219,7 @@ export default function ChatRoomPage() {
         {isParticipant ? (
           <div className="flex min-w-0 items-center gap-2">
             <input
+              ref={composerInputRef}
               type="text"
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
@@ -1206,7 +1231,7 @@ export default function ChatRoomPage() {
               className="min-w-0 flex-1 rounded-full border border-gray-200 px-4 py-2 focus:border-primary-600 focus:ring-2 focus:ring-primary-100"
             />
             <button
-              onClick={handleSendMessage}
+              onClick={handleSendButtonClick}
               onPointerDown={handleSendButtonPointerDown}
               disabled={!newMessage.trim()}
               className="shrink-0 rounded-full bg-primary-600 p-2 text-white hover:bg-primary-700 disabled:bg-gray-300"

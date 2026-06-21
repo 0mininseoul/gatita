@@ -315,6 +315,24 @@
     touch-action: pan-y;
   }
 
+  .chat-date-divider {
+    display: flex;
+    justify-content: center;
+    margin: 0.85rem 0 0.35rem;
+  }
+
+  .chat-date-divider span {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    background: rgba(31, 41, 55, 0.06);
+    color: #6b7280;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+  }
+
   .chat-message-row {
     position: relative;
   }

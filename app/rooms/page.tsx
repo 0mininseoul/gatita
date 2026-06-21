@@ -274,7 +274,7 @@ function RoomsPageContent() {
           <select
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="input-field text-sm"
+            className="input-field text-base"
           >
             {getDateOptions().map(date => (
               <option key={date.value} value={date.value}>

@@ -496,22 +496,24 @@ export default function CampusRouteMap({
             type="button"
             aria-label="선택 닫기"
             onClick={closeSheet}
-            className="absolute right-0 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
+            className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
           >
             <X className="h-5 w-5" />
           </button>
 
           {selectedFrom ? (
             <div className="gatita-bottom-sheet-body">
-              <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">출발 지점</p>
-              <div className="mt-1 flex min-w-0 items-center gap-2 text-base font-extrabold text-gray-950">
-                <Compass className="h-4 w-4 shrink-0 text-primary-600" />
-                <span className="truncate">{LOCATIONS[selectedFrom]}</span>
+              <div className="pr-10">
+                <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">출발 지점</p>
+                <div className="mt-1 flex min-w-0 items-center gap-2 text-base font-extrabold text-gray-950">
+                  <Compass className="h-4 w-4 shrink-0 text-primary-600" />
+                  <span className="truncate">{LOCATIONS[selectedFrom]}</span>
+                </div>
+                <p className="mt-2 text-sm font-semibold text-gray-600">
+                  오늘 출발 방 {selectedOriginStat.roomCount}개
+                  {selectedOriginStat.nextTime ? ` · 다음 출발 ${formatRoomTime(selectedOriginStat.nextTime)}` : ''}
+                </p>
               </div>
-              <p className="mt-2 text-sm font-semibold text-gray-600">
-                오늘 출발 방 {selectedOriginStat.roomCount}개
-                {selectedOriginStat.nextTime ? ` · 다음 출발 ${formatRoomTime(selectedOriginStat.nextTime)}` : ''}
-              </p>
 
               {selectedOriginRooms.length > 0 ? (
                 <div className="mt-3 space-y-2">
@@ -582,7 +584,7 @@ export default function CampusRouteMap({
                       <select
                         value={draftDestination}
                         onChange={(event) => setDraftDestination(event.target.value as LocationType | '')}
-                        className="input-field bg-white py-2.5 text-sm font-bold"
+                        className="input-field bg-white py-2.5 text-base font-bold"
                       >
                         <option value="">도착지 선택</option>
                         {destinationOptions.map((location) => (
@@ -607,7 +609,7 @@ export default function CampusRouteMap({
                             setDraftDepartureHour(nextHour)
                             setDraftDepartureMinute(nextMinute)
                           }}
-                          className="input-field bg-white py-2.5 text-sm font-bold"
+                          className="input-field bg-white py-2.5 text-base font-bold"
                         >
                           {departureHourOptions.length > 0 ? (
                             departureHourOptions.map((hour) => (
@@ -624,7 +626,7 @@ export default function CampusRouteMap({
                           aria-label="출발 예정 분"
                           value={draftDepartureMinute}
                           onChange={(event) => setDraftDepartureMinute(event.target.value)}
-                          className="input-field bg-white py-2.5 text-sm font-bold"
+                          className="input-field bg-white py-2.5 text-base font-bold"
                         >
                           {departureMinuteOptions.length > 0 ? (
                             departureMinuteOptions.map((minute) => (

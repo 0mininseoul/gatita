@@ -46,6 +46,12 @@
     color-scheme: only light;
   }
 
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
   html.landing-lock,
   body.landing-lock {
     overflow-x: hidden;
@@ -233,6 +239,7 @@
 
   .input-field {
     @apply w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-primary-600 focus:ring-2 focus:ring-primary-100 transition-all duration-200;
+    font-size: 1rem;
   }
 
   .legal-shell {
@@ -475,15 +482,34 @@
   }
 
   .settings-avatar {
+    appearance: none;
     display: flex;
     align-items: center;
     justify-content: center;
     width: 3rem;
     height: 3rem;
+    padding: 0;
+    border: 0;
     overflow: hidden;
     border-radius: 999px;
     background: #f1f5fb;
     box-shadow: 0 8px 18px rgba(39, 130, 255, 0.22);
+    cursor: pointer;
+    transition: transform 180ms ease, box-shadow 180ms ease;
+  }
+
+  .settings-avatar:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+
+  .settings-avatar:focus-visible {
+    outline: 3px solid rgba(39, 130, 255, 0.22);
+    outline-offset: 3px;
+  }
+
+  .settings-avatar:disabled {
+    cursor: wait;
+    opacity: 0.82;
   }
 
   .settings-avatar-button {
@@ -645,7 +671,7 @@
   .settings-input {
     min-height: 2.55rem;
     border-radius: 8px;
-    font-size: 0.82rem;
+    font-size: 1rem;
     font-weight: 800;
   }
 
@@ -732,14 +758,14 @@
     min-height: 2.55rem;
     padding: 0.58rem 0.82rem;
     border-radius: 8px;
-    font-size: 0.82rem;
+    font-size: 1rem;
     font-weight: 800;
   }
 
   .settings-section input[aria-label^="계좌번호"] {
     height: 2.55rem;
     border-radius: 8px;
-    font-size: 0.78rem;
+    font-size: 1rem;
   }
 
   /* Gradient floating action button */
@@ -870,7 +896,7 @@
   .gatita-bottom-sheet-body {
     min-height: 0;
     overflow-y: auto;
-    padding-right: 2rem;
+    padding-right: 0;
     -webkit-overflow-scrolling: touch;
   }
 }

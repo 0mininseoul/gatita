@@ -62,6 +62,16 @@ test('chat loads only the latest page of messages with load-older pagination', (
   assert.match(helpers, /export function prependOlderMessages/)
 })
 
+test('chat and map routes render an instant skeleton/loader during segment load', () => {
+  const chatLoading = readProjectFile('app/rooms/[id]/loading.tsx')
+  const mapLoading = readProjectFile('app/map/loading.tsx')
+
+  assert.match(chatLoading, /export default function/)
+  assert.match(chatLoading, /animate-pulse/)
+  assert.match(mapLoading, /export default function/)
+  assert.match(mapLoading, /loading-spinner/)
+})
+
 test('map replaces 30s polling with a realtime subscription', () => {
   const source = readProjectFile('app/page.tsx')
 

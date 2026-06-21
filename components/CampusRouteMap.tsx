@@ -496,7 +496,7 @@ export default function CampusRouteMap({
             type="button"
             aria-label="선택 닫기"
             onClick={closeSheet}
-            className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
+            className="absolute right-0 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
           >
             <X className="h-5 w-5" />
           </button>

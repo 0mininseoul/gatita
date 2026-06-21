@@ -84,6 +84,7 @@ export default function ChatRoomPage() {
   const supabase = useMemo(() => createClient(), [])
   const roomSyncChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const trackedRoomOpenRef = useRef<string | null>(null)
+  const preloadedParticipantAvatarUrlsRef = useRef(new Set<string>())
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     const scroller = messagesScrollRef.current
@@ -625,6 +626,20 @@ export default function ChatRoomPage() {
 
     setNextHostId(hostTransferCandidates[0]?.user_id ?? '')
   }, [hostTransferCandidates, nextHostId, showHostLeaveModal])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    participants.forEach((participant) => {
+      const avatarUrl = participant.user?.avatar_url
+      if (!avatarUrl || preloadedParticipantAvatarUrlsRef.current.has(avatarUrl)) return
+
+      preloadedParticipantAvatarUrlsRef.current.add(avatarUrl)
+      const image = new window.Image()
+      image.decoding = 'async'
+      image.src = avatarUrl
+    })
+  }, [participants])
 
   const handleSendMessage = useCallback(async () => {
     if (!newMessage.trim() || !user) return

@@ -365,7 +365,6 @@ export default function HomePage() {
 
         setHasAuthenticatedSession(true)
         setPendingProfileEmail(email ?? '')
-        setPendingProfileName(getGoogleAccountName(email, session.user.user_metadata))
 
         const profileResponse = await fetch('/api/profile/me')
         const profileResult = await profileResponse.json().catch(() => null) as MyProfilePayload | null
@@ -378,6 +377,7 @@ export default function HomePage() {
 
         if (profileResult?.profileCompleted && userData) {
           setAuthNotice(null)
+          setPendingProfileName('')
           setUser(userData)
           await loadModerationStatus()
           const shouldSuppressAnalytics = shouldSuppressAnalyticsForUser({
@@ -408,6 +408,7 @@ export default function HomePage() {
           enterMap(true)
           void loadMapRooms()
         } else {
+          setPendingProfileName(getGoogleAccountName(email, session.user.user_metadata))
           setUser(null)
           setModerationStatus(null)
           setModerationModal(null)
@@ -551,8 +552,10 @@ export default function HomePage() {
     user
   )
 
-  const requiresProfile = hasAuthenticatedSession && !user
+  const isResolvingMapSession = loading && isMapRoute
+  const requiresProfile = !loading && hasAuthenticatedSession && !user
   const profileDisplayName = user?.nickname || pendingProfileName || pendingProfileEmail.split('@')[0] || '가천대'
+  const mapGreetingText = isResolvingMapSession ? '계정 확인 중...' : `${profileDisplayName}님, 안녕하세요!`
   const showLanding = !loading && authMode !== 'signup' && (!hasAuthenticatedSession || !hasEnteredApp)
   const isCurrentlySuspended = moderationStatus?.status === 'suspended' || user?.status === 'suspended'
   const activeSuspendedUntil = moderationStatus?.suspendedUntil ?? user?.suspended_until ?? null
@@ -758,6 +761,8 @@ export default function HomePage() {
   }
 
   const handleFromLocationChange = (location: LocationType | '') => {
+    if (isResolvingMapSession) return
+
     if (requiresProfile) {
       setShowProfileRequiredModal(true)
       return
@@ -785,6 +790,8 @@ export default function HomePage() {
     toLocation: LocationType
     departureTime: string
   }) => {
+    if (isResolvingMapSession) return
+
     if (!user || !supabase) {
       if (requiresProfile) {
         setShowProfileRequiredModal(true)
@@ -908,6 +915,8 @@ export default function HomePage() {
   }, [supabase])
 
   const handleJoinMapRoom = async (roomId: string) => {
+    if (isResolvingMapSession) return
+
     if (!user || !supabase) {
       if (requiresProfile) {
         setShowProfileRequiredModal(true)
@@ -1114,6 +1123,8 @@ export default function HomePage() {
   }
 
   const handleOpenMyRooms = () => {
+    if (isResolvingMapSession) return
+
     if (requiresProfile) {
       setShowProfileRequiredModal(true)
       return
@@ -1607,7 +1618,7 @@ export default function HomePage() {
             />
             <div className="min-w-0">
               <h1 className="text-base font-black text-gray-950">같이타</h1>
-              <p className="truncate text-xs font-semibold text-gray-600">{profileDisplayName}님, 안녕하세요!</p>
+              <p className="truncate text-xs font-semibold text-gray-600">{mapGreetingText}</p>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -1623,6 +1634,8 @@ export default function HomePage() {
               type="button"
               aria-label="설정"
               onClick={() => {
+                if (isResolvingMapSession) return
+
                 if (requiresProfile) {
                   setShowProfileRequiredModal(true)
                   return

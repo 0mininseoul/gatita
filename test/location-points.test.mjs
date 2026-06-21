@@ -328,7 +328,8 @@ test('profileless authenticated users see the map first and complete profile fro
   assert.doesNotMatch(source, /if \(!user \|\| !hasEnteredApp\) \{/)
 
   assert.ok(noProfileStart > -1, 'missing profile branch exists')
-  assert.match(noProfileBlock, /void loadMapRooms\(\)/, 'missing profile branch should load map rooms in the background')
+  // 지도 방 목록은 분기마다 중복 호출하지 않고, 입장 시 백그라운드 effect 에서 로드된다
+  assert.match(source, /hasEnteredApp[\s\S]{0,80}loadMapRooms\(\)/, 'map rooms load in a background effect once the user enters the map')
   assert.match(noProfileBlock, /enterMap\(false\)/, 'missing profile branch should route into map UI')
   assert.doesNotMatch(noProfileBlock, /setAuthMode\('signup'\)/, 'missing profile branch should not auto-open profile setup')
 

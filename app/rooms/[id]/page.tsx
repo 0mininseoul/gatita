@@ -9,7 +9,9 @@ import {
   extractHostAppearanceFromMessage,
   splitMessages,
   upsertMessage,
+  prependOlderMessages,
   HOST_APPEARANCE_MESSAGE_PREFIX,
+  LEGACY_HOST_APPEARANCE_MESSAGE_PREFIX,
   type MessageAuthor,
 } from '@/lib/chat/messages'
 import { formatAccountNumberForBank } from '@/lib/banks'
@@ -20,6 +22,7 @@ import { ko } from 'date-fns/locale'
 import toast from 'react-hot-toast'
 
 const MAX_TIMESTAMP_REVEAL = 68
+const MESSAGE_PAGE_SIZE = 50
 
 type RoomPrivateInfoPayload = {
   phonesByUserId?: Record<string, string | null>
@@ -35,6 +38,8 @@ export default function ChatRoomPage() {
   const [user, setUser] = useState<User | null>(null)
   const [room, setRoom] = useState<ChatRoom | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
+  const [hasMoreMessages, setHasMoreMessages] = useState(false)
+  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false)
   const [participants, setParticipants] = useState<RoomParticipant[]>([])
   const [creatorPayoutAccount, setCreatorPayoutAccount] = useState<PayoutAccount | null>(null)
   const [newMessage, setNewMessage] = useState('')
@@ -79,6 +84,9 @@ export default function ChatRoomPage() {
   const trackedRoomOpenRef = useRef<string | null>(null)
   const preloadedParticipantAvatarUrlsRef = useRef(new Set<string>())
   const authorsCacheRef = useRef(new Map<string, MessageAuthor>())
+  const oldestRawCreatedAtRef = useRef<string | null>(null)
+  const lastMessageIdRef = useRef<string | null>(null)
+  const pendingScrollRestoreRef = useRef<number | null>(null)
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     const scroller = messagesScrollRef.current
@@ -210,8 +218,25 @@ export default function ChatRoomPage() {
     }
   }, [keepWindowPinned, syncAndPinChat])
 
-  useEffect(() => {
-    scrollToBottom()
+  useLayoutEffect(() => {
+    const scroller = messagesScrollRef.current
+
+    // 이전 메시지 prepend 시: 스크롤 위치 보존 (맨 아래로 튀지 않게)
+    if (pendingScrollRestoreRef.current !== null) {
+      if (scroller) {
+        scroller.scrollTop += scroller.scrollHeight - pendingScrollRestoreRef.current
+      }
+      pendingScrollRestoreRef.current = null
+      lastMessageIdRef.current = messages.length ? messages[messages.length - 1].id : null
+      return
+    }
+
+    // 새 메시지(맨 아래) 추가/초기 로드일 때만 하단으로 스크롤
+    const lastId = messages.length ? messages[messages.length - 1].id : null
+    if (lastId !== lastMessageIdRef.current) {
+      lastMessageIdRef.current = lastId
+      scrollToBottom()
+    }
   }, [messages, scrollToBottom])
 
   useLayoutEffect(() => {
@@ -230,7 +255,7 @@ export default function ChatRoomPage() {
       window.cancelAnimationFrame(frameId)
       window.clearTimeout(timeoutId)
     }
-  }, [loading, messages.length, room, scrollToBottom, syncAndPinChat, user])
+  }, [loading, room, scrollToBottom, syncAndPinChat, user])
 
   const handleComposerFocus = useCallback(() => {
     isComposerFocusedRef.current = true
@@ -350,18 +375,37 @@ export default function ChatRoomPage() {
 
   const loadMessages = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('id, room_id, user_id, content, created_at')
-        .eq('room_id', roomId)
-        .order('created_at', { ascending: true })
+      const [messagesResult, hostResult] = await Promise.all([
+        // 전체가 아니라 최근 MESSAGE_PAGE_SIZE개만 (내림차순으로 받아 오름차순으로 뒤집음)
+        supabase
+          .from('messages')
+          .select('id, room_id, user_id, content, created_at')
+          .eq('room_id', roomId)
+          .order('created_at', { ascending: false })
+          .limit(MESSAGE_PAGE_SIZE),
+        // 방장 인상착의는 페이지 창(최근 N개) 밖의 과거 메시지일 수 있어 최신 1건을 따로 조회
+        supabase
+          .from('messages')
+          .select('content')
+          .eq('room_id', roomId)
+          .or(`content.like.${HOST_APPEARANCE_MESSAGE_PREFIX}*,content.like.${LEGACY_HOST_APPEARANCE_MESSAGE_PREFIX}*`)
+          .order('created_at', { ascending: false })
+          .limit(1),
+      ])
 
-      if (error) throw error
+      if (messagesResult.error) throw messagesResult.error
 
-      const { visible, latestHostAppearance } = splitMessages((data ?? []) as Message[])
+      const rawDesc = (messagesResult.data ?? []) as Message[]
+      setHasMoreMessages(rawDesc.length === MESSAGE_PAGE_SIZE)
+      const raw = rawDesc.slice().reverse()
+      oldestRawCreatedAtRef.current = raw[0]?.created_at ?? null
 
-      if (latestHostAppearance) {
-        setHostAppearance(latestHostAppearance)
+      const { visible, latestHostAppearance } = splitMessages(raw)
+
+      const hostContent = hostResult.data?.[0]?.content as string | undefined
+      const resolvedHostAppearance = (hostContent ? extractHostAppearanceFromMessage(hostContent) : '') || latestHostAppearance
+      if (resolvedHostAppearance) {
+        setHostAppearance(resolvedHostAppearance)
       }
       setHostAppearanceLoaded(true)
 
@@ -376,6 +420,50 @@ export default function ChatRoomPage() {
       setHostAppearanceLoaded(true)
     }
   }, [ensureAuthors, roomId, supabase])
+
+  // 페이지네이션: 현재 가장 오래된 메시지보다 이전 메시지 한 페이지를 앞에 붙인다.
+  const loadOlderMessages = useCallback(async () => {
+    const cursor = oldestRawCreatedAtRef.current
+    if (!cursor || isLoadingOlderMessages) return
+
+    setIsLoadingOlderMessages(true)
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('id, room_id, user_id, content, created_at')
+        .eq('room_id', roomId)
+        .lt('created_at', cursor)
+        .order('created_at', { ascending: false })
+        .limit(MESSAGE_PAGE_SIZE)
+
+      if (error) throw error
+
+      const rawDesc = (data ?? []) as Message[]
+      setHasMoreMessages(rawDesc.length === MESSAGE_PAGE_SIZE)
+      if (rawDesc.length === 0) return
+
+      const raw = rawDesc.slice().reverse()
+      oldestRawCreatedAtRef.current = raw[0]?.created_at ?? cursor
+
+      const { visible } = splitMessages(raw)
+      await ensureAuthors(visible.map((message) => message.user_id))
+
+      const scroller = messagesScrollRef.current
+      if (scroller) {
+        pendingScrollRestoreRef.current = scroller.scrollHeight
+      }
+
+      setMessages((prev) => prependOlderMessages(prev, visible.map((message) => ({
+        ...message,
+        user: authorsCacheRef.current.get(message.user_id),
+      })) as Message[]))
+    } catch (error) {
+      console.error('Load older messages error:', error)
+      toast.error('이전 메시지를 불러오지 못했습니다')
+    } finally {
+      setIsLoadingOlderMessages(false)
+    }
+  }, [ensureAuthors, isLoadingOlderMessages, roomId, supabase])
 
   // 실시간으로 도착한 단일 메시지를 전체 재조회 없이 증분 반영한다.
   const applyIncomingMessage = useCallback(async (incoming: Message) => {
@@ -1055,6 +1143,18 @@ export default function ChatRoomPage() {
         onPointerCancel={handleMessagesPointerEnd}
         onPointerLeave={handleMessagesPointerEnd}
       >
+        {hasMoreMessages && (
+          <div className="flex justify-center py-2">
+            <button
+              type="button"
+              onClick={loadOlderMessages}
+              disabled={isLoadingOlderMessages}
+              className="rounded-full bg-gray-100 px-4 py-1.5 text-xs text-gray-600 transition active:scale-95 disabled:opacity-50"
+            >
+              {isLoadingOlderMessages ? '불러오는 중…' : '이전 메시지 더보기'}
+            </button>
+          </div>
+        )}
         {messages.map((message, index) => {
           const isOwnMessage = message.user_id === user.id
           const previousMessage = messages[index - 1]

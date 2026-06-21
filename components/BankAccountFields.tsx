@@ -112,22 +112,24 @@ export function BankSelectField({
       </button>
 
       {isOpen && !disabled && (
-        <div data-bank-dropdown-list className="rounded-xl border border-gray-200 bg-white shadow-lg">
-          {BANK_OPTIONS.map((bank) => (
-            <button
-              key={bank.id}
-              type="button"
-              onClick={() => {
-                onChange(bank.name)
-                setIsCustomBankMode(false)
-                setIsOpen(false)
-              }}
-              className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-bold text-gray-900 transition hover:bg-gray-50"
-            >
-              <BankIcon bank={bank} />
-              <span>{bank.name}</span>
-            </button>
-          ))}
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
+          <div data-bank-dropdown-list className="max-h-64 overflow-y-auto overscroll-contain">
+            {BANK_OPTIONS.map((bank) => (
+              <button
+                key={bank.id}
+                type="button"
+                onClick={() => {
+                  onChange(bank.name)
+                  setIsCustomBankMode(false)
+                  setIsOpen(false)
+                }}
+                className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-bold text-gray-900 transition hover:bg-gray-50"
+              >
+                <BankIcon bank={bank} />
+                <span>{bank.name}</span>
+              </button>
+            ))}
+          </div>
           <div className="border-t border-gray-100 p-2">
             {isCustomBankMode ? (
               <form onSubmit={handleCustomSubmit} className="flex items-center gap-2">
@@ -137,7 +139,7 @@ export function BankSelectField({
                   onChange={(event) => setCustomBankName(event.target.value)}
                   autoFocus
                   placeholder="은행명 직접 입력"
-                  className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold outline-none focus:border-primary-600 focus:ring-2 focus:ring-primary-100"
+                  className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-2 text-base font-bold outline-none focus:border-primary-600 focus:ring-2 focus:ring-primary-100"
                 />
                 <button
                   type="submit"
@@ -245,7 +247,7 @@ export function AccountNumberSegmentField({
               maxLength={length}
               disabled={disabled}
               aria-label={`계좌번호 ${index + 1}번째 입력칸`}
-              className={`h-12 min-w-0 w-full rounded-lg border bg-white px-2 text-center text-sm font-black tracking-normal text-gray-950 outline-none transition focus:border-primary-600 focus:ring-2 focus:ring-primary-100 disabled:bg-gray-50 disabled:text-gray-400 ${
+              className={`h-12 min-w-0 w-full rounded-lg border bg-white px-2 text-center text-base font-black tracking-normal text-gray-950 outline-none transition focus:border-primary-600 focus:ring-2 focus:ring-primary-100 disabled:bg-gray-50 disabled:text-gray-400 ${
                 error ? 'border-red-500' : 'border-gray-200'
               }`}
               placeholder={'0'.repeat(length)}

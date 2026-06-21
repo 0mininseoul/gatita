@@ -557,7 +557,11 @@ export default function SettingsPage() {
       <main className="settings-shell">
         <section className="settings-hero" aria-labelledby="settings-profile-title">
           <div className="relative shrink-0">
-            <div
+            <button
+              type="button"
+              aria-label={user.avatar_url ? '프로필 사진 변경' : '프로필 사진 등록'}
+              onClick={() => photoInputRef.current?.click()}
+              disabled={isSavingPhoto}
               className="settings-avatar"
               style={{ backgroundImage: user.avatar_url ? undefined : 'var(--brand-gradient)' }}
             >
@@ -567,7 +571,7 @@ export default function SettingsPage() {
               ) : (
                 <UserIcon className="h-6 w-6 text-white" />
               )}
-            </div>
+            </button>
             <input
               ref={photoInputRef}
               type="file"

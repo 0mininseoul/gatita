@@ -87,6 +87,7 @@ test('settings uses a compact row-based product layout', () => {
   assert.match(source, /settings-list/)
   assert.match(source, /settings-row/)
   assert.match(source, /settings-avatar-button/)
+  assert.match(source, /<button[\s\S]*photoInputRef\.current\?\.click\(\)[\s\S]*className="settings-avatar"/, 'settings avatar circle should open the photo picker, not only the camera badge')
   assert.match(source, /settings-action-row/)
   assert.match(source, /프로필 요약/)
   assert.match(source, /기본 정보/)
@@ -96,6 +97,7 @@ test('settings uses a compact row-based product layout', () => {
   assert.match(css, /\.settings-hero/)
   assert.match(css, /\.settings-section/)
   assert.match(css, /\.settings-row/)
+  assert.match(css, /\.settings-avatar:hover:not\(:disabled\)/)
   assert.match(css, /\.settings-avatar-button/)
 })
 

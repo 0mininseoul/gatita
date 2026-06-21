@@ -121,6 +121,14 @@ function formatKoreanDateTime(value?: string | null) {
   }
 }
 
+function resetDocumentScrollPosition() {
+  if (typeof window === 'undefined') return
+
+  window.scrollTo(0, 0)
+  document.documentElement.scrollTop = 0
+  document.body.scrollTop = 0
+}
+
 export default function HomePage() {
   const [user, setUser] = useState<User | null>(null)
   const [hasAuthenticatedSession, setHasAuthenticatedSession] = useState(false)
@@ -330,6 +338,7 @@ export default function HomePage() {
       const enterMap = (profileCompleted: boolean) => {
         if (!enterApp) return
 
+        resetDocumentScrollPosition()
         setHasEnteredApp(true)
         trackEvent('map_opened', {
           source: 'auth_redirect',
@@ -681,22 +690,36 @@ export default function HomePage() {
       root.classList.toggle('gatita-browser-map', !isStandaloneMap)
     }
 
+    const resetMapScroll = () => {
+      resetDocumentScrollPosition()
+    }
+    const syncAppViewport = () => {
+      setAppViewport()
+      resetMapScroll()
+    }
+
     setAppViewport()
     applyMapDisplayMode()
-    window.scrollTo(0, 0)
+    resetMapScroll()
     root.style.overflow = 'hidden'
     body.style.overflow = 'hidden'
     body.style.overscrollBehavior = 'none'
+    const firstFrameId = window.requestAnimationFrame(() => {
+      setAppViewport()
+      resetMapScroll()
+    })
+    const secondFrameId = window.requestAnimationFrame(resetMapScroll)
+    const scrollResetTimerId = window.setTimeout(resetMapScroll, 250)
 
     const headerResizeObserver = typeof ResizeObserver !== 'undefined'
-      ? new ResizeObserver(setAppViewport)
+      ? new ResizeObserver(syncAppViewport)
       : null
     if (mapHeaderRef.current) headerResizeObserver?.observe(mapHeaderRef.current)
 
-    window.addEventListener('resize', setAppViewport)
-    window.addEventListener('orientationchange', setAppViewport)
-    window.visualViewport?.addEventListener('resize', setAppViewport)
-    window.visualViewport?.addEventListener('scroll', setAppViewport)
+    window.addEventListener('resize', syncAppViewport)
+    window.addEventListener('orientationchange', syncAppViewport)
+    window.visualViewport?.addEventListener('resize', syncAppViewport)
+    window.visualViewport?.addEventListener('scroll', syncAppViewport)
     if (typeof standaloneDisplayQuery.addEventListener === 'function') {
       standaloneDisplayQuery.addEventListener('change', applyMapDisplayMode)
     } else {
@@ -719,10 +742,13 @@ export default function HomePage() {
       body.style.overscrollBehavior = previousBodyOverscrollBehavior
       root.classList.remove('gatita-standalone-map', 'gatita-browser-map')
       headerResizeObserver?.disconnect()
-      window.removeEventListener('resize', setAppViewport)
-      window.removeEventListener('orientationchange', setAppViewport)
-      window.visualViewport?.removeEventListener('resize', setAppViewport)
-      window.visualViewport?.removeEventListener('scroll', setAppViewport)
+      window.cancelAnimationFrame(firstFrameId)
+      window.cancelAnimationFrame(secondFrameId)
+      window.clearTimeout(scrollResetTimerId)
+      window.removeEventListener('resize', syncAppViewport)
+      window.removeEventListener('orientationchange', syncAppViewport)
+      window.visualViewport?.removeEventListener('resize', syncAppViewport)
+      window.visualViewport?.removeEventListener('scroll', syncAppViewport)
       if (typeof standaloneDisplayQuery.removeEventListener === 'function') {
         standaloneDisplayQuery.removeEventListener('change', applyMapDisplayMode)
       } else {
@@ -1133,8 +1159,10 @@ export default function HomePage() {
         <SignupForm
           startWithProfileStep={hasAuthenticatedSession}
           onSuccess={() => {
+            resetDocumentScrollPosition()
             setAuthMode(null)
             router.push('/map')
+            window.requestAnimationFrame(resetDocumentScrollPosition)
             checkAuth(true)
           }}
           onBackToLanding={() => setAuthMode(null)}
@@ -1335,7 +1363,8 @@ export default function HomePage() {
 
       {showPwaOnboarding && (
         <div
-          className="absolute inset-0 z-[60] flex items-end bg-gray-950/30 px-3 pb-3 pt-20"
+          className="fixed inset-x-0 top-0 z-[60] flex items-end bg-gray-950/30 px-3 pb-3 pt-20"
+          style={{ height: 'var(--app-viewport-height)' }}
           onClick={() => dismissPwaOnboarding('outside')}
         >
           <div
@@ -1394,7 +1423,8 @@ export default function HomePage() {
 
       {showProfileRequiredModal && (
         <div
-          className="absolute inset-0 z-[70] flex items-end bg-gray-950/30 px-3 pb-3 pt-24"
+          className="fixed inset-x-0 top-0 z-[70] flex items-end bg-gray-950/30 px-3 pb-3 pt-24"
+          style={{ height: 'var(--app-viewport-height)' }}
           onClick={() => setShowProfileRequiredModal(false)}
         >
           <div
@@ -1439,7 +1469,8 @@ export default function HomePage() {
 
       {moderationModal && (
         <div
-          className="absolute inset-0 z-[80] flex items-end bg-gray-950/35 px-3 pb-3 pt-24"
+          className="fixed inset-x-0 top-0 z-[80] flex items-end bg-gray-950/35 px-3 pb-3 pt-24"
+          style={{ height: 'var(--app-viewport-height)' }}
           onClick={() => setModerationModal(null)}
         >
           <div

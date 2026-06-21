@@ -1228,7 +1228,7 @@ export default function ChatRoomPage() {
               onFocus={handleComposerFocus}
               onBlur={handleComposerBlur}
               placeholder="메시지를 입력하세요..."
-              className="min-w-0 flex-1 rounded-full border border-gray-200 px-4 py-2 focus:border-primary-600 focus:ring-2 focus:ring-primary-100"
+              className="min-w-0 flex-1 rounded-full border border-gray-200 px-4 py-2 text-base focus:border-primary-600 focus:ring-2 focus:ring-primary-100"
             />
             <button
               onClick={handleSendButtonClick}
@@ -1380,7 +1380,7 @@ export default function ChatRoomPage() {
               onChange={(event) => setHostAppearanceDraft(event.target.value)}
               placeholder="예: 검은 백팩, 파란 후드"
               maxLength={60}
-              className="input-field mt-2 text-sm"
+              className="input-field mt-2 text-base"
             />
 
             <button
@@ -1540,7 +1540,7 @@ export default function ChatRoomPage() {
               <select
                 value={nextHostId}
                 onChange={(event) => setNextHostId(event.target.value)}
-                className="input-field text-sm font-bold"
+                className="input-field text-base font-bold"
               >
                 <option value="">선택해주세요</option>
                 {hostTransferCandidates.map((participant) => (

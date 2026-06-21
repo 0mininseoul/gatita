@@ -363,12 +363,23 @@ test('map app and bottom sheet use the visual viewport and internal sheet scroll
   assert.match(pageSource, /--app-viewport-height/)
   assert.match(pageSource, /window\.visualViewport\?\.height \?\? window\.innerHeight/)
   assert.match(pageSource, /style=\{\{ height: 'var\(--app-viewport-height\)' \}\}/)
+  assert.match(pageSource, /resetDocumentScrollPosition/)
+  assert.match(pageSource, /className="fixed inset-x-0 top-0 z-\[\d+\][^"]*items-end[\s\S]*style=\{\{ height: 'var\(--app-viewport-height\)' \}\}/, 'map overlays should anchor to the visual viewport instead of a shifted map container')
   assert.match(mapSource, /className="gatita-bottom-sheet/)
   assert.match(mapSource, /className="gatita-bottom-sheet-body/)
-  assert.match(mapSource, /aria-label="선택 닫기"[\s\S]*className="absolute right-0 top-3/, 'bottom sheet close icon should align with the content edge')
+  assert.match(mapSource, /aria-label="선택 닫기"[\s\S]*className="absolute right-3 top-3/, 'bottom sheet close icon should sit inside the content edge')
   assert.doesNotMatch(mapSource, /bottom-3/)
   assert.match(sheetBlock, /max-height:\s*min\(72vh, calc\(var\(--app-viewport-height\) - 8\.75rem\)\);/)
   assert.match(sheetBlock, /bottom:\s*max\(1rem, env\(safe-area-inset-bottom\)\);/)
+  assert.doesNotMatch(sheetBlock, /padding-right:\s*2rem;/, 'bottom sheet body should not create extra right whitespace')
+})
+
+test('chat room editable inputs avoid iOS Safari focus zoom', () => {
+  const source = readProjectFile('app/rooms/[id]/page.tsx')
+
+  assert.match(source, /id="host-appearance"[\s\S]*className="input-field mt-2 text-base"/, 'host appearance input should use at least 16px text')
+  assert.match(source, /placeholder="메시지를 입력하세요\.\.\."[\s\S]*className="[^"]*text-base[^"]*"/, 'message composer input should use at least 16px text')
+  assert.match(source, /value=\{nextHostId\}[\s\S]*className="input-field text-base font-bold"/, 'host transfer select should use at least 16px text')
 })
 
 test('kakao map zoom control is offset below the app header', () => {

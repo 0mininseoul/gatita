@@ -93,6 +93,13 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
   const onSuccessRef = useRef(onSuccess)
   const isLastStep = currentStep === SIGNUP_STEPS.length - 1
 
+  const scrollStepIntoView = useCallback((stepId: string, block: ScrollLogicalPosition = 'start') => {
+    const el = stepRefs.current[stepId]
+    if (!el) return
+
+    el.scrollIntoView({ behavior: 'smooth', block })
+  }, [])
+
   useEffect(() => {
     onSuccessRef.current = onSuccess
   }, [onSuccess])
@@ -249,10 +256,7 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
       // 다음 질문으로 부드럽게 스크롤
       setTimeout(() => {
         const nextStep = SIGNUP_STEPS[currentStep + 1]
-        const el = stepRefs.current[nextStep.id]
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }
+        scrollStepIntoView(nextStep.id)
       }, 50)
     }
   }
@@ -368,6 +372,35 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
     })
   }, [currentStep])
 
+  useEffect(() => {
+    if (currentStep < 0) return
+
+    const root = document.documentElement
+    const previousSignupViewportHeight = root.style.getPropertyValue('--signup-viewport-height')
+    const setSignupViewportHeight = () => {
+      const visualHeight = window.visualViewport?.height ?? window.innerHeight
+      root.style.setProperty('--signup-viewport-height', `${Math.ceil(visualHeight)}px`)
+    }
+
+    setSignupViewportHeight()
+    window.addEventListener('resize', setSignupViewportHeight)
+    window.addEventListener('orientationchange', setSignupViewportHeight)
+    window.visualViewport?.addEventListener('resize', setSignupViewportHeight)
+    window.visualViewport?.addEventListener('scroll', setSignupViewportHeight)
+
+    return () => {
+      if (previousSignupViewportHeight) {
+        root.style.setProperty('--signup-viewport-height', previousSignupViewportHeight)
+      } else {
+        root.style.removeProperty('--signup-viewport-height')
+      }
+      window.removeEventListener('resize', setSignupViewportHeight)
+      window.removeEventListener('orientationchange', setSignupViewportHeight)
+      window.visualViewport?.removeEventListener('resize', setSignupViewportHeight)
+      window.visualViewport?.removeEventListener('scroll', setSignupViewportHeight)
+    }
+  }, [currentStep])
+
   // Google Login Screen (currentStep === -1)
   if (currentStep === -1) {
     return (
@@ -434,9 +467,12 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
 
   // Profile completion steps (currentStep >= 0)
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div
+      className="flex flex-col overflow-hidden bg-white"
+      style={{ height: 'var(--signup-viewport-height, 100dvh)' }}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-100">
+      <div className="flex shrink-0 items-center justify-between border-b border-gray-100 p-4">
         <button
           onClick={handleBack}
           className="p-2"
@@ -457,13 +493,23 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
       </div>
 
       {/* Content: Stacked progressive steps */}
-      <div className="flex-1 flex flex-col p-6 space-y-8">
+      <div
+        className="flex-1 space-y-8 overflow-y-auto overscroll-contain px-6 pt-6"
+        style={{
+          paddingBottom: 'calc(env(safe-area-inset-bottom) + 12rem)',
+          WebkitOverflowScrolling: 'touch',
+        }}
+      >
         {SIGNUP_STEPS.slice(0, currentStep + 1).map((step, index) => {
           const isCurrent = index === currentStep
           return (
             <div
               key={step.id}
               ref={(el) => { stepRefs.current[step.id] = el }}
+              onFocusCapture={() => {
+                window.setTimeout(() => scrollStepIntoView(step.id, isCurrent ? 'center' : 'nearest'), 120)
+                window.setTimeout(() => scrollStepIntoView(step.id, isCurrent ? 'center' : 'nearest'), 320)
+              }}
               className={`step-container ${activatedSteps[index] ? 'step-active' : 'step-enter'}`}
             >
               {/* Question */}

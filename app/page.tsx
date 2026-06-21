@@ -668,6 +668,7 @@ export default function HomePage() {
     const root = document.documentElement
     const body = document.body
     const previousAppViewportHeight = root.style.getPropertyValue('--app-viewport-height')
+    const previousMapViewportHeight = root.style.getPropertyValue('--map-viewport-height')
     const previousMapHeaderBottom = root.style.getPropertyValue('--map-header-bottom')
     const previousRootOverflow = root.style.overflow
     const previousBodyOverflow = body.style.overflow
@@ -676,9 +677,11 @@ export default function HomePage() {
 
     const setAppViewport = () => {
       const visualHeight = window.visualViewport?.height ?? window.innerHeight
+      const mapHeight = Math.max(visualHeight, window.innerHeight, document.documentElement.clientHeight)
       const headerBottom = mapHeaderRef.current?.getBoundingClientRect().bottom
 
       root.style.setProperty('--app-viewport-height', `${Math.ceil(visualHeight)}px`)
+      root.style.setProperty('--map-viewport-height', `${Math.ceil(mapHeight)}px`)
       if (typeof headerBottom === 'number' && headerBottom > 0) {
         root.style.setProperty('--map-header-bottom', `${Math.ceil(headerBottom)}px`)
       }
@@ -731,6 +734,11 @@ export default function HomePage() {
         root.style.setProperty('--app-viewport-height', previousAppViewportHeight)
       } else {
         root.style.removeProperty('--app-viewport-height')
+      }
+      if (previousMapViewportHeight) {
+        root.style.setProperty('--map-viewport-height', previousMapViewportHeight)
+      } else {
+        root.style.removeProperty('--map-viewport-height')
       }
       if (previousMapHeaderBottom) {
         root.style.setProperty('--map-header-bottom', previousMapHeaderBottom)
@@ -1284,7 +1292,7 @@ export default function HomePage() {
   return (
     <main
       className="relative w-screen overflow-hidden bg-[#e7edf4]"
-      style={{ height: 'var(--app-viewport-height)' }}
+      style={{ height: 'var(--map-viewport-height)' }}
     >
       <CampusRouteMap
         rooms={mapRooms}

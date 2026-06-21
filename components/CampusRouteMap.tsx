@@ -183,12 +183,19 @@ export default function CampusRouteMap({
   const [draftDestination, setDraftDestination] = useState<LocationType | ''>('')
   const [draftDepartureHour, setDraftDepartureHour] = useState('')
   const [draftDepartureMinute, setDraftDepartureMinute] = useState('')
+  // Bumped on an interval while the create form is open so the time options stay
+  // anchored to the current clock — otherwise an option that was valid when the
+  // form opened can quietly go stale and (post-midnight rollover) create a room
+  // far beyond the 01:00 cutoff.
+  const [departureOptionsNonce, setDepartureOptionsNonce] = useState(0)
 
   const { originStats } = useMemo(() => buildStats(rooms), [rooms])
   const destinationOptions = useMemo(() => getDestinationOptions(selectedFrom), [selectedFrom])
   const departureTimeOptions = useMemo(
+    // departureOptionsNonce intentionally drives recomputation; new Date() is read fresh.
     () => isCreateMode ? getDepartureTimeOptions(new Date(), 1) : [],
-    [isCreateMode]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isCreateMode, departureOptionsNonce]
   )
   const departureHourOptions = useMemo(
     () => Array.from(new Set(departureTimeOptions.map((time) => time.slice(0, 2)))),
@@ -381,6 +388,16 @@ export default function CampusRouteMap({
   }, [destinationOptions, draftDestination])
 
   useEffect(() => {
+    if (!isCreateMode) return
+
+    const intervalId = window.setInterval(() => {
+      setDepartureOptionsNonce((nonce) => nonce + 1)
+    }, 30000)
+
+    return () => window.clearInterval(intervalId)
+  }, [isCreateMode])
+
+  useEffect(() => {
     if (!isCreateMode || departureTimeOptions.length === 0) return
 
     const firstTime = departureTimeOptions[0]
@@ -496,14 +513,14 @@ export default function CampusRouteMap({
             type="button"
             aria-label="선택 닫기"
             onClick={closeSheet}
-            className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
+            className="absolute right-1.5 top-1.5 inline-flex h-12 w-12 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
           >
             <X className="h-5 w-5" />
           </button>
 
           {selectedFrom ? (
             <div className="gatita-bottom-sheet-body">
-              <div className="pr-10">
+              <div className="pr-14">
                 <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">출발 지점</p>
                 <div className="mt-1 flex min-w-0 items-center gap-2 text-base font-extrabold text-gray-950">
                   <Compass className="h-4 w-4 shrink-0 text-primary-600" />

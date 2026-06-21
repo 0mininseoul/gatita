@@ -361,8 +361,10 @@ test('map app and bottom sheet use the visual viewport and internal sheet scroll
   const sheetBlock = cssBlock(cssSource, '.gatita-bottom-sheet')
 
   assert.match(pageSource, /--app-viewport-height/)
+  assert.match(pageSource, /--map-viewport-height/)
   assert.match(pageSource, /window\.visualViewport\?\.height \?\? window\.innerHeight/)
-  assert.match(pageSource, /style=\{\{ height: 'var\(--app-viewport-height\)' \}\}/)
+  assert.match(pageSource, /Math\.max\(visualHeight, window\.innerHeight, document\.documentElement\.clientHeight\)/, 'map canvas should fill the larger layout viewport in mobile Safari')
+  assert.match(pageSource, /style=\{\{ height: 'var\(--map-viewport-height\)' \}\}/, 'map canvas should use full-screen map height instead of the smaller visual viewport')
   assert.match(pageSource, /resetDocumentScrollPosition/)
   assert.match(pageSource, /className="fixed inset-x-0 top-0 z-\[\d+\][^"]*items-end[\s\S]*style=\{\{ height: 'var\(--app-viewport-height\)' \}\}/, 'map overlays should anchor to the visual viewport instead of a shifted map container')
   assert.match(mapSource, /className="gatita-bottom-sheet/)

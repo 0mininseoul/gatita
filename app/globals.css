@@ -546,7 +546,7 @@
     margin-bottom: 0.15rem;
     color: #1f6ef0;
     font-size: 0.7rem;
-    font-weight: 900;
+    font-weight: 700;
     line-height: 1;
   }
 
@@ -573,7 +573,7 @@
   .settings-section-heading h3 {
     color: #101622;
     font-size: 0.9rem;
-    font-weight: 900;
+    font-weight: 800;
     line-height: 1.2;
   }
 
@@ -581,7 +581,7 @@
     margin-top: 0.15rem;
     color: #667085;
     font-size: 0.7rem;
-    font-weight: 700;
+    font-weight: 500;
     line-height: 1.35;
   }
 
@@ -615,7 +615,7 @@
   .settings-row-label {
     color: #667085;
     font-size: 0.72rem;
-    font-weight: 850;
+    font-weight: 600;
     line-height: 1.15;
   }
 
@@ -625,7 +625,7 @@
     overflow: hidden;
     color: #101622;
     font-size: 0.78rem;
-    font-weight: 850;
+    font-weight: 700;
     line-height: 1.2;
     text-align: right;
     text-overflow: ellipsis;
@@ -643,7 +643,7 @@
     background: #2782ff;
     color: #fbfcff;
     font-size: 0.78rem;
-    font-weight: 900;
+    font-weight: 800;
     transition: background-color 180ms ease, transform 180ms ease;
   }
 
@@ -667,7 +667,7 @@
     margin-bottom: 0.3rem;
     color: #667085;
     font-size: 0.73rem;
-    font-weight: 850;
+    font-weight: 600;
     line-height: 1.15;
   }
 
@@ -675,7 +675,7 @@
     min-height: 2.55rem;
     border-radius: 8px;
     font-size: 1rem;
-    font-weight: 800;
+    font-weight: 600;
   }
 
   .settings-save-button {
@@ -687,7 +687,7 @@
     padding: 0.55rem 0.85rem;
     border-radius: 8px;
     font-size: 0.82rem;
-    font-weight: 900;
+    font-weight: 800;
   }
 
   .settings-error {
@@ -696,7 +696,7 @@
     gap: 0.35rem;
     color: #e5484d;
     font-size: 0.75rem;
-    font-weight: 800;
+    font-weight: 700;
     line-height: 1.35;
   }
 
@@ -709,7 +709,7 @@
     min-height: 2.48rem;
     border-radius: 8px;
     font-size: 0.84rem;
-    font-weight: 900;
+    font-weight: 800;
     transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, transform 180ms ease;
   }
 
@@ -753,7 +753,7 @@
     padding: 0.9rem 0 0.25rem;
     color: #7b8494;
     font-size: 0.72rem;
-    font-weight: 700;
+    font-weight: 500;
     text-align: center;
   }
 
@@ -762,7 +762,7 @@
     padding: 0.58rem 0.82rem;
     border-radius: 8px;
     font-size: 1rem;
-    font-weight: 800;
+    font-weight: 600;
   }
 
   .settings-section input[aria-label^="계좌번호"] {

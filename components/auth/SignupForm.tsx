@@ -1,74 +1,122 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, type KeyboardEvent, type ReactNode } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { NON_GACHON_ACCOUNT_MESSAGE, extractGachonProfileFromMetadata, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
-import { getBankOption, isAccountNumberCompleteForBank } from '@/lib/banks'
+import { formatAccountNumberForBank, isAccountNumberCompleteForBank } from '@/lib/banks'
 import { AccountNumberSegmentField, BankSelectField } from '@/components/BankAccountFields'
 import { identifyAnalyticsUser, trackEvent } from '@/lib/analytics/client'
-import { ChevronDown, AlertCircle } from 'lucide-react'
+import { AlertCircle, CheckCircle2, ChevronDown } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-type SignupStep = {
-  id: string
+type SignupFieldId = 'name' | 'phone' | 'bank_name' | 'account_number' | 'account_holder' | 'nickname'
+type SignupSectionId = 'basic' | 'payout' | 'profile' | 'review'
+
+type SignupField = {
+  id: SignupFieldId
   label: string
+  errorLabel: string
   placeholder: string
   type: string
   required: boolean
-  options?: string[]
   description?: string
 }
 
-const SIGNUP_STEPS: SignupStep[] = [
-  {
+type SignupSection = {
+  id: SignupSectionId
+  shortTitle: string
+  title: string
+  description: string
+  fields: SignupFieldId[]
+}
+
+const SIGNUP_FIELDS: Record<SignupFieldId, SignupField> = {
+  name: {
     id: 'name',
-    label: '실명을 입력해주세요',
+    label: '실명',
+    errorLabel: '실명',
     placeholder: '홍길동',
     type: 'text',
     required: true,
-    description: '실명을 정확히 입력해주세요'
+    description: 'Google 계정에서 가져온 이름이 맞는지 확인해주세요.',
   },
-  {
+  phone: {
     id: 'phone',
-    label: '전화번호를 입력해주세요',
-    placeholder: '010-1234-5678',
-    type: 'text',
+    label: '전화번호',
+    errorLabel: '전화번호',
+    placeholder: '010-0000-0000',
+    type: 'tel',
     required: true,
-    description: '가입 후 설정에서 변경할 수 없습니다'
+    description: '동행 중 연락이 필요한 경우에만 사용됩니다. 가입 후 설정에서 변경할 수 없습니다.',
   },
-  {
+  bank_name: {
     id: 'bank_name',
-    label: '동행 시 정산 받을 은행을 입력해주세요',
-    placeholder: '토스뱅크',
-    type: 'text',
+    label: '정산 받을 은행',
+    errorLabel: '은행',
+    placeholder: '은행 선택',
+    type: 'button',
     required: true,
-    description: '방을 개설하면 같은 방 참여자에게 공개될 수 있습니다'
+    description: '방을 개설하면 같은 방 참여자에게 공개될 수 있습니다.',
   },
-  {
+  account_number: {
     id: 'account_number',
-    label: '계좌번호를 입력해주세요',
+    label: '계좌번호',
+    errorLabel: '계좌번호',
     placeholder: '1234-5678-9012',
     type: 'text',
     required: true,
-    description: '방을 개설하면 같은 방 참여자에게 공개될 수 있습니다'
+    description: '선택한 은행 형식에 맞춰 숫자만 입력해주세요.',
   },
-  {
+  account_holder: {
     id: 'account_holder',
-    label: '계좌주 이름을 입력해주세요',
+    label: '예금주',
+    errorLabel: '예금주 이름',
     placeholder: '홍길동',
     type: 'text',
     required: true,
-    description: '방을 개설하면 같은 방 참여자에게 공개될 수 있습니다'
+    description: '계좌에 표시된 이름과 동일해야 합니다.',
   },
-  {
+  nickname: {
     id: 'nickname',
-    label: '닉네임을 입력해주세요',
+    label: '닉네임',
+    errorLabel: '닉네임',
     placeholder: '가천존예여신',
     type: 'text',
     required: true,
-    description: '다른 사용자에게 보여질 이름입니다'
-  }
+    description: '방 목록과 채팅에서 다른 사용자에게 보여질 이름입니다.',
+  },
+}
+
+const SIGNUP_SECTIONS: SignupSection[] = [
+  {
+    id: 'basic',
+    shortTitle: '기본 정보',
+    title: '기본 정보를 확인해주세요',
+    description: '학교 계정 정보와 연락처를 한 번만 확인합니다.',
+    fields: ['name', 'phone'],
+  },
+  {
+    id: 'payout',
+    shortTitle: '정산 계좌',
+    title: '정산 계좌를 등록해주세요',
+    description: '방을 개설했을 때 같이 탄 멤버가 송금할 계좌입니다.',
+    fields: ['bank_name', 'account_number', 'account_holder'],
+  },
+  {
+    id: 'profile',
+    shortTitle: '공개 프로필',
+    title: '보여질 이름을 정해주세요',
+    description: '실명 대신 닉네임이 방 목록과 채팅에 표시됩니다.',
+    fields: ['nickname'],
+  },
+  {
+    id: 'review',
+    shortTitle: '마지막 확인',
+    title: '입력한 정보를 확인해주세요',
+    description: '가입 후 전화번호는 변경할 수 없고, 정산 계좌와 닉네임은 설정에서 수정할 수 있습니다.',
+    fields: [],
+  },
 ]
 
 interface SignupFormProps {
@@ -78,26 +126,33 @@ interface SignupFormProps {
 }
 
 export default function SignupForm({ onSuccess, onBackToLanding, startWithProfileStep = false }: SignupFormProps) {
-  const [currentStep, setCurrentStep] = useState(() => startWithProfileStep ? 0 : -1) // -1 = Google login screen, 0+ = profile steps
+  const [currentStep, setCurrentStep] = useState(() => startWithProfileStep ? 0 : -1)
   const [formData, setFormData] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [hasAcceptedRequiredTerms, setHasAcceptedRequiredTerms] = useState(false)
   const supabase = useMemo(() => createClient(), [])
-  const [activatedSteps, setActivatedSteps] = useState<boolean[]>(Array(SIGNUP_STEPS.length).fill(false))
-  const [googleEmail, setGoogleEmail] = useState<string>('')
 
-  const currentStepData = SIGNUP_STEPS[currentStep]
-  const stepRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const currentSection = SIGNUP_SECTIONS[currentStep]
+  const isLastStep = currentStep === SIGNUP_SECTIONS.length - 1
+  const contentRef = useRef<HTMLDivElement | null>(null)
+  const currentSectionRef = useRef<HTMLDivElement | null>(null)
   const hasCheckedSessionRef = useRef(false)
   const onSuccessRef = useRef(onSuccess)
-  const isLastStep = currentStep === SIGNUP_STEPS.length - 1
 
-  const scrollStepIntoView = useCallback((stepId: string, block: ScrollLogicalPosition = 'start') => {
-    const el = stepRefs.current[stepId]
-    if (!el) return
+  const focusCurrentSection = useCallback(() => {
+    window.setTimeout(() => {
+      currentSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 120)
+    window.setTimeout(() => {
+      currentSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 320)
+  }, [])
 
-    el.scrollIntoView({ behavior: 'smooth', block })
+  const scrollContentToTop = useCallback(() => {
+    window.setTimeout(() => {
+      contentRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+    }, 40)
   }, [])
 
   useEffect(() => {
@@ -115,7 +170,6 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
       if (session?.user) {
         const email = session.user.email
         if (isGachonEmail(email)) {
-          setGoogleEmail(email)
           const googleProfile = extractGachonProfileFromMetadata(session.user.user_metadata)
 
           const profileResponse = await fetch('/api/profile/me')
@@ -172,21 +226,24 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
     }
   }
 
-  const validateStep = (step: SignupStep, value: string): string | null => {
-    if (!value.trim() && step.required) {
-      return `${step.label}을(를) 입력해주세요`
+  const validateField = (fieldId: SignupFieldId, value: string): string | null => {
+    const field = SIGNUP_FIELDS[fieldId]
+
+    if (!value.trim() && field.required) {
+      return `${field.errorLabel}을(를) 입력해주세요`
     }
 
-    switch (step.id) {
-      case 'phone':
+    switch (fieldId) {
+      case 'phone': {
         const phoneRegex = /^010-\d{4}-\d{4}$/
         if (!phoneRegex.test(value)) {
           return '010-0000-0000 형식으로 입력해주세요'
         }
         break
+      }
       case 'bank_name':
-        if (!getBankOption(value)) {
-          return '은행을 선택해주세요'
+        if (value.trim().length < 2) {
+          return '은행을 선택하거나 입력해주세요'
         }
         break
       case 'account_number':
@@ -196,7 +253,7 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
         break
       case 'account_holder':
         if (value.trim().length < 2) {
-          return '계좌주 이름을 2자 이상 입력해주세요'
+          return '예금주 이름을 2자 이상 입력해주세요'
         }
         break
       case 'nickname':
@@ -208,32 +265,42 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
     return null
   }
 
-  const handleNext = async () => {
-    const value = formData[currentStepData.id] || ''
-    const error = validateStep(currentStepData, value)
+  const validateCurrentSection = () => {
+    const nextErrors: Record<string, string> = {}
 
-    if (error) {
-      setErrors({ [currentStepData.id]: error })
-      return
-    }
+    currentSection.fields.forEach((fieldId) => {
+      const error = validateField(fieldId, formData[fieldId] || '')
+      if (error) {
+        nextErrors[fieldId] = error
+      }
+    })
 
     if (isLastStep && !hasAcceptedRequiredTerms) {
-      setErrors({ consent: '개인정보처리방침과 서비스약관에 동의해주세요' })
+      nextErrors.consent = '개인정보처리방침과 서비스약관에 동의해주세요'
+    }
+
+    setErrors(nextErrors)
+    return Object.keys(nextErrors).length === 0
+  }
+
+  const handleNext = async () => {
+    if (!validateCurrentSection()) {
+      focusCurrentSection()
       return
     }
 
-    // 닉네임 중복 확인
-    if (currentStepData.id === 'nickname') {
+    if (currentSection.id === 'profile') {
       setIsLoading(true)
       try {
         const { data } = await supabase
           .from('users')
           .select('nickname')
-          .eq('nickname', value)
+          .eq('nickname', formData.nickname)
           .maybeSingle()
 
         if (data) {
           setErrors({ nickname: '이미 사용 중인 닉네임입니다' })
+          focusCurrentSection()
           setIsLoading(false)
           return
         }
@@ -245,7 +312,7 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
 
     setErrors({})
     trackEvent('profile_setup_step_completed', {
-      step_id: currentStepData.id,
+      step_id: currentSection.id,
       step_index: currentStep,
     })
 
@@ -253,11 +320,7 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
       await handleSignup()
     } else {
       setCurrentStep(prev => prev + 1)
-      // 다음 질문으로 부드럽게 스크롤
-      setTimeout(() => {
-        const nextStep = SIGNUP_STEPS[currentStep + 1]
-        scrollStepIntoView(nextStep.id)
-      }, 50)
+      scrollContentToTop()
     }
   }
 
@@ -307,7 +370,7 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
     } catch (error: any) {
       console.error('Signup error:', error)
       trackEvent('profile_completion_failed', {
-        step_id: currentStepData?.id,
+        step_id: currentSection?.id,
       })
       toast.error(error.message || '회원가입 중 오류가 발생했습니다')
     } finally {
@@ -321,7 +384,6 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
       [fieldId]: value
     }))
 
-    // 실시간 에러 제거
     if (errors[fieldId]) {
       setErrors(prev => {
         const newErrors = { ...prev }
@@ -331,8 +393,12 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !isLoading) {
+  const handlePhoneChange = (value: string) => {
+    handleInputChange('phone', formatPhoneNumber(value))
+  }
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' && !isLoading) {
       handleNext()
     }
   }
@@ -340,6 +406,8 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
   const handleBack = async () => {
     if (currentStep > 0) {
       setCurrentStep(prev => prev - 1)
+      setErrors({})
+      scrollContentToTop()
       return
     }
 
@@ -351,7 +419,6 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
       }
 
       await supabase.auth.signOut()
-      setGoogleEmail('')
       setFormData({})
       setErrors({})
       setCurrentStep(-1)
@@ -360,17 +427,6 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
 
     onBackToLanding?.()
   }
-
-  // Activate animation for the current step when it becomes visible
-  useEffect(() => {
-    if (currentStep < 0) return
-
-    setActivatedSteps(prev => {
-      const next = [...prev]
-      next[currentStep] = true
-      return next
-    })
-  }, [currentStep])
 
   useEffect(() => {
     if (currentStep < 0) return
@@ -401,22 +457,129 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
     }
   }, [currentStep])
 
-  // Google Login Screen (currentStep === -1)
+  const canContinue = useMemo(() => {
+    if (!currentSection || isLoading) return false
+    if (isLastStep) return hasAcceptedRequiredTerms
+
+    return currentSection.fields.every((fieldId) => Boolean((formData[fieldId] || '').trim()))
+  }, [currentSection, formData, hasAcceptedRequiredTerms, isLastStep, isLoading])
+
+  const formattedAccountNumber = useMemo(
+    () => formatAccountNumberForBank(formData.bank_name, formData.account_number || ''),
+    [formData.account_number, formData.bank_name]
+  )
+
+  const getSectionSummary = (sectionId: SignupSectionId) => {
+    switch (sectionId) {
+      case 'basic':
+        return {
+          title: '기본 정보',
+          value: `${formData.name || '실명 미입력'} · ${formData.department || '학과 미확인'}`,
+          detail: formData.phone || '전화번호 미입력',
+        }
+      case 'payout':
+        return {
+          title: '정산 계좌',
+          value: formData.bank_name || '은행 미선택',
+          detail: formattedAccountNumber ? `${formattedAccountNumber} · ${formData.account_holder || '예금주 미입력'}` : '계좌번호 미입력',
+        }
+      case 'profile':
+        return {
+          title: '공개 프로필',
+          value: formData.nickname || '닉네임 미입력',
+          detail: '방 목록과 채팅에서 표시됩니다.',
+        }
+      case 'review':
+        return {
+          title: '마지막 확인',
+          value: '가입 전 확인',
+          detail: '약관 동의가 필요합니다.',
+        }
+    }
+  }
+
+  const renderField = (fieldId: SignupFieldId) => {
+    const field = SIGNUP_FIELDS[fieldId]
+    const value = formData[fieldId] || ''
+
+    if (fieldId === 'bank_name') {
+      return (
+        <FormField key={fieldId} field={field} error={errors[fieldId]}>
+          <BankSelectField
+            value={value}
+            onChange={(nextValue) => handleInputChange(fieldId, nextValue)}
+            error={errors[fieldId]}
+            presentation="sheet"
+            showErrorMessage={false}
+          />
+        </FormField>
+      )
+    }
+
+    if (fieldId === 'account_number') {
+      return (
+        <FormField key={fieldId} field={field}>
+          <AccountNumberSegmentField
+            bankName={formData.bank_name || ''}
+            value={value}
+            onChange={(nextValue) => handleInputChange(fieldId, nextValue)}
+            error={errors[fieldId]}
+          />
+        </FormField>
+      )
+    }
+
+    if (fieldId === 'phone') {
+      return (
+        <FormField key={fieldId} field={field} error={errors[fieldId]}>
+          <InputField
+            id={`signup-${fieldId}`}
+            type="tel"
+            inputMode="numeric"
+            autoComplete="tel"
+            enterKeyHint="next"
+            value={value}
+            onChange={handlePhoneChange}
+            onKeyDown={handleKeyDown}
+            placeholder={field.placeholder}
+            error={errors[fieldId]}
+          />
+        </FormField>
+      )
+    }
+
+    return (
+      <FormField key={fieldId} field={field} error={errors[fieldId]}>
+        <InputField
+          id={`signup-${fieldId}`}
+          type={field.type}
+          value={value}
+          onChange={(nextValue) => handleInputChange(fieldId, nextValue)}
+          onKeyDown={handleKeyDown}
+          placeholder={field.placeholder}
+          error={errors[fieldId]}
+          autoComplete={fieldId === 'name' ? 'name' : 'off'}
+          enterKeyHint={fieldId === 'nickname' ? 'done' : 'next'}
+          maxLength={fieldId === 'nickname' ? 10 : undefined}
+        />
+      </FormField>
+    )
+  }
+
   if (currentStep === -1) {
     return (
       <div className="min-h-screen bg-white flex flex-col">
-        {/* Header */}
         <div className="flex items-center p-4 border-b border-gray-100">
           <button
             onClick={handleBack}
             className="p-2 mr-2 hover:bg-gray-100 rounded-lg"
+            aria-label="뒤로"
           >
             <ChevronDown className="w-6 h-6 rotate-90" />
           </button>
           <h1 className="text-lg font-semibold">회원가입</h1>
         </div>
 
-        {/* Content */}
         <div className="flex-1 flex flex-col items-center justify-center p-6">
           <div className="w-full max-w-md space-y-8">
             <div className="text-center">
@@ -465,264 +628,160 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
     )
   }
 
-  // Profile completion steps (currentStep >= 0)
   return (
     <div
-      className="flex flex-col overflow-hidden bg-white"
+      className="flex flex-col overflow-hidden bg-gray-50"
       style={{ height: 'var(--signup-viewport-height, 100dvh)' }}
     >
-      {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-gray-100 p-4">
-        <button
-          onClick={handleBack}
-          className="p-2"
-        >
-          <ChevronDown className="w-6 h-6 rotate-90" />
-        </button>
-        <div className="flex space-x-1">
-          {SIGNUP_STEPS.map((_, index) => (
-            <div
-              key={index}
-              className={`w-2 h-2 rounded-full ${
-                index <= currentStep ? 'bg-primary-600' : 'bg-gray-200'
-              }`}
-            />
-          ))}
+      <header className="shrink-0 border-b border-gray-100 bg-white px-4 pb-3 pt-4">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={handleBack}
+            className="grid h-10 w-10 place-items-center rounded-full text-gray-900 transition hover:bg-gray-100"
+            aria-label="뒤로"
+          >
+            <ChevronDown className="h-6 w-6 rotate-90" />
+          </button>
+          <div className="text-center">
+            <p className="text-xs font-semibold text-primary-600">{currentStep + 1} / {SIGNUP_SECTIONS.length}</p>
+            <h1 className="text-sm font-bold text-gray-950">{currentSection.shortTitle}</h1>
+          </div>
+          <div className="h-10 w-10" />
         </div>
-        <div className="w-10" />
-      </div>
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-100">
+          <div
+            className="h-full rounded-full bg-primary-600 transition-all duration-300"
+            style={{ width: `${((currentStep + 1) / SIGNUP_SECTIONS.length) * 100}%` }}
+          />
+        </div>
+      </header>
 
-      {/* Content: Stacked progressive steps */}
-      <div
-        className="flex-1 space-y-8 overflow-y-auto overscroll-contain px-6 pt-6"
+      <main
+        ref={contentRef}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-5"
         style={{
-          paddingBottom: 'calc(env(safe-area-inset-bottom) + 12rem)',
+          paddingBottom: '1.5rem',
           WebkitOverflowScrolling: 'touch',
         }}
       >
-        {SIGNUP_STEPS.slice(0, currentStep + 1).map((step, index) => {
-          const isCurrent = index === currentStep
-          return (
-            <div
-              key={step.id}
-              ref={(el) => { stepRefs.current[step.id] = el }}
-              onFocusCapture={() => {
-                window.setTimeout(() => scrollStepIntoView(step.id, isCurrent ? 'center' : 'nearest'), 120)
-                window.setTimeout(() => scrollStepIntoView(step.id, isCurrent ? 'center' : 'nearest'), 320)
-              }}
-              className={`step-container ${activatedSteps[index] ? 'step-active' : 'step-enter'}`}
-            >
-              {/* Question */}
-              <div className="mb-4">
-                <h1 className={`mb-2 font-bold text-gray-900 ${
-                  step.id === 'bank_name'
-                    ? 'whitespace-nowrap text-[20px] leading-7'
-                    : 'text-2xl'
-                }`}>
-                  {step.label}
-                </h1>
-                {step.description && (
-                  <p className="text-gray-600 text-sm">
-                    {step.description}
-                  </p>
-                )}
-              </div>
-
-
-              {/* Input */}
-              <div className="mb-2">
-                {step.id === 'bank_name' ? (
-                  <BankSelectField
-                    value={formData[step.id] || ''}
-                    onChange={(v) => handleInputChange(step.id, v)}
-                    error={errors[step.id]}
-                  />
-                ) : step.id === 'account_number' ? (
-                  <AccountNumberSegmentField
-                    bankName={formData.bank_name || ''}
-                    value={formData[step.id] || ''}
-                    onChange={(v) => handleInputChange(step.id, v)}
-                    error={errors[step.id]}
-                  />
-                ) : step.id === 'phone' ? (
-                  <PhoneSegmentField
-                    value={formData[step.id] || ''}
-                    onChange={(v) => handleInputChange(step.id, v)}
-                    error={errors[step.id]}
-                    autoFocus={isCurrent}
-                  />
-                ) : (
-                  <InputField
-                    type={step.type}
-                    value={formData[step.id] || ''}
-                    onChange={(v) => handleInputChange(step.id, v)}
-                    onKeyDown={isCurrent ? handleKeyDown : () => {}}
-                    placeholder={step.placeholder}
-                    error={errors[step.id]}
-                    autoFocus={isCurrent}
-                  />
-                )}
-              </div>
-
-              {step.id === 'name' && formData.department && (
-                <div className="mb-4 rounded-xl border border-primary-100 bg-primary-50 px-3 py-2 text-sm font-bold text-primary-700">
-                  학과는 Google 계정 정보에서 {formData.department}(으)로 자동 등록됩니다.
-                </div>
-              )}
-
-              {isCurrent && isLastStep && (
-                <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
-                  <label className="flex items-start gap-2 text-xs font-semibold leading-5 text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={hasAcceptedRequiredTerms}
-                      onChange={(event) => {
-                        setHasAcceptedRequiredTerms(event.target.checked)
-                        if (errors.consent) {
-                          setErrors(prev => {
-                            const next = { ...prev }
-                            delete next.consent
-                            return next
-                          })
-                        }
-                      }}
-                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                    />
-                    <span>
-                      <Link href="/terms" className="font-black text-primary-700 underline">
-                        서비스약관
-                      </Link>
-                      과{' '}
-                      <Link href="/privacy" className="font-black text-primary-700 underline">
-                        개인정보처리방침
-                      </Link>
-                      에 동의합니다.
-                    </span>
-                  </label>
-                  <p className="mt-2 text-[11px] font-semibold leading-4 text-gray-500">
-                    &lt;같이타&gt;는 현재 수집된 개인정보를 마케팅에 일체 활용하지 않습니다.
-                  </p>
-                  {errors.consent && (
-                    <div className="mt-2 flex items-center text-xs font-semibold text-red-500">
-                      <AlertCircle className="mr-1 h-3.5 w-3.5" />
-                      {errors.consent}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Next button only at the current step */}
-              {isCurrent && (
+        {currentStep > 0 && (
+          <div className="mb-5 space-y-2">
+            {SIGNUP_SECTIONS.slice(0, currentStep).map((section, index) => {
+              const summary = getSectionSummary(section.id)
+              return (
                 <button
-                  onClick={handleNext}
-                  disabled={!formData[step.id] || isLoading || (isLastStep && !hasAcceptedRequiredTerms)}
-                  className="btn-primary w-full"
+                  key={section.id}
+                  type="button"
+                  onClick={() => {
+                    setCurrentStep(index)
+                    setErrors({})
+                    scrollContentToTop()
+                  }}
+                  className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-left shadow-sm shadow-gray-950/[0.03]"
                 >
-                  {isLoading ? (
-                    <div className="flex items-center justify-center">
-                      <div className="loading-spinner mr-2" />
-                      처리중...
-                    </div>
-                  ) : index === SIGNUP_STEPS.length - 1 ? (
-                    '가입완료'
-                  ) : (
-                    '다음'
-                  )}
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-primary-600" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-medium text-gray-500">{summary.title}</span>
+                    <span className="block truncate text-sm font-bold text-gray-950">{summary.value}</span>
+                    <span className="block truncate text-xs font-medium text-gray-500">{summary.detail}</span>
+                  </span>
+                  <span className="shrink-0 text-xs font-semibold text-primary-600">수정</span>
                 </button>
-              )}
+              )
+            })}
+          </div>
+        )}
+
+        <section
+          ref={currentSectionRef}
+          onFocusCapture={focusCurrentSection}
+          className="rounded-2xl bg-white px-5 py-5 shadow-sm shadow-gray-950/[0.04]"
+        >
+          <p className="mb-2 text-sm font-semibold text-primary-600">{currentSection.shortTitle}</p>
+          <h2 className="text-[26px] font-extrabold leading-tight tracking-normal text-gray-950">
+            {currentSection.title}
+          </h2>
+          <p className="mt-2 text-sm font-medium leading-5 text-gray-500">
+            {currentSection.description}
+          </p>
+
+          {currentSection.id === 'basic' && formData.department && (
+            <div className="mt-4 rounded-xl border border-primary-100 bg-primary-50 px-3 py-2 text-sm font-semibold leading-5 text-primary-700">
+              학과는 Google 계정 정보에서 {formData.department}(으)로 자동 등록됩니다.
             </div>
-          )
-        })}
-      </div>
+          )}
+
+          <div className="mt-6 space-y-5">
+            {currentSection.fields.map(renderField)}
+          </div>
+
+          {currentSection.id === 'review' && (
+            <ReviewPanel
+              formData={formData}
+              formattedAccountNumber={formattedAccountNumber}
+              hasAcceptedRequiredTerms={hasAcceptedRequiredTerms}
+              setHasAcceptedRequiredTerms={setHasAcceptedRequiredTerms}
+              clearConsentError={() => {
+                if (errors.consent) {
+                  setErrors(prev => {
+                    const next = { ...prev }
+                    delete next.consent
+                    return next
+                  })
+                }
+              }}
+              consentError={errors.consent}
+            />
+          )}
+        </section>
+      </main>
+
+      <footer className="shrink-0 border-t border-gray-100 bg-white/95 px-5 py-3 backdrop-blur" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+        <button
+          onClick={handleNext}
+          disabled={!canContinue}
+          className="btn-primary w-full"
+        >
+          {isLoading ? (
+            <span className="flex items-center justify-center">
+              <span className="loading-spinner mr-2" />
+              처리중...
+            </span>
+          ) : isLastStep ? (
+            '가입 완료'
+          ) : (
+            '다음'
+          )}
+        </button>
+      </footer>
     </div>
   )
 }
 
-function splitPhoneNumber(value: string) {
-  const digits = value.replace(/\D/g, '').slice(0, 11)
-
-  return [
-    digits.slice(0, 3),
-    digits.slice(3, 7),
-    digits.slice(7, 11),
-  ]
-}
-
-function joinPhoneSegments(segments: string[]) {
-  return segments.map((segment) => segment.replace(/\D/g, '')).filter(Boolean).join('-')
-}
-
-function PhoneSegmentField({
-  value,
-  onChange,
+function FormField({
+  field,
   error,
-  autoFocus,
+  children,
 }: {
-  value: string
-  onChange: (value: string) => void
+  field: SignupField
   error?: string
-  autoFocus?: boolean
+  children: ReactNode
 }) {
-  const inputRefs = useRef<Array<HTMLInputElement | null>>([])
-  const segmentLengths = [3, 4, 4]
-  const segmentValues = useMemo(() => splitPhoneNumber(value), [value])
-
-  const updateSegment = (index: number, nextValue: string) => {
-    const digits = nextValue.replace(/\D/g, '')
-    const nextSegments = [...segmentValues]
-    const maxLength = segmentLengths[index]
-
-    if (digits.length > maxLength) {
-      const pastedSegments = splitPhoneNumber(digits)
-      onChange(joinPhoneSegments(pastedSegments))
-      inputRefs.current[pastedSegments.every(Boolean) ? 2 : pastedSegments.findIndex((segment) => !segment)]?.focus()
-      return
-    }
-
-    nextSegments[index] = digits.slice(0, maxLength)
-    onChange(joinPhoneSegments(nextSegments))
-
-    if (digits.length >= maxLength) {
-      inputRefs.current[index + 1]?.focus()
-    }
-
-  }
-
-  const handleKeyDown = (index: number, event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== 'Backspace') return
-    if (segmentValues[index]) return
-
-    inputRefs.current[index - 1]?.focus()
-  }
-
   return (
     <div>
-      <div className="grid grid-cols-[0.82fr_auto_1fr_auto_1fr] items-center gap-1.5">
-        {segmentLengths.map((length, index) => (
-          <div key={index} className="contents">
-            <input
-              ref={(element) => { inputRefs.current[index] = element }}
-              type="tel"
-              inputMode="numeric"
-              value={segmentValues[index] ?? ''}
-              onChange={(event) => updateSegment(index, event.target.value)}
-              onKeyDown={(event) => handleKeyDown(index, event)}
-              maxLength={length}
-              placeholder={index === 0 ? '010' : '0000'}
-              autoFocus={autoFocus && index === 0}
-              aria-label={`전화번호 ${index + 1}번째 입력칸`}
-              className={`h-12 min-w-0 rounded-xl border bg-white px-3 text-center text-lg font-black tracking-normal text-gray-950 outline-none transition focus:border-primary-600 focus:ring-2 focus:ring-primary-100 ${
-                error ? 'border-red-500' : 'border-gray-200'
-              }`}
-            />
-            {index < segmentLengths.length - 1 && (
-              <span className="text-center text-sm font-black text-gray-400">-</span>
-            )}
-          </div>
-        ))}
+      <div className="mb-2">
+        <label htmlFor={`signup-${field.id}`} className="text-sm font-semibold text-gray-900">
+          {field.label}
+        </label>
+        {field.description && (
+          <p className="mt-1 text-xs font-medium leading-4 text-gray-500">
+            {field.description}
+          </p>
+        )}
       </div>
+      {children}
       {error && (
-        <div className="mt-2 flex items-center text-sm text-red-500">
+        <div className="mt-2 flex items-center text-sm font-semibold text-red-500">
           <AlertCircle className="mr-1 h-4 w-4" />
           {error}
         </div>
@@ -731,43 +790,139 @@ function PhoneSegmentField({
   )
 }
 
-// Input Field Component
+function ReviewPanel({
+  formData,
+  formattedAccountNumber,
+  hasAcceptedRequiredTerms,
+  setHasAcceptedRequiredTerms,
+  clearConsentError,
+  consentError,
+}: {
+  formData: Record<string, string>
+  formattedAccountNumber: string
+  hasAcceptedRequiredTerms: boolean
+  setHasAcceptedRequiredTerms: (value: boolean) => void
+  clearConsentError: () => void
+  consentError?: string
+}) {
+  return (
+    <div className="mt-6 space-y-4">
+      <div className="rounded-xl border border-gray-200 bg-gray-50">
+        <ReviewRow label="실명" value={formData.name} />
+        <ReviewRow label="학과" value={formData.department || '학과 미확인'} />
+        <ReviewRow label="전화번호" value={formData.phone} />
+        <ReviewRow label="닉네임" value={formData.nickname} />
+        <ReviewRow label="정산 계좌" value={`${formData.bank_name} ${formattedAccountNumber} ${formData.account_holder}`} />
+      </div>
+
+      <div className="rounded-xl border border-primary-100 bg-primary-50 px-3 py-3">
+        <p className="text-xs font-semibold leading-5 text-primary-800">
+          정산 계좌는 방을 개설한 경우 같은 방 참여자에게만 표시됩니다.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-gray-200 bg-white px-3 py-3">
+        <label className="flex items-start gap-2 text-xs font-semibold leading-5 text-gray-700">
+          <input
+            type="checkbox"
+            checked={hasAcceptedRequiredTerms}
+            onChange={(event) => {
+              setHasAcceptedRequiredTerms(event.target.checked)
+              clearConsentError()
+            }}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+          />
+          <span>
+            <Link href="/terms" className="font-semibold text-primary-700 underline">
+              서비스약관
+            </Link>
+            과{' '}
+            <Link href="/privacy" className="font-semibold text-primary-700 underline">
+              개인정보처리방침
+            </Link>
+            에 동의합니다.
+          </span>
+        </label>
+        <p className="mt-2 text-[11px] font-semibold leading-4 text-gray-500">
+          &lt;같이타&gt;는 현재 수집된 개인정보를 마케팅에 일체 활용하지 않습니다.
+        </p>
+        {consentError && (
+          <div className="mt-2 flex items-center text-xs font-semibold text-red-500">
+            <AlertCircle className="mr-1 h-3.5 w-3.5" />
+            {consentError}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ReviewRow({ label, value }: { label: string; value?: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-gray-200 px-3 py-3 last:border-b-0">
+      <span className="shrink-0 text-xs font-medium text-gray-500">{label}</span>
+      <span className="min-w-0 text-right text-sm font-semibold text-gray-950">{value || '-'}</span>
+    </div>
+  )
+}
+
 interface InputFieldProps {
+  id: string
   type: string
   value: string
   onChange: (value: string) => void
-  onKeyDown: (e: React.KeyboardEvent) => void
+  onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void
   placeholder: string
   error?: string
-  autoFocus?: boolean
+  autoComplete?: string
+  inputMode?: 'none' | 'text' | 'tel' | 'url' | 'email' | 'numeric' | 'decimal' | 'search'
+  enterKeyHint?: 'enter' | 'done' | 'go' | 'next' | 'previous' | 'search' | 'send'
+  maxLength?: number
 }
 
 function InputField({
+  id,
   type,
   value,
   onChange,
   onKeyDown,
   placeholder,
   error,
-  autoFocus
+  autoComplete,
+  inputMode,
+  enterKeyHint,
+  maxLength,
 }: InputFieldProps) {
   return (
-    <div>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={onKeyDown}
-        placeholder={placeholder}
-        autoFocus={autoFocus}
-        className={`input-field ${error ? 'border-red-500' : ''}`}
-      />
-      {error && (
-        <div className="flex items-center mt-2 text-red-500 text-sm">
-          <AlertCircle className="w-4 h-4 mr-1" />
-          {error}
-        </div>
-      )}
-    </div>
+    <input
+      id={id}
+      type={type}
+      inputMode={inputMode}
+      enterKeyHint={enterKeyHint}
+      autoComplete={autoComplete}
+      value={value}
+      maxLength={maxLength}
+      onChange={(event) => onChange(event.target.value)}
+      onKeyDown={onKeyDown}
+      placeholder={placeholder}
+      className={`input-field h-14 text-base font-semibold ${error ? 'border-red-500' : ''}`}
+    />
   )
+}
+
+function formatPhoneNumber(value: string) {
+  const rawDigits = value.replace(/\D/g, '')
+  const digits = rawDigits.startsWith('8210')
+    ? `0${rawDigits.slice(2, 12)}`
+    : rawDigits.slice(0, 11)
+
+  if (digits.length <= 3) {
+    return digits
+  }
+
+  if (digits.length <= 7) {
+    return `${digits.slice(0, 3)}-${digits.slice(3)}`
+  }
+
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`
 }

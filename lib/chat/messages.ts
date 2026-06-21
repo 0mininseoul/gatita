@@ -90,3 +90,14 @@ export function upsertMessage(list: Message[], incoming: Message): Message[] {
   next.splice(findInsertionIndex(next, incoming.created_at), 0, incoming)
   return next
 }
+
+// 페이지네이션: 더 과거 메시지(오름차순)를 기존 목록 앞에 붙인다. id 중복은 제거.
+export function prependOlderMessages(list: Message[], older: Message[]): Message[] {
+  if (older.length === 0) return list
+
+  const existingIds = new Set(list.map((message) => message.id))
+  const deduped = older.filter((message) => !existingIds.has(message.id))
+  if (deduped.length === 0) return list
+
+  return [...deduped, ...list]
+}

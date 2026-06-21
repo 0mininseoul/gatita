@@ -499,6 +499,3 @@ begin
     alter publication supabase_realtime add table public.room_participants;
   end if;
 end $$;
-
--- Sample data for testing (optional)
--- You can insert some test data here if needed

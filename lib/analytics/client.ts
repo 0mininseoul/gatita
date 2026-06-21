@@ -106,10 +106,7 @@ export function shouldSuppressAnalyticsForUser(user: {
   if (user.isAdmin) return true
 
   const excludedUserIds = parseEnvList(process.env.NEXT_PUBLIC_ANALYTICS_EXCLUDED_USER_IDS)
-  const excludedEmails = parseEnvList([
-    process.env.NEXT_PUBLIC_ADMIN_EMAIL,
-    process.env.NEXT_PUBLIC_ANALYTICS_EXCLUDED_EMAILS,
-  ].filter(Boolean).join(','))
+  const excludedEmails = parseEnvList(process.env.NEXT_PUBLIC_ANALYTICS_EXCLUDED_EMAILS)
 
   const userId = user.userId?.trim().toLowerCase()
   const email = user.email?.trim().toLowerCase()

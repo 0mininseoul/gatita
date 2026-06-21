@@ -355,15 +355,15 @@ test('profileless authenticated users see the map first and complete profile fro
   assert.match(source, /<SignupForm[\s\S]*startWithProfileStep=\{hasAuthenticatedSession\}/, 'profile setup entry from the authenticated map should not flash the landing signup screen')
 })
 
-test('landing exposes email password login only through the test login query', () => {
+test('landing does not expose the removed email password test login', () => {
   const source = readProjectFile('app/page.tsx')
 
-  assert.match(source, /test-login/)
-  assert.match(source, /showTestLogin/)
-  assert.match(source, /signInWithPassword/)
-  assert.match(source, /검수용 로그인/)
-  assert.match(source, /테스트 계정으로 로그인/)
-  assert.match(source, /isGachonEmail\(email\)/)
+  assert.doesNotMatch(source, /test-login/)
+  assert.doesNotMatch(source, /showTestLogin/)
+  assert.doesNotMatch(source, /signInWithPassword/)
+  assert.doesNotMatch(source, /password_test/)
+  assert.doesNotMatch(source, /검수용 로그인/)
+  assert.doesNotMatch(source, /테스트 계정으로 로그인/)
 })
 
 test('map shows a one-time PWA home screen onboarding modal', () => {

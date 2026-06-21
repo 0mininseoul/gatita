@@ -140,10 +140,6 @@ export default function HomePage() {
   const [hasEnteredApp, setHasEnteredApp] = useState(false)
   const [showPwaOnboarding, setShowPwaOnboarding] = useState(false)
   const [authNotice, setAuthNotice] = useState<string | null>(null)
-  const [showTestLogin, setShowTestLogin] = useState(false)
-  const [testEmail, setTestEmail] = useState('')
-  const [testPassword, setTestPassword] = useState('')
-  const [isStartingTestLogin, setIsStartingTestLogin] = useState(false)
   const [moderationStatus, setModerationStatus] = useState<ModerationStatusPayload | null>(null)
   const [moderationModal, setModerationModal] = useState<'warning' | 'suspension' | null>(null)
   const [isAcknowledgingWarning, setIsAcknowledgingWarning] = useState(false)
@@ -490,11 +486,6 @@ export default function HomePage() {
 
     return () => subscription.unsubscribe()
   }, [checkAuth, supabase])
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    setShowTestLogin(params.get('test-login') === '1')
-  }, [])
 
   useEffect(() => {
     router.prefetch('/map')
@@ -1052,92 +1043,6 @@ export default function HomePage() {
     }
   }
 
-  const handleTestLogin = async () => {
-    if (!supabase) {
-      toast.error('인증 설정을 불러오지 못했습니다')
-      return
-    }
-
-    if (!testEmail.trim() || !testPassword) {
-      toast.error('테스트 계정 정보를 입력해주세요')
-      return
-    }
-
-    setIsStartingTestLogin(true)
-    setAuthNotice(null)
-    trackEvent('login_started', {
-      method: 'password_test',
-    })
-
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: testEmail.trim(),
-        password: testPassword,
-      })
-
-      if (error) throw error
-
-      const email = data.user?.email
-      if (!isGachonEmail(email)) {
-        await rejectNonGachonAccount()
-        return
-      }
-
-      setHasAuthenticatedSession(true)
-      setPendingProfileEmail(email ?? '')
-      setPendingProfileName(getGoogleAccountName(email, data.user.user_metadata))
-
-      const profileResponse = await fetch('/api/profile/me')
-      const profileResult = await profileResponse.json().catch(() => null) as MyProfilePayload | null
-      const userData = profileResult?.user
-
-      if (!profileResponse.ok) {
-        throw new Error(profileResult?.error ?? '프로필을 확인하지 못했습니다')
-      }
-
-      if (!profileResult?.profileCompleted || !userData) {
-        setUser(null)
-        setModerationStatus(null)
-        setModerationModal(null)
-        setAuthMode(null)
-        setHasEnteredApp(true)
-        router.push('/map')
-        await loadMapRooms()
-        trackEvent('login_succeeded', {
-          method: 'password_test',
-          profile_completed: false,
-        })
-        toast.success('지도에서 프로필을 완료해주세요')
-        return
-      }
-
-      setUser(userData)
-      await loadModerationStatus()
-      identifyAnalyticsUser(userData.id, {
-        profile_completed: true,
-        is_admin: userData.is_admin,
-        account_status: userData.status,
-        department: userData.department,
-      })
-      setAuthMode(null)
-      setHasEnteredApp(true)
-      router.push('/map')
-      trackEvent('login_succeeded', {
-        method: 'password_test',
-        profile_completed: true,
-      })
-      toast.success('테스트 계정으로 로그인했습니다')
-    } catch (error) {
-      console.error('Test login error:', error)
-      trackEvent('login_failed', {
-        method: 'password_test',
-      })
-      toast.error('테스트 로그인에 실패했습니다')
-    } finally {
-      setIsStartingTestLogin(false)
-    }
-  }
-
   const handleEnterApp = () => {
     setHasEnteredApp(true)
     trackEvent('map_opened', {
@@ -1333,42 +1238,6 @@ export default function HomePage() {
               </div>
             )}
 
-            {showTestLogin && !hasAuthenticatedSession && (
-              <form
-                className="mt-5 w-full max-w-[320px] rounded-lg border border-white/55 bg-white/90 p-3 shadow-[0_12px_30px_rgba(17,24,39,0.16)] backdrop-blur"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  handleTestLogin()
-                }}
-              >
-                <p className="mb-2 text-xs font-black text-gray-700">검수용 로그인</p>
-                <div className="space-y-2">
-                  <input
-                    type="email"
-                    value={testEmail}
-                    onChange={(event) => setTestEmail(event.target.value)}
-                    placeholder="아이디"
-                    autoComplete="username"
-                    className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm font-semibold text-gray-900 outline-none transition focus:border-primary-500"
-                  />
-                  <input
-                    type="password"
-                    value={testPassword}
-                    onChange={(event) => setTestPassword(event.target.value)}
-                    placeholder="비밀번호"
-                    autoComplete="current-password"
-                    className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm font-semibold text-gray-900 outline-none transition focus:border-primary-500"
-                  />
-                  <button
-                    type="submit"
-                    disabled={isStartingTestLogin}
-                    className="h-10 w-full rounded-lg bg-gray-950 text-sm font-black text-white transition hover:bg-gray-800 disabled:bg-gray-300"
-                  >
-                    {isStartingTestLogin ? '로그인 중...' : '테스트 계정으로 로그인'}
-                  </button>
-                </div>
-              </form>
-            )}
           </div>
 
           <div className="landing-footer">

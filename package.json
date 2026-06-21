@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "test": "node --test test/*.test.mjs",
+    "smoke:user": "node scripts/smoke-user.mjs",
     "start": "next start",
     "lint": "next lint"
   },

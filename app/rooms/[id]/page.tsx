@@ -5,6 +5,13 @@ import Image from 'next/image'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { ChatRoom, User, Message, RoomParticipant, PayoutAccount, LOCATIONS } from '@/lib/supabase'
+import {
+  extractHostAppearanceFromMessage,
+  splitMessages,
+  upsertMessage,
+  HOST_APPEARANCE_MESSAGE_PREFIX,
+  type MessageAuthor,
+} from '@/lib/chat/messages'
 import { formatAccountNumberForBank } from '@/lib/banks'
 import { identifyAnalyticsUser, trackEvent } from '@/lib/analytics/client'
 import { ArrowLeft, Users, Clock, Send, Flag, X, LogOut, Phone, CreditCard, Copy } from 'lucide-react'
@@ -13,25 +20,11 @@ import { ko } from 'date-fns/locale'
 import toast from 'react-hot-toast'
 
 const MAX_TIMESTAMP_REVEAL = 68
-const HOST_APPEARANCE_MESSAGE_PREFIX = '__gatita_host_appearance__:'
-const LEGACY_HOST_APPEARANCE_MESSAGE_PREFIX = '방장 인상착의:'
 
 type RoomPrivateInfoPayload = {
   phonesByUserId?: Record<string, string | null>
   creatorPayoutAccount?: PayoutAccount | null
   error?: string
-}
-
-function extractHostAppearanceFromMessage(content: string) {
-  if (content.startsWith(HOST_APPEARANCE_MESSAGE_PREFIX)) {
-    return content.slice(HOST_APPEARANCE_MESSAGE_PREFIX.length).trim()
-  }
-
-  if (content.startsWith(LEGACY_HOST_APPEARANCE_MESSAGE_PREFIX)) {
-    return content.slice(LEGACY_HOST_APPEARANCE_MESSAGE_PREFIX.length).trim()
-  }
-
-  return ''
 }
 
 export default function ChatRoomPage() {
@@ -85,6 +78,7 @@ export default function ChatRoomPage() {
   const roomSyncChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const trackedRoomOpenRef = useRef<string | null>(null)
   const preloadedParticipantAvatarUrlsRef = useRef(new Set<string>())
+  const authorsCacheRef = useRef(new Map<string, MessageAuthor>())
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     const scroller = messagesScrollRef.current
@@ -334,6 +328,26 @@ export default function ChatRoomPage() {
     }
   }, [roomId, router, supabase])
 
+  // 캐시에 없는 작성자만 조회해 채운다 (메시지마다 전체 작성자 재조회 방지).
+  const ensureAuthors = useCallback(async (userIds: string[]) => {
+    const missing = Array.from(new Set(userIds)).filter((id) => id && !authorsCacheRef.current.has(id))
+    if (missing.length === 0) return
+
+    const { data: authors, error } = await supabase
+      .from('users')
+      .select('id, nickname, department, avatar_url')
+      .in('id', missing)
+
+    if (error) {
+      console.error('Load message authors error:', error)
+      return
+    }
+
+    authors?.forEach((author) => {
+      authorsCacheRef.current.set(author.id, author as MessageAuthor)
+    })
+  }, [supabase])
+
   const loadMessages = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -344,46 +358,40 @@ export default function ChatRoomPage() {
 
       if (error) throw error
 
-      const messageRows = (data ?? []) as Message[]
-      const latestHostAppearance = messageRows
-        .map((message) => extractHostAppearanceFromMessage(message.content))
-        .filter(Boolean)
-        .at(-1) ?? ''
-      const visibleMessageRows = messageRows.filter((message) => !extractHostAppearanceFromMessage(message.content))
-      const authorIds = Array.from(new Set(visibleMessageRows.map((message) => message.user_id)))
-      const authorsById = new Map<string, Pick<User, 'id' | 'nickname' | 'department' | 'avatar_url'>>()
+      const { visible, latestHostAppearance } = splitMessages((data ?? []) as Message[])
 
       if (latestHostAppearance) {
         setHostAppearance(latestHostAppearance)
       }
       setHostAppearanceLoaded(true)
 
-      if (authorIds.length > 0) {
-        const { data: authors, error: authorError } = await supabase
-          .from('users')
-          .select('id, nickname, department, avatar_url')
-          .in('id', authorIds)
+      await ensureAuthors(visible.map((message) => message.user_id))
 
-        if (authorError) {
-          console.error('Load message authors error:', authorError)
-        } else {
-          authors?.forEach((author) => {
-            authorsById.set(author.id, author as Pick<User, 'id' | 'nickname' | 'department' | 'avatar_url'>)
-          })
-        }
-      }
-
-      const messagesWithAuthors = visibleMessageRows.map((message) => ({
+      setMessages(visible.map((message) => ({
         ...message,
-        user: authorsById.get(message.user_id),
-      }))
-
-      setMessages(messagesWithAuthors as Message[])
+        user: authorsCacheRef.current.get(message.user_id),
+      })) as Message[])
     } catch (error) {
       console.error('Load messages error:', error)
       setHostAppearanceLoaded(true)
     }
-  }, [roomId, supabase])
+  }, [ensureAuthors, roomId, supabase])
+
+  // 실시간으로 도착한 단일 메시지를 전체 재조회 없이 증분 반영한다.
+  const applyIncomingMessage = useCallback(async (incoming: Message) => {
+    const appearance = extractHostAppearanceFromMessage(incoming.content)
+    if (appearance) {
+      setHostAppearance(appearance)
+      return
+    }
+
+    await ensureAuthors([incoming.user_id])
+
+    setMessages((prev) => upsertMessage(prev, {
+      ...incoming,
+      user: authorsCacheRef.current.get(incoming.user_id),
+    } as Message))
+  }, [ensureAuthors])
 
   const loadParticipants = useCallback(async () => {
     try {
@@ -442,7 +450,8 @@ export default function ChatRoomPage() {
 
   const checkAuthAndLoadData = useCallback(async () => {
     try {
-      const { data: { user: authUser } } = await supabase.auth.getUser()
+      const { data: { session } } = await supabase.auth.getSession()
+      const authUser = session?.user
 
       if (!authUser) {
         router.push('/')
@@ -497,15 +506,14 @@ export default function ChatRoomPage() {
     checkAuthAndLoadData()
   }, [checkAuthAndLoadData, roomId, router])
 
-  const handleRealtimeRefresh = useCallback(async () => {
+  const handleParticipantsRefresh = useCallback(async () => {
     await Promise.all([
-      loadMessages(),
       loadParticipants(),
       user ? checkParticipation(user.id) : Promise.resolve(),
     ])
-  }, [checkParticipation, loadMessages, loadParticipants, user])
+  }, [checkParticipation, loadParticipants, user])
 
-  const broadcastRoomSync = useCallback(async (reason: 'message' | 'participants' | 'host-guide') => {
+  const broadcastRoomSync = useCallback(async (reason: 'participants') => {
     const channel = roomSyncChannelRef.current
     if (!channel) return
 
@@ -528,7 +536,7 @@ export default function ChatRoomPage() {
 
     const syncChannel = supabase
       .channel(`room-sync:${roomId}`)
-      .on('broadcast', { event: 'room-sync' }, handleRealtimeRefresh)
+      .on('broadcast', { event: 'room-sync' }, handleParticipantsRefresh)
       .subscribe()
 
     roomSyncChannelRef.current = syncChannel
@@ -543,7 +551,9 @@ export default function ChatRoomPage() {
           table: 'messages',
           filter: `room_id=eq.${roomId}`,
         },
-        handleRealtimeRefresh
+        (payload) => {
+          void applyIncomingMessage(payload.new as Message)
+        }
       )
       .subscribe()
 
@@ -557,7 +567,7 @@ export default function ChatRoomPage() {
           table: 'room_participants',
           filter: `room_id=eq.${roomId}`,
         },
-        handleRealtimeRefresh
+        handleParticipantsRefresh
       )
       .on(
         'postgres_changes',
@@ -566,7 +576,7 @@ export default function ChatRoomPage() {
           schema: 'public',
           table: 'room_participants',
         },
-        handleRealtimeRefresh
+        handleParticipantsRefresh
       )
       .subscribe()
 
@@ -578,7 +588,7 @@ export default function ChatRoomPage() {
       supabase.removeChannel(messagesChannel)
       supabase.removeChannel(participantsChannel)
     }
-  }, [handleRealtimeRefresh, room, roomId, supabase])
+  }, [applyIncomingMessage, handleParticipantsRefresh, room, roomId, supabase])
 
   useEffect(() => {
     if (loading || !room || !user) return
@@ -644,36 +654,48 @@ export default function ChatRoomPage() {
   const handleSendMessage = useCallback(async () => {
     if (!newMessage.trim() || !user) return
 
-    const tempMessage = {
+    // 내 작성자 정보를 캐시에 보장 (실시간 echo·이후 메시지에서 재사용)
+    authorsCacheRef.current.set(user.id, {
+      id: user.id,
+      nickname: user.nickname,
+      department: user.department,
+      avatar_url: user.avatar_url ?? null,
+    })
+
+    const tempMessage: Message = {
       id: `temp-${Date.now()}`,
       content: newMessage.trim(),
       user_id: user.id,
       room_id: roomId,
       created_at: new Date().toISOString(),
-      user: {
-        nickname: user.nickname,
-        department: user.department
-      }
+      user: authorsCacheRef.current.get(user.id) as User,
     }
 
     // 즉시 UI에 메시지 추가 (낙관적 업데이트)
-    setMessages(prev => [...prev, tempMessage as any])
+    setMessages((prev) => [...prev, tempMessage])
     setNewMessage('')
 
     try {
-      const { error } = await supabase
+      const { data: inserted, error } = await supabase
         .from('messages')
         .insert({
           room_id: roomId,
           user_id: user.id,
-          content: tempMessage.content
+          content: tempMessage.content,
         })
+        .select('id, room_id, user_id, content, created_at')
+        .single()
 
       if (error) throw error
 
-      // 서버에서 실제 메시지 다시 로드
-      await loadMessages()
-      await broadcastRoomSync('message')
+      // 실제 저장된 행으로 임시 메시지를 교체 (전체 재조회 없이). 실시간 echo는 같은 id라 멱등.
+      if (inserted) {
+        setMessages((prev) => upsertMessage(prev, {
+          ...(inserted as Message),
+          user: authorsCacheRef.current.get(user.id),
+        } as Message))
+      }
+
       trackEvent('chat_message_sent', {
         room_id: roomId,
         message_length: tempMessage.content.length,
@@ -681,12 +703,12 @@ export default function ChatRoomPage() {
       })
     } catch (error) {
       // 오류 시 임시 메시지 제거하고 입력창에 다시 표시
-      setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id))
+      setMessages((prev) => prev.filter((msg) => msg.id !== tempMessage.id))
       setNewMessage(tempMessage.content)
       console.error('Send message error:', error)
       toast.error('메시지 전송 중 오류가 발생했습니다')
     }
-  }, [broadcastRoomSync, isRoomCreator, loadMessages, newMessage, roomId, supabase, user])
+  }, [isRoomCreator, newMessage, roomId, supabase, user])
 
   const handleSendButtonPointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     if (event.pointerType !== 'touch') return
@@ -895,8 +917,6 @@ export default function ChatRoomPage() {
       setHostAppearance(hostAppearanceDraft.trim())
       setShowHostGuide(false)
       setHostAppearanceDraft('')
-      await loadMessages()
-      await broadcastRoomSync('host-guide')
       trackEvent('host_guide_saved', {
         room_id: roomId,
         appearance_length: hostAppearanceDraft.trim().length,

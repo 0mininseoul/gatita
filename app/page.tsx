@@ -406,7 +406,6 @@ export default function HomePage() {
             }
           }
           enterMap(true)
-          void loadMapRooms()
         } else {
           setPendingProfileName(getGoogleAccountName(email, session.user.user_metadata))
           setUser(null)
@@ -426,7 +425,6 @@ export default function HomePage() {
             })
           }
           enterMap(false)
-          void loadMapRooms()
         }
       } else if (window.location.pathname === '/map') {
         setHasAuthenticatedSession(false)
@@ -451,7 +449,7 @@ export default function HomePage() {
     } finally {
       setLoading(false)
     }
-  }, [loadMapRooms, loadModerationStatus, rejectNonGachonAccount, router, supabase])
+  }, [loadModerationStatus, rejectNonGachonAccount, router, supabase])
 
   useEffect(() => {
     if (!supabase) {
@@ -538,13 +536,40 @@ export default function HomePage() {
   }, [])
 
   useEffect(() => {
-    if (!hasAuthenticatedSession || !hasEnteredApp || authMode === 'signup') return
+    if (!supabase || !hasAuthenticatedSession || !hasEnteredApp || authMode === 'signup') return
 
     loadMapRooms()
-    const intervalId = window.setInterval(loadMapRooms, 30000)
 
-    return () => window.clearInterval(intervalId)
-  }, [authMode, hasAuthenticatedSession, hasEnteredApp, loadMapRooms])
+    // 30초 전체 폴링 대신 실시간 구독 + 디바운스 재조회 (chat_rooms는 마이그레이션 적용 후 발화)
+    let debounceId: ReturnType<typeof setTimeout> | null = null
+    const scheduleReload = () => {
+      if (debounceId) clearTimeout(debounceId)
+      debounceId = setTimeout(() => {
+        debounceId = null
+        loadMapRooms()
+      }, 500)
+    }
+
+    const channel = supabase
+      .channel('map-rooms')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_rooms' }, scheduleReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'room_participants' }, scheduleReload)
+      .subscribe()
+
+    // 실시간 누락 대비 저빈도 안전망 + 탭 복귀 시 갱신
+    const safetyId = window.setInterval(loadMapRooms, 120000)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') loadMapRooms()
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      if (debounceId) clearTimeout(debounceId)
+      window.clearInterval(safetyId)
+      document.removeEventListener('visibilitychange', handleVisibility)
+      supabase.removeChannel(channel)
+    }
+  }, [authMode, hasAuthenticatedSession, hasEnteredApp, loadMapRooms, supabase])
 
   const onlineDisplayCount = usePresenceDisplayCount(
     supabase,

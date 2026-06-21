@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, Fragment, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, Fragment, type CSSProperties, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import Image from 'next/image'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
@@ -73,6 +73,7 @@ export default function ChatRoomPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<HTMLDivElement>(null)
   const composerInputRef = useRef<HTMLInputElement>(null)
+  const composerSendButtonRef = useRef<HTMLButtonElement>(null)
   const hostAppearanceInputRef = useRef<HTMLInputElement>(null)
   const isComposerFocusedRef = useRef(false)
   const visualViewportBaselineRef = useRef(0)
@@ -820,17 +821,38 @@ export default function ChatRoomPage() {
   const handleSendButtonPointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     if (event.pointerType !== 'touch') return
 
-    // 전송 버튼 탭이 입력창의 포커스를 빼앗지 않게 해 키패드가 닫히지 않도록 한다
+    // 터치 전송: 입력창 포커스(=키패드)를 유지한 채 즉시 전송
     event.preventDefault()
     void handleSendMessage()
     focusComposerInput()
   }, [focusComposerInput, handleSendMessage])
+
+  // 데스크톱 마우스: 버튼이 입력창 포커스를 빼앗지 않도록 mousedown 기본 동작 차단
+  const handleSendButtonMouseDown = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+  }, [])
 
   const handleSendButtonClick = useCallback(() => {
     void handleSendMessage()
     // 데스크톱 클릭·폴백 경로에서도 입력창 포커스를 유지한다
     focusComposerInput()
   }, [focusComposerInput, handleSendMessage])
+
+  // iOS Safari/PWA에서는 화면을 탭하면 포커스가 입력창 밖으로 빠져 키패드가 닫힌다.
+  // 이를 막으려면 전송 버튼의 touchstart 기본 동작을 차단해야 하는데, React 합성
+  // 이벤트는 passive라 preventDefault가 무시되므로 네이티브 비-passive 리스너로 등록한다.
+  // (키패드 밖 영역을 터치해 닫는 동작은 입력창 onBlur에서 그대로 유지된다.)
+  useEffect(() => {
+    const button = composerSendButtonRef.current
+    if (!button) return
+
+    const preventComposerBlur = (event: TouchEvent) => {
+      event.preventDefault()
+    }
+
+    button.addEventListener('touchstart', preventComposerBlur, { passive: false })
+    return () => button.removeEventListener('touchstart', preventComposerBlur)
+  }, [isParticipant])
 
   const handleConfirmParticipation = async () => {
     if (!user || isConfirmed || isConfirmingParticipation) return
@@ -1244,8 +1266,11 @@ export default function ChatRoomPage() {
               className="min-w-0 flex-1 rounded-full border border-gray-200 px-4 py-2 text-base focus:border-primary-600 focus:ring-2 focus:ring-primary-100"
             />
             <button
+              ref={composerSendButtonRef}
+              type="button"
               onClick={handleSendButtonClick}
               onPointerDown={handleSendButtonPointerDown}
+              onMouseDown={handleSendButtonMouseDown}
               disabled={!newMessage.trim()}
               className="shrink-0 rounded-full bg-primary-600 p-2 text-white hover:bg-primary-700 disabled:bg-gray-300"
             >

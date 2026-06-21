@@ -31,6 +31,23 @@ test('sending a message keeps the composer input focused so the keyboard stays o
   assert.match(source, /onClick=\{handleSendButtonClick\}/)
 })
 
+test('send button blocks composer blur even where synthetic touch events are passive (iOS)', () => {
+  const source = readProjectFile('app/rooms/[id]/page.tsx')
+
+  // 전송 버튼에 ref 연결
+  assert.match(source, /const composerSendButtonRef = useRef<HTMLButtonElement>\(null\)/)
+  assert.match(source, /ref=\{composerSendButtonRef\}/)
+
+  // React 합성 touchstart는 passive라 막을 수 없으므로 네이티브 비-passive 리스너로 preventDefault
+  assert.match(source, /addEventListener\('touchstart', preventComposerBlur, \{ passive: false \}\)/)
+  assert.match(source, /const preventComposerBlur = \(event: TouchEvent\) => \{\s*\n\s*event\.preventDefault\(\)/)
+  assert.match(source, /removeEventListener\('touchstart', preventComposerBlur\)/)
+
+  // 데스크톱 마우스도 버튼이 포커스를 빼앗지 않도록 mousedown 차단
+  assert.match(source, /onMouseDown=\{handleSendButtonMouseDown\}/)
+  assert.match(source, /const handleSendButtonMouseDown = useCallback\(\(event: ReactMouseEvent<HTMLButtonElement>\) => \{\s*\n\s*event\.preventDefault\(\)/)
+})
+
 test('chat messages render a KakaoTalk-style date divider when the day changes', () => {
   const source = readProjectFile('app/rooms/[id]/page.tsx')
 

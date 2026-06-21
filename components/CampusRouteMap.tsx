@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Clock, Compass, Minus, Plus, Users, X } from 'lucide-react'
 import {
   getDepartureTimeOptions,
@@ -233,6 +233,17 @@ export default function CampusRouteMap({
     setDraftDepartureHour('')
     setDraftDepartureMinute('')
   }, [onSelectFrom])
+
+  // The close button sits above the momentum-scrolling sheet body (-webkit-overflow-
+  // scrolling: touch). On iOS that scroller can swallow the first synthetic click, so
+  // taps appear to do nothing until repeated. Acting on pointerdown for touch closes
+  // the sheet on the first tap (same approach as the chat send button). preventDefault
+  // works here because React pointerdown — unlike touchstart — is not passive.
+  const handleCloseSheetPointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType !== 'touch') return
+    event.preventDefault()
+    closeSheet()
+  }, [closeSheet])
 
   const handleZoomIn = useCallback(() => {
     const map = mapRef.current
@@ -512,8 +523,9 @@ export default function CampusRouteMap({
           <button
             type="button"
             aria-label="선택 닫기"
+            onPointerDown={handleCloseSheetPointerDown}
             onClick={closeSheet}
-            className="absolute right-1.5 top-1.5 inline-flex h-12 w-12 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
+            className="absolute right-1.5 top-1.5 z-10 inline-flex h-12 w-12 touch-manipulation items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
           >
             <X className="h-5 w-5" />
           </button>

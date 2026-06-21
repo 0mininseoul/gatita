@@ -381,8 +381,14 @@ test('map app and bottom sheet use the visual viewport and internal sheet scroll
   assert.match(mapSource, /className="gatita-bottom-sheet-body/)
   assert.match(
     mapSource,
-    /aria-label="선택 닫기"[\s\S]*className="absolute right-1\.5 top-1\.5 inline-flex h-12 w-12/,
-    'bottom sheet close button should expose a comfortable (>=44px) touch target near the top-right corner',
+    /aria-label="선택 닫기"[\s\S]*onPointerDown=\{handleCloseSheetPointerDown\}[\s\S]*className="absolute right-1\.5 top-1\.5 z-10 inline-flex h-12 w-12 touch-manipulation/,
+    'close button must fire on touch pointerdown and expose a comfortable (>=44px) touch target near the top-right corner',
+  )
+  // iOS: acting on pointerdown for touch avoids the momentum-scroll body swallowing the first click.
+  assert.match(
+    mapSource,
+    /handleCloseSheetPointerDown = useCallback\(\(event: ReactPointerEvent<HTMLButtonElement>\) => \{\s*if \(event\.pointerType !== 'touch'\) return\s*event\.preventDefault\(\)\s*closeSheet\(\)/,
+    'close button pointerdown handler should preventDefault and close on the first touch',
   )
   assert.match(mapSource, /gatita-bottom-sheet-body">\s*<div className="pr-14"/, 'sheet body should clear the enlarged close button')
   assert.doesNotMatch(mapSource, /bottom-3/)

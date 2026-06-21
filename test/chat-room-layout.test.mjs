@@ -379,7 +379,12 @@ test('map app and bottom sheet use the visual viewport and internal sheet scroll
   assert.match(pageSource, /className="fixed inset-x-0 top-0 z-\[\d+\][^"]*items-end[\s\S]*style=\{\{ height: 'var\(--app-viewport-height\)' \}\}/, 'map overlays should anchor to the visual viewport instead of a shifted map container')
   assert.match(mapSource, /className="gatita-bottom-sheet/)
   assert.match(mapSource, /className="gatita-bottom-sheet-body/)
-  assert.match(mapSource, /aria-label="선택 닫기"[\s\S]*className="absolute right-3 top-3/, 'bottom sheet close icon should sit inside the content edge')
+  assert.match(
+    mapSource,
+    /aria-label="선택 닫기"[\s\S]*className="absolute right-1\.5 top-1\.5 inline-flex h-12 w-12/,
+    'bottom sheet close button should expose a comfortable (>=44px) touch target near the top-right corner',
+  )
+  assert.match(mapSource, /gatita-bottom-sheet-body">\s*<div className="pr-14"/, 'sheet body should clear the enlarged close button')
   assert.doesNotMatch(mapSource, /bottom-3/)
   assert.match(sheetBlock, /max-height:\s*min\(72vh, calc\(var\(--app-viewport-height\) - 8\.75rem\)\);/)
   assert.match(sheetBlock, /bottom:\s*max\(1rem, env\(safe-area-inset-bottom\)\);/)

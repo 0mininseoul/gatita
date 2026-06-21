@@ -146,6 +146,24 @@ test('departure time options use one minute intervals through 01:00', () => {
   )
 })
 
+test('departure time options always start at least a full minute after now', () => {
+  // 19:25:10 -> next whole minute 19:26 is only 50s away, so the soonest option is 19:27.
+  const withSeconds = getDepartureTimeOptions(new Date('2026-06-21T19:25:10+09:00'), 1)
+  assert.equal(withSeconds[0], '19:27')
+  assert.ok(!withSeconds.includes('19:25'))
+  assert.ok(!withSeconds.includes('19:26'))
+
+  // 19:25:59 -> next boundary 19:26 is 1s away -> soonest option is still 19:27.
+  assert.equal(getDepartureTimeOptions(new Date('2026-06-21T19:25:59+09:00'), 1)[0], '19:27')
+
+  // Exactly on the minute keeps a full 60s lead -> 19:26 is allowed.
+  assert.equal(getDepartureTimeOptions(new Date('2026-06-21T19:25:00+09:00'), 1)[0], '19:26')
+
+  // getDepartureDateForTime shares the same window start, so a sub-minute option is rejected.
+  assert.equal(getDepartureDateForTime(new Date('2026-06-21T19:25:10+09:00'), '19:26'), null)
+  assert.equal(getDepartureDateForTime(new Date('2026-06-21T19:25:10+09:00'), '19:27'), '2026-06-21')
+})
+
 test('legacy rooms create modal also uses future departure time options', () => {
   const source = readProjectFile('app/rooms/page.tsx')
 
@@ -170,6 +188,29 @@ test('departure date follows the selected post-midnight time', () => {
   const now = new Date('2026-06-18T20:48:00+09:00')
   assert.equal(getDepartureDateForTime(now, '21:00'), '2026-06-18')
   assert.equal(getDepartureDateForTime(now, '00:30'), '2026-06-19')
+  // The 01:00 cutoff is inclusive, matching getDepartureTimeOptions.
+  assert.equal(getDepartureDateForTime(now, '01:00'), '2026-06-19')
+})
+
+test('departure date rejects times outside the [now, next 01:00] window', () => {
+  // Regression: a stale option (selected while the form was open, then submitted
+  // after that time has passed) must NOT roll over to the next evening.
+  // Form opened at 19:00 (19:25 was a valid same-day option), submitted at 19:51.
+  const submittedLate = new Date('2026-06-21T19:51:00+09:00')
+  assert.equal(getDepartureDateForTime(submittedLate, '19:25'), null)
+
+  // Anything past the next-day 01:00 cutoff is rejected outright.
+  assert.equal(getDepartureDateForTime(submittedLate, '01:01'), null)
+  assert.equal(getDepartureDateForTime(submittedLate, '12:00'), null)
+
+  // Still-valid selections continue to resolve normally.
+  assert.equal(getDepartureDateForTime(submittedLate, '20:00'), '2026-06-21')
+  assert.equal(getDepartureDateForTime(submittedLate, '00:30'), '2026-06-22')
+
+  // After midnight, daytime selections are out of window and rejected.
+  const afterMidnight = new Date('2026-06-22T00:30:00+09:00')
+  assert.equal(getDepartureDateForTime(afterMidnight, '00:45'), '2026-06-22')
+  assert.equal(getDepartureDateForTime(afterMidnight, '20:00'), null)
 })
 
 test('map room date range includes the next day for post-midnight departures', () => {

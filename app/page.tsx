@@ -869,10 +869,21 @@ export default function HomePage() {
       departure_time: departureTime,
       source: 'map_bottom_sheet',
     })
+    const departureDate = getDepartureDateForTime(new Date(), departureTime)
+    if (!departureDate) {
+      toast.error('출발 가능 시간이 지났어요. 시간을 다시 선택해주세요')
+      trackEvent('room_create_failed', {
+        from_location: roomFromLocation,
+        to_location: roomToLocation,
+        departure_time: departureTime,
+        reason: 'departure_time_out_of_window',
+      })
+      return
+    }
+
     setIsCreatingMapRoom(true)
 
     try {
-      const departureDate = getDepartureDateForTime(new Date(), departureTime)
       const title = `${departureTime} ${LOCATIONS[roomFromLocation]}→${LOCATIONS[roomToLocation]}`
 
       const { data: room, error } = await supabase

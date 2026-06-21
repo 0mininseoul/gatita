@@ -204,12 +204,32 @@ function formatLocalDate(date: Date) {
   return `${year}-${month}-${day}`
 }
 
+// The earliest selectable departure minute: the first whole minute that is at
+// least one full minute after `now`. Rounding only to the next minute boundary
+// would allow an option barely seconds in the future (e.g. at 19:25:59 the next
+// boundary 19:26 is 1s away), which then races past `now` during submission.
+// Requiring a full-minute lead keeps every offered time comfortably in the future.
+export const MIN_DEPARTURE_LEAD_MS = 60_000
+
+function getEarliestDepartureMinute(now: Date) {
+  const earliest = new Date(now)
+  earliest.setSeconds(0, 0)
+  earliest.setMinutes(earliest.getMinutes() + 1)
+  if (earliest.getTime() - now.getTime() < MIN_DEPARTURE_LEAD_MS) {
+    earliest.setMinutes(earliest.getMinutes() + 1)
+  }
+  return earliest
+}
+
 export function getDepartureTimeOptions(now = new Date(), intervalMinutes = 1) {
   const options: string[] = []
-  const nextTime = new Date(now)
-  const currentMinutes = nextTime.getMinutes()
-  const minutesUntilNextInterval = intervalMinutes - (currentMinutes % intervalMinutes)
-  nextTime.setMinutes(currentMinutes + minutesUntilNextInterval, 0, 0)
+  const nextTime = getEarliestDepartureMinute(now)
+
+  // Snap up to the next interval boundary (a no-op when intervalMinutes === 1).
+  const remainder = nextTime.getMinutes() % intervalMinutes
+  if (remainder !== 0) {
+    nextTime.setMinutes(nextTime.getMinutes() + (intervalMinutes - remainder), 0, 0)
+  }
 
   const cutoff = new Date(nextTime)
   cutoff.setHours(1, 0, 0, 0)
@@ -227,16 +247,38 @@ export function getDepartureTimeOptions(now = new Date(), intervalMinutes = 1) {
   return options
 }
 
-export function getDepartureDateForTime(now: Date, departureTime: string) {
+// Resolves the concrete calendar date for a selected HH:MM, using the exact same
+// window as getDepartureTimeOptions: [earliest departure minute, the upcoming 01:00].
+// Returns null when the time falls outside that window (e.g. a stale option that
+// was selected while the form was open and only submitted after it had passed),
+// so callers never silently roll a same-day evening time over to the next evening.
+export function getDepartureDateForTime(now: Date, departureTime: string): string | null {
   const [hours, minutes] = departureTime.split(':').map(Number)
-  const departureDate = new Date(now)
-  departureDate.setHours(hours, minutes, 0, 0)
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null
 
-  if (departureDate <= now) {
-    departureDate.setDate(departureDate.getDate() + 1)
+  // Shares getDepartureTimeOptions' first offered minute so the two never disagree.
+  const windowStart = getEarliestDepartureMinute(now)
+
+  // cutoff is the upcoming 01:00 (today's if we are still before it, else tomorrow's).
+  const cutoff = new Date(windowStart)
+  cutoff.setHours(1, 0, 0, 0)
+  if (windowStart > cutoff) {
+    cutoff.setDate(cutoff.getDate() + 1)
   }
 
-  return formatLocalDate(departureDate)
+  const candidate = new Date(windowStart)
+  candidate.setHours(hours, minutes, 0, 0)
+  // A time-of-day earlier than the window start belongs to the following day
+  // (the post-midnight portion of the window).
+  if (candidate < windowStart) {
+    candidate.setDate(candidate.getDate() + 1)
+  }
+
+  if (candidate < windowStart || candidate > cutoff) {
+    return null
+  }
+
+  return formatLocalDate(candidate)
 }
 
 export function getMapRoomDateRange(now = new Date()) {

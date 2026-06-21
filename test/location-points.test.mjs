@@ -211,6 +211,10 @@ test('departure date rejects times outside the [now, next 01:00] window', () => 
   const afterMidnight = new Date('2026-06-22T00:30:00+09:00')
   assert.equal(getDepartureDateForTime(afterMidnight, '00:45'), '2026-06-22')
   assert.equal(getDepartureDateForTime(afterMidnight, '20:00'), null)
+
+  // Malformed time strings resolve to null rather than an Invalid Date.
+  assert.equal(getDepartureDateForTime(submittedLate, '19'), null)
+  assert.equal(getDepartureDateForTime(submittedLate, ''), null)
 })
 
 test('map room date range includes the next day for post-midnight departures', () => {

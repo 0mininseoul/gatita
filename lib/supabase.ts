@@ -209,7 +209,7 @@ function formatLocalDate(date: Date) {
 // would allow an option barely seconds in the future (e.g. at 19:25:59 the next
 // boundary 19:26 is 1s away), which then races past `now` during submission.
 // Requiring a full-minute lead keeps every offered time comfortably in the future.
-export const MIN_DEPARTURE_LEAD_MS = 60_000
+const MIN_DEPARTURE_LEAD_MS = 60_000
 
 function getEarliestDepartureMinute(now: Date) {
   const earliest = new Date(now)
@@ -254,7 +254,9 @@ export function getDepartureTimeOptions(now = new Date(), intervalMinutes = 1) {
 // so callers never silently roll a same-day evening time over to the next evening.
 export function getDepartureDateForTime(now: Date, departureTime: string): string | null {
   const [hours, minutes] = departureTime.split(':').map(Number)
-  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null
+  // isFinite (not isNaN) also rejects a malformed time whose minute is undefined,
+  // e.g. "19" → [19, undefined], which would otherwise yield an Invalid Date.
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null
 
   // Shares getDepartureTimeOptions' first offered minute so the two never disagree.
   const windowStart = getEarliestDepartureMinute(now)

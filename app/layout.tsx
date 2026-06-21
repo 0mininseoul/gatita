@@ -22,7 +22,7 @@ const paperlogy = localFont({
   fallback: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
 })
 const siteUrl = 'https://gatitagachon.vercel.app'
-const SPLASH_ASSET_VERSION = '20260619-03'
+const SPLASH_ASSET_VERSION = '20260621-01'
 const splashImageUrl = (fileName: string) => `/splash/${fileName}.png?v=${SPLASH_ASSET_VERSION}`
 
 // Next emits these entries as <link rel="apple-touch-startup-image"> tags for iOS PWAs.
@@ -46,6 +46,21 @@ const iosStartupImages = [
   {
     url: splashImageUrl('iphone-14'),
     media: 'screen and (device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)',
+  },
+  {
+    // 393×852: iPhone 14 Pro / 15 / 15 Pro / 16 (가장 흔한 누락 크기 — 흰 화면 원인)
+    url: splashImageUrl('iphone-15'),
+    media: 'screen and (device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)',
+  },
+  {
+    // 428×926: iPhone 12/13 Pro Max, 14 Plus
+    url: splashImageUrl('iphone-14-plus'),
+    media: 'screen and (device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)',
+  },
+  {
+    // 360×780: iPhone 12 mini / 13 mini
+    url: splashImageUrl('iphone-13-mini'),
+    media: 'screen and (device-width: 360px) and (device-height: 780px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)',
   },
   {
     url: splashImageUrl('iphone-xs-max'),

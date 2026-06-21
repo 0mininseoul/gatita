@@ -17,6 +17,7 @@
   --chat-header-height: 0px;
   --chat-composer-height: 0px;
   --chat-keyboard-inset: 0px;
+  --chat-viewport-height: 100dvh;
   --timestamp-reveal: 0px;
   --timestamp-opacity: 0;
 }
@@ -386,8 +387,9 @@
   }
 
   .chat-guide-sheet {
-    max-height: min(82vh, 42rem);
+    max-height: min(calc(var(--chat-viewport-height) - 1.25rem), 42rem);
     overflow-y: auto;
+    overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
   }
 

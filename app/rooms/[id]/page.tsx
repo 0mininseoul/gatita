@@ -73,6 +73,7 @@ export default function ChatRoomPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<HTMLDivElement>(null)
   const composerInputRef = useRef<HTMLInputElement>(null)
+  const hostAppearanceInputRef = useRef<HTMLInputElement>(null)
   const isComposerFocusedRef = useRef(false)
   const visualViewportBaselineRef = useRef(0)
   const timestampDragRef = useRef({
@@ -138,12 +139,22 @@ export default function ChatRoomPage() {
     root.style.setProperty('--chat-header-height', `${Math.ceil(headerHeight)}px`)
     root.style.setProperty('--chat-composer-height', `${Math.ceil(composerHeight)}px`)
     root.style.setProperty('--chat-keyboard-inset', `${Math.ceil(keyboardInset)}px`)
+    root.style.setProperty('--chat-viewport-height', `${Math.ceil(viewportHeight)}px`)
   }, [])
 
   const syncAndPinChat = useCallback(() => {
     syncChatChrome()
     requestAnimationFrame(keepWindowPinned)
   }, [keepWindowPinned, syncChatChrome])
+
+  const scrollHostAppearanceInputIntoView = useCallback(() => {
+    window.setTimeout(() => {
+      hostAppearanceInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 120)
+    window.setTimeout(() => {
+      hostAppearanceInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 320)
+  }, [])
 
   useEffect(() => {
     const root = document.documentElement
@@ -162,6 +173,7 @@ export default function ChatRoomPage() {
     const previousChatHeaderHeight = root.style.getPropertyValue('--chat-header-height')
     const previousChatComposerHeight = root.style.getPropertyValue('--chat-composer-height')
     const previousChatKeyboardInset = root.style.getPropertyValue('--chat-keyboard-inset')
+    const previousChatViewportHeight = root.style.getPropertyValue('--chat-viewport-height')
 
     const restoreProperty = (property: string, value: string) => {
       if (value) {
@@ -211,6 +223,7 @@ export default function ChatRoomPage() {
       restoreProperty('--chat-header-height', previousChatHeaderHeight)
       restoreProperty('--chat-composer-height', previousChatComposerHeight)
       restoreProperty('--chat-keyboard-inset', previousChatKeyboardInset)
+      restoreProperty('--chat-viewport-height', previousChatViewportHeight)
       resizeObserver?.disconnect()
       window.visualViewport?.removeEventListener('resize', syncAndPinChat)
       window.removeEventListener('resize', syncAndPinChat)
@@ -1344,7 +1357,10 @@ export default function ChatRoomPage() {
 
       {/* 방장 최초 안내 모달 */}
       {showHostGuide && (
-        <div className="fixed inset-0 z-50 flex items-end bg-gray-950/35 px-3 pb-3 pt-16">
+        <div
+          className="fixed inset-x-0 top-0 z-50 flex items-end bg-gray-950/35 px-3 pb-3 pt-16"
+          style={{ height: 'var(--chat-viewport-height)' }}
+        >
           <div className="chat-guide-sheet w-full rounded-2xl bg-white p-4 shadow-2xl">
             <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-gray-200" />
             <div className="mb-4">
@@ -1374,10 +1390,12 @@ export default function ChatRoomPage() {
               방장 인상착의
             </label>
             <input
+              ref={hostAppearanceInputRef}
               id="host-appearance"
               type="text"
               value={hostAppearanceDraft}
               onChange={(event) => setHostAppearanceDraft(event.target.value)}
+              onFocus={scrollHostAppearanceInputIntoView}
               placeholder="예: 검은 백팩, 파란 후드"
               maxLength={60}
               className="input-field mt-2 text-base"

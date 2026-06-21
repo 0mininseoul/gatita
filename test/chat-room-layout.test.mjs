@@ -23,6 +23,9 @@ test('chat room uses fixed messenger chrome with document scroll locking', () =>
   assert.match(source, /isComposerFocusedRef/)
   assert.match(source, /visualViewportBaselineRef/)
   assert.match(source, /--chat-keyboard-inset/)
+  assert.match(source, /--chat-viewport-height/)
+  assert.match(source, /hostAppearanceInputRef/)
+  assert.match(source, /scrollHostAppearanceInputIntoView/)
   assert.match(source, /className="chat-room-header/)
   assert.match(source, /className="chat-messages/)
   assert.match(source, /className="chat-composer/)
@@ -38,6 +41,7 @@ test('chat room CSS keeps the header fixed while the keyboard only moves the low
   const headerBlock = cssBlock(source, '.chat-room-header')
   const messagesBlock = cssBlock(source, '.chat-messages')
   const composerBlock = cssBlock(source, '.chat-composer')
+  const guideSheetBlock = cssBlock(source, '.chat-guide-sheet')
 
   assert.match(shellBlock, /height:\s*100%;/)
   assert.doesNotMatch(shellBlock, /height:\s*100dvh;/)
@@ -48,6 +52,9 @@ test('chat room CSS keeps the header fixed while the keyboard only moves the low
   assert.doesNotMatch(messagesBlock, /padding-bottom:[^;]*--chat-keyboard-inset/)
   assert.match(composerBlock, /bottom:\s*var\(--chat-keyboard-inset\);/)
   assert.match(composerBlock, /padding-bottom:\s*max\(0\.5rem, calc\(env\(safe-area-inset-bottom\) \* 0\.38\)\);/)
+  assert.match(guideSheetBlock, /max-height:\s*min\(calc\(var\(--chat-viewport-height\) - 1\.25rem\), 42rem\);/, 'guide sheets should shrink to the iOS visual viewport when the keyboard is open')
+  assert.match(guideSheetBlock, /overflow-y:\s*auto;/, 'guide sheets should scroll internally when the keyboard covers content')
+  assert.match(guideSheetBlock, /overscroll-behavior:\s*contain;/)
 })
 
 test('chat bubbles use compact mobile messenger spacing', () => {
@@ -297,6 +304,9 @@ test('room creators see a first-room guide and submit a one-line appearance note
   assert.match(source, /hostAppearance/)
   assert.match(source, /hostAppearanceLoaded/)
   assert.match(source, /hostAppearanceDraft/)
+  assert.match(source, /style=\{\{ height: 'var\(--chat-viewport-height\)' \}\}/)
+  assert.match(source, /ref=\{hostAppearanceInputRef\}/)
+  assert.match(source, /onFocus=\{scrollHostAppearanceInputIntoView\}/)
   assert.match(source, /방장 인상착의/)
   assert.match(source, /HOST_APPEARANCE_MESSAGE_PREFIX/)
   assert.match(source, /content: `\$\{HOST_APPEARANCE_MESSAGE_PREFIX\}\$\{hostAppearanceDraft\.trim\(\)\}`/)

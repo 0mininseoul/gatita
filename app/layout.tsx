@@ -3,6 +3,7 @@ import localFont from 'next/font/local'
 import { Toaster } from 'react-hot-toast'
 import { Metadata, Viewport } from 'next'
 import AnalyticsProvider from '@/components/AnalyticsProvider'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 
 const paperlogy = localFont({
   src: [
@@ -173,6 +174,7 @@ export default function RootLayout({
             },
           }}
         />
+        <SpeedInsights />
       </body>
     </html>
   )

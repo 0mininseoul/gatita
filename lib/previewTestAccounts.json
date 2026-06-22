@@ -1,0 +1,23 @@
+[
+  {
+    "key": "preview-1",
+    "email": "gatita.preview.01@gachon.ac.kr",
+    "name": "김하나",
+    "nickname": "세연",
+    "department": "컴퓨터공학과"
+  },
+  {
+    "key": "preview-2",
+    "email": "gatita.preview.02@gachon.ac.kr",
+    "name": "이도윤",
+    "nickname": "수정",
+    "department": "AI소프트웨어학부"
+  },
+  {
+    "key": "preview-3",
+    "email": "gatita.preview.03@gachon.ac.kr",
+    "name": "박서연",
+    "nickname": "유진",
+    "department": "경영학부"
+  }
+]

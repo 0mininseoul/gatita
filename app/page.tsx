@@ -21,6 +21,7 @@ import {
 import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
 import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, extractGachonProfileFromMetadata, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
 import { isInstalled } from '@/lib/pwa'
+import { PREVIEW_TEST_ACCOUNTS, isPreviewTestLoginEnabled } from '@/lib/previewTestAccounts'
 import { identifyAnalyticsUser, shouldSuppressAnalyticsForUser, suppressAnalyticsForCurrentDevice, trackEvent } from '@/lib/analytics/client'
 import { AlertTriangle, ArrowRight, Ban, Clock, MessageSquareText, Share2, Star, Settings, Users, X } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -159,6 +160,7 @@ export default function HomePage() {
   const [unreadCount, setUnreadCount] = useState(0)
   const [isCreatingMapRoom, setIsCreatingMapRoom] = useState(false)
   const [isStartingGoogle, setIsStartingGoogle] = useState(false)
+  const [startingPreviewAccountKey, setStartingPreviewAccountKey] = useState<string | null>(null)
   const [hasEnteredApp, setHasEnteredApp] = useState(false)
   const [showPwaOnboarding, setShowPwaOnboarding] = useState(false)
   const [routeCoachStep, setRouteCoachStep] = useState<'hidden' | 'select' | 'action'>('hidden')
@@ -172,6 +174,7 @@ export default function HomePage() {
   const router = useRouter()
   const pathname = usePathname()
   const isMapRoute = pathname === '/map'
+  const previewTestLoginEnabled = isPreviewTestLoginEnabled()
 
   const supabase = useMemo(() => {
     try {
@@ -1185,6 +1188,42 @@ export default function HomePage() {
     }
   }
 
+  const handlePreviewTestLogin = async (accountKey: string) => {
+    if (!previewTestLoginEnabled) return
+
+    setAuthNotice(null)
+    setStartingPreviewAccountKey(accountKey)
+    rememberPendingLogin('preview_test')
+    trackEvent('login_started', {
+      method: 'preview_test',
+      account_key: accountKey,
+    })
+
+    try {
+      const response = await fetch('/api/auth/preview-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountKey }),
+      })
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        throw new Error(result?.error ?? '프리뷰 계정 로그인에 실패했습니다')
+      }
+
+      window.location.assign('/map?auth=complete')
+    } catch (error) {
+      console.error('Preview test login error:', error)
+      window.sessionStorage.removeItem(ANALYTICS_PENDING_LOGIN_KEY)
+      trackEvent('login_failed', {
+        method: 'preview_test',
+        account_key: accountKey,
+      })
+      toast.error(error instanceof Error ? error.message : '프리뷰 계정 로그인에 실패했습니다')
+      setStartingPreviewAccountKey(null)
+    }
+  }
+
   const handleEnterApp = () => {
     setHasEnteredApp(true)
     trackEvent('map_opened', {
@@ -1380,6 +1419,29 @@ export default function HomePage() {
             {authNotice && !hasAuthenticatedSession && (
               <div role="alert" className="auth-notice">
                 {authNotice}
+              </div>
+            )}
+
+            {previewTestLoginEnabled && !hasAuthenticatedSession && (
+              <div
+                aria-label="프리뷰 계정"
+                className="grid w-full max-w-xs grid-cols-3 gap-2 rounded-lg border border-white/20 bg-white/10 p-2 backdrop-blur"
+              >
+                {PREVIEW_TEST_ACCOUNTS.map((account) => {
+                  const isStarting = startingPreviewAccountKey === account.key
+
+                  return (
+                    <button
+                      key={account.key}
+                      type="button"
+                      onClick={() => handlePreviewTestLogin(account.key)}
+                      disabled={Boolean(startingPreviewAccountKey) || isStartingGoogle}
+                      className="min-h-10 rounded-lg border border-white/25 bg-white/90 px-2 text-sm font-black text-gray-950 shadow-sm transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isStarting ? '입장 중...' : account.nickname}
+                    </button>
+                  )
+                })}
               </div>
             )}
 

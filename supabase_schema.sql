@@ -12,40 +12,37 @@ create type location_type as enum (
   '중앙도서관'
 );
 
--- Users table
+-- Users table (public profile). A row is auto-created on Gachon login via
+-- handle_new_user(); nickname/department stay null until onboarding completes.
 create table public.users (
   id uuid references auth.users on delete cascade primary key,
-  nickname varchar(50) unique not null,
+  nickname varchar(50) unique,
   nickname_updated_at timestamp with time zone,
-  department varchar(100) not null,
+  department varchar(100),
   avatar_url text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
 -- Private profiles table. Never expose this table broadly to browser clients.
+-- A row is auto-created on Gachon login; phone/bank fields and onboarded_at are
+-- filled when the user completes onboarding. Payout (bank) fields live here.
 create table public.user_private_profiles (
   user_id uuid references public.users(id) on delete cascade primary key,
   email varchar(255) unique not null,
-  name varchar(100) not null,
-  phone varchar(20) not null,
+  name varchar(100),
+  phone varchar(20),
   phone_verified_at timestamp with time zone,
   phone_mfa_factor_id uuid,
+  bank_name varchar(50),
+  account_number varchar(80),
+  account_holder varchar(100),
   status varchar(20) not null default 'active' check (status in ('active', 'suspended')),
   suspended_until timestamp with time zone,
   suspension_reason text,
   moderation_updated_at timestamp with time zone,
   is_admin boolean not null default false,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
-
--- Payout accounts table
-create table public.user_payout_accounts (
-  user_id uuid references public.users(id) on delete cascade primary key,
-  bank_name varchar(50) not null,
-  account_number varchar(80) not null,
-  account_holder varchar(100) not null,
+  onboarded_at timestamp with time zone,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -131,7 +128,6 @@ create table public.favorites (
 -- Enable RLS (Row Level Security)
 alter table public.users enable row level security;
 alter table public.user_private_profiles enable row level security;
-alter table public.user_payout_accounts enable row level security;
 alter table public.chat_rooms enable row level security;
 alter table public.room_participants enable row level security;
 alter table public.messages enable row level security;
@@ -147,7 +143,6 @@ grant select (id, nickname, nickname_updated_at, department, avatar_url, created
   on table public.users to authenticated;
 grant update (nickname, nickname_updated_at, avatar_url) on table public.users to authenticated;
 grant select on table public.user_private_profiles to authenticated;
-grant select, insert, update on table public.user_payout_accounts to authenticated;
 grant select, insert, update, delete on table public.chat_rooms to authenticated;
 grant select, insert on table public.room_participants to authenticated;
 grant all on table public.room_participants to service_role;
@@ -226,26 +221,9 @@ create policy "Users can read own private profile"
   to authenticated
   using ((select auth.uid()) = user_id);
 
--- Payout accounts: browser clients can manage only their own payout account.
--- Room creator payout account display is served through a room-scoped server API.
-create policy "Users can read own payout account"
-  on public.user_payout_accounts
-  for select
-  to authenticated
-  using ((select auth.uid()) = user_id);
-
-create policy "Users can insert own payout account"
-  on public.user_payout_accounts
-  for insert
-  to authenticated
-  with check ((select auth.uid()) = user_id);
-
-create policy "Users can update own payout account"
-  on public.user_payout_accounts
-  for update
-  to authenticated
-  using ((select auth.uid()) = user_id)
-  with check ((select auth.uid()) = user_id);
+-- Payout (bank) fields live on user_private_profiles and are written only by the
+-- server (admin client) via /api/profile/complete and /api/profile/payout. Room
+-- creator payout display is served through a room-scoped server API.
 
 -- Chat rooms: Everyone can read, authenticated active users can create
 create policy "Anyone can read chat rooms" on public.chat_rooms for select using (true);
@@ -401,8 +379,54 @@ create trigger handle_updated_at before update on public.users
 create trigger handle_updated_at before update on public.user_private_profiles
   for each row execute procedure public.handle_updated_at();
 
-create trigger handle_updated_at before update on public.user_payout_accounts
-  for each row execute procedure public.handle_updated_at();
+-- Auto-create profile rows for Gachon users on signup. Mirrors the app's
+-- extractGachonProfileFromMetadata() parsing ("이름/학과") in SQL. Non-Gachon
+-- signups are left without profile rows (callback rejects + deletes them).
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  display_name text;
+  parsed_name text;
+  parsed_department text;
+  parsed_avatar text;
+begin
+  if new.email is null or lower(new.email) not like '%@gachon.ac.kr' then
+    return new;
+  end if;
+
+  display_name := coalesce(
+    new.raw_user_meta_data->>'name',
+    new.raw_user_meta_data->>'full_name',
+    new.raw_user_meta_data->>'display_name'
+  );
+
+  parsed_name := nullif(trim(split_part(coalesce(display_name, ''), '/', 1)), '');
+  parsed_department := nullif(trim(split_part(coalesce(display_name, ''), '/', 2)), '');
+  parsed_avatar := coalesce(
+    new.raw_user_meta_data->>'avatar_url',
+    new.raw_user_meta_data->>'picture'
+  );
+
+  insert into public.users (id, nickname, department, avatar_url)
+  values (new.id, null, parsed_department, parsed_avatar)
+  on conflict (id) do nothing;
+
+  insert into public.user_private_profiles (user_id, email, name, status, is_admin, onboarded_at)
+  values (new.id, new.email, parsed_name, 'active', false, null)
+  on conflict (user_id) do nothing;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
 
 -- Guard room capacity at the database level.
 create or replace function public.enforce_room_capacity()

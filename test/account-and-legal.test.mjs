@@ -179,7 +179,7 @@ test('admin dashboard is server-authorized and exposes operational review tools'
   assert.match(route, /\.from\('reports'\)/)
   assert.match(route, /\.from\('chat_rooms'\)/)
   assert.match(route, /\.from\('messages'\)/)
-  assert.match(route, /\.from\('user_payout_accounts'\)/)
+  assert.match(route, /not\('bank_name', 'is', null\)/)
   assert.match(route, /room:room_id\(title, from_location, to_location, departure_date, departure_time\)/)
   assert.match(route, /creatorPayoutAccount/)
   assert.match(page, /\/api\/admin\/dashboard/)

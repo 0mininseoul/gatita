@@ -59,6 +59,7 @@ type MyProfilePayload = {
 }
 
 const PWA_ONBOARDING_STORAGE_KEY = 'gatita:pwa-onboarding-dismissed'
+const ROUTE_COACHMARK_STORAGE_KEY = 'gatita:route-coachmark-seen'
 const PWA_INSTALLED_DETECTED_STORAGE_KEY = 'gatita:pwa-installed-detected'
 const ANALYTICS_PENDING_LOGIN_KEY = 'gatita:analytics-pending-login'
 
@@ -147,6 +148,7 @@ export default function HomePage() {
   const [isStartingGoogle, setIsStartingGoogle] = useState(false)
   const [hasEnteredApp, setHasEnteredApp] = useState(false)
   const [showPwaOnboarding, setShowPwaOnboarding] = useState(false)
+  const [showRouteCoachmark, setShowRouteCoachmark] = useState(false)
   const [authNotice, setAuthNotice] = useState<string | null>(null)
   const [moderationStatus, setModerationStatus] = useState<ModerationStatusPayload | null>(null)
   const [moderationModal, setModerationModal] = useState<'warning' | 'suspension' | null>(null)
@@ -781,6 +783,35 @@ export default function HomePage() {
     return () => window.clearTimeout(timerId)
   }, [hasAuthenticatedSession, hasEnteredApp, requiresProfile])
 
+  const dismissRouteCoachmark = useCallback((action: 'select' | 'close' = 'close') => {
+    setShowRouteCoachmark((current) => {
+      if (current) {
+        trackEvent('route_coachmark_dismissed', { action })
+      }
+      return false
+    })
+    window.localStorage.setItem(ROUTE_COACHMARK_STORAGE_KEY, 'true')
+  }, [])
+
+  useEffect(() => {
+    if (!hasAuthenticatedSession || !hasEnteredApp) return
+    if (requiresProfile) return
+    if (showPwaOnboarding || fromLocation) return
+    if (window.localStorage.getItem(ROUTE_COACHMARK_STORAGE_KEY)) return
+    // Wait until the PWA install step is resolved (installed, or its modal already dismissed)
+    // so the two onboarding prompts never overlap.
+    if (!isInstalled() && !window.localStorage.getItem(PWA_ONBOARDING_STORAGE_KEY)) return
+
+    const timerId = window.setTimeout(() => {
+      setShowRouteCoachmark(true)
+      trackEvent('route_coachmark_shown', {
+        source: 'map_onboarding',
+      })
+    }, 450)
+
+    return () => window.clearTimeout(timerId)
+  }, [hasAuthenticatedSession, hasEnteredApp, requiresProfile, showPwaOnboarding, fromLocation])
+
   const validateRouteSelection = (from: LocationType | '', to: LocationType | '') => {
     if (!from || !to) {
       toast.error('출발지와 도착지를 모두 선택해주세요')
@@ -825,6 +856,7 @@ export default function HomePage() {
 
     setFromLocation(location)
     if (location) {
+      dismissRouteCoachmark('select')
       trackEvent('fixed_point_selected', {
         from_location: location,
       })
@@ -1120,7 +1152,7 @@ export default function HomePage() {
     setAuthMode('signup')
   }
 
-  const dismissPwaOnboarding = useCallback((action: 'later' | 'start' | 'outside' = 'later') => {
+  const dismissPwaOnboarding = useCallback((action: 'later' | 'start' | 'outside' | 'confirm' | 'close' = 'later') => {
     trackEvent('pwa_install_instruction_dismissed', {
       action,
     })
@@ -1314,6 +1346,8 @@ export default function HomePage() {
         onSelectFrom={handleFromLocationChange}
         onCreateRoom={handleCreateMapRoom}
         onJoinRoom={handleJoinMapRoom}
+        showRouteHint={showRouteCoachmark}
+        onDismissRouteHint={() => dismissRouteCoachmark('close')}
       />
 
       {showMyRooms && (
@@ -1398,9 +1432,17 @@ export default function HomePage() {
               <div>
                 <p className="text-xs font-black tracking-[0.02em] text-primary-600">홈 화면 추가</p>
                 <h2 id="pwa-onboarding-title" className="mt-1 text-lg font-black text-gray-950">
-                  홈 화면에 추가해서 앱처럼 쓰세요
+                  지금 홈 화면에 추가해서 앱처럼 쓰세요
                 </h2>
               </div>
+              <button
+                type="button"
+                aria-label="홈 화면 추가 안내 닫기"
+                onClick={() => dismissPwaOnboarding('close')}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
 
             <div className="mt-4 space-y-2">
@@ -1420,20 +1462,13 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4">
               <button
                 type="button"
-                onClick={() => dismissPwaOnboarding('later')}
-                className="h-11 flex-1 rounded-lg border border-gray-200 bg-white text-sm font-black text-gray-700 transition hover:bg-gray-50"
+                onClick={() => dismissPwaOnboarding('confirm')}
+                className="h-11 w-full rounded-lg bg-gray-950 text-sm font-black text-white transition hover:bg-gray-800"
               >
-                나중에
-              </button>
-              <button
-                type="button"
-                onClick={() => dismissPwaOnboarding('start')}
-                className="h-11 flex-1 rounded-lg bg-gray-950 text-sm font-black text-white transition hover:bg-gray-800"
-              >
-                지금 할게요
+                확인했어요
               </button>
             </div>
           </div>

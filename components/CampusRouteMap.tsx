@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { Clock, Compass, Minus, Plus, Users, X } from 'lucide-react'
+import { Clock, Compass, MapPin, Minus, Plus, Users, X } from 'lucide-react'
 import {
   getDepartureTimeOptions,
   getDestinationOptions,
@@ -47,6 +47,8 @@ type CampusRouteMapProps = {
     departureTime: string
   }) => void | Promise<void>
   onJoinRoom: (roomId: string) => void
+  showRouteHint?: boolean
+  onDismissRouteHint?: () => void
 }
 
 declare global {
@@ -171,6 +173,8 @@ export default function CampusRouteMap({
   onSelectFrom,
   onCreateRoom,
   onJoinRoom,
+  showRouteHint = false,
+  onDismissRouteHint,
 }: CampusRouteMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<any>(null)
@@ -426,10 +430,14 @@ export default function CampusRouteMap({
     ? originStats.get(selectedFrom) ?? emptyStat()
     : emptyStat()
   const isSheetOpen = Boolean(selectedFrom)
+  const routeHintActive = showRouteHint && !selectedFrom && mapStatus === 'ready'
 
   return (
     <section className="relative h-full w-full overflow-hidden bg-[#e7edf4]">
-      <div ref={mapContainerRef} className="gatita-kakao-map absolute inset-0 h-full w-full" />
+      <div
+        ref={mapContainerRef}
+        className={`gatita-kakao-map absolute inset-0 h-full w-full${routeHintActive ? ' gatita-kakao-map--hint' : ''}`}
+      />
 
       <div className="gatita-map-stats pointer-events-none absolute left-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap gap-2 sm:left-4">
         <div className="inline-flex items-center gap-2 rounded-lg border border-white/75 bg-white/90 px-3 py-2 text-xs font-extrabold text-gray-950 shadow-[0_10px_28px_rgba(17,24,39,0.12)] backdrop-blur">
@@ -513,6 +521,39 @@ export default function CampusRouteMap({
 
       {mapStatus === 'loading' && (
         <div className="pointer-events-none absolute inset-0 bg-[#e7edf4]" />
+      )}
+
+      {routeHintActive && (
+        <div className="pointer-events-none absolute inset-x-3 bottom-3 z-30 flex justify-center">
+          <div
+            role="status"
+            aria-labelledby="route-hint-title"
+            className="pointer-events-auto w-full max-w-sm rounded-lg border border-white/80 bg-white/95 px-4 py-3 shadow-[0_18px_48px_rgba(17,24,39,0.22)] backdrop-blur"
+            style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
+          >
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-50 text-primary-600">
+                <MapPin className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p id="route-hint-title" className="text-sm font-black text-gray-950">
+                  출발 지점을 선택해 보세요
+                </p>
+                <p className="mt-1 text-xs font-semibold leading-5 text-gray-600">
+                  지도에서 출발 지점을 누르면, 같이 갈 방에 참여하거나 새 방을 만들 수 있어요.
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="안내 닫기"
+                onClick={() => onDismissRouteHint?.()}
+                className="-mr-1 -mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-950"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {isSheetOpen && (

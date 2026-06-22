@@ -606,8 +606,8 @@
     border-top: 0;
   }
 
-  .settings-row-standalone {
-    border: 1px solid rgba(229, 233, 240, 0.96);
+  .settings-row.settings-row-standalone {
+    border: 1px solid rgba(208, 213, 224, 0.96);
     border-radius: 8px;
     background: #fbfcff;
   }
@@ -761,14 +761,14 @@
     min-height: 2.55rem;
     padding: 0.58rem 0.82rem;
     border-radius: 8px;
-    font-size: 1rem;
+    font-size: 0.9rem;
     font-weight: 600;
   }
 
   .settings-section input[aria-label^="계좌번호"] {
     height: 2.55rem;
     border-radius: 8px;
-    font-size: 1rem;
+    font-size: 0.9rem;
   }
 
   /* Gradient floating action button */
@@ -864,6 +864,28 @@
 
   .gatita-map-overlay.is-empty {
     opacity: 0.72;
+  }
+
+  @keyframes gatita-marker-pulse {
+    0%,
+    100% {
+      transform: scale(1);
+      box-shadow: 0 12px 28px rgba(17, 24, 39, 0.18), 0 0 0 0 rgba(39, 130, 255, 0);
+    }
+    50% {
+      transform: scale(1.06);
+      box-shadow: 0 14px 30px rgba(17, 24, 39, 0.2), 0 0 0 6px rgba(39, 130, 255, 0.16);
+    }
+  }
+
+  .gatita-kakao-map--hint .gatita-map-overlay {
+    animation: gatita-marker-pulse 1.6s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .gatita-kakao-map--hint .gatita-map-overlay {
+      animation: none;
+    }
   }
 
   .gatita-kakao-map .zoom_control,

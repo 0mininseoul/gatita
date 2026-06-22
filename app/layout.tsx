@@ -90,9 +90,9 @@ const iosStartupImages = [
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: '같이타 - 가천대 통학 동행 플랫폼',
-  description: '가천대학교 학생들을 위한 통학 경로 동행자 매칭 서비스입니다. 가천대역에서 AI공학관까지 안전하고 편리하게 함께 이동하세요.',
-  keywords: '가천대, 통학, 동행, 플랫폼, 가천대역, AI공학관, 가천대학교',
+  title: '같이타 - 가천대 택시 동승 플랫폼',
+  description: '가천대학교 학생들을 위한 택시 동승자 찾기 서비스입니다. 가천대역에서 기숙사까지 안전하고 편리하게 함께 이동하세요.',
+  keywords: '가천대, 택시, 동승, 플랫폼, 가천대역, 기숙사, 가천대학교',
   authors: [{ name: '같이타' }],
   creator: '같이타',
   icons: {
@@ -106,8 +106,8 @@ export const metadata: Metadata = {
     locale: 'ko_KR',
     url: siteUrl,
     siteName: '같이타',
-    title: '같이타 : 가천대 통학 동행 플랫폼',
-    description: '가천대역에서 AI공학관까지, 안전하고 편리하게 함께 이동하세요!',
+    title: '같이타 : 가천대 택시 동승 플랫폼',
+    description: '가천대역에서 기숙사까지, 택시를 함께 이용할 동승자를 찾아보세요!',
     images: [
       {
         url: '/og-image.png',
@@ -119,8 +119,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: '같이타 : 가천대 통학 동행 플랫폼',
-    description: '가천대역에서 AI공학관까지, 안전하고 편리하게 함께 이동하세요!',
+    title: '같이타 : 가천대 택시 동승 플랫폼',
+    description: '가천대역에서 기숙사까지, 택시를 함께 이용할 동승자를 찾아보세요!',
     images: ['/og-image.png'],
   },
   appleWebApp: {

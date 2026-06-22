@@ -1291,7 +1291,7 @@ export default function HomePage() {
 
           <div className="landing-hero">
             <SplitText
-              text="같이 탈래요?"
+              text="같이 탈 사람?"
               tag="h1"
               splitType="words, chars"
               className="landing-headline font-bold"
@@ -1312,7 +1312,7 @@ export default function HomePage() {
               marginBottom: '1rem', color: 'rgba(255, 255, 255, 0.92)',
               textShadow: '0 1px 16px rgba(28, 22, 92, 0.4)'
             }}>
-              가천대 학생들을 위한 통학길 동행 플랫폼
+              가천대 학생들을 위한 택시 동승 플랫폼
             </p>
 
             <div style={{

@@ -1,7 +1,7 @@
 {
-  "name": "같이타 - 가천대 통학 동행 커뮤니티",
+  "name": "같이타 - 가천대 택시 동승 플랫폼",
   "short_name": "같이타",
-  "description": "가천대학교 학생들을 위한 통학 경로 동행자 찾기 서비스",
+  "description": "가천대학교 학생들을 위한 택시 동승자 찾기 서비스",
   "start_url": "/map",
   "display": "standalone",
   "background_color": "#f9fafb",

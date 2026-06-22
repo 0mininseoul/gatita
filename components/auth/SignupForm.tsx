@@ -816,7 +816,7 @@ function ReviewPanel({
       </div>
 
       <div className="rounded-xl border border-primary-100 bg-primary-50 px-3 py-3">
-        <p className="text-xs font-semibold leading-5 text-primary-800">
+        <p className="text-[11px] font-semibold leading-5 text-primary-800">
           정산 계좌는 방을 개설한 경우 같은 방 참여자에게만 표시됩니다.
         </p>
       </div>
@@ -843,7 +843,7 @@ function ReviewPanel({
             에 동의합니다.
           </span>
         </label>
-        <p className="mt-2 text-[11px] font-semibold leading-4 text-gray-500">
+        <p className="mt-2 text-[10px] font-semibold leading-4 text-gray-500">
           &lt;같이타&gt;는 현재 수집된 개인정보를 마케팅에 일체 활용하지 않습니다.
         </p>
         {consentError && (
@@ -861,7 +861,7 @@ function ReviewRow({ label, value }: { label: string; value?: string }) {
   return (
     <div className="flex items-start justify-between gap-4 border-b border-gray-200 px-3 py-3 last:border-b-0">
       <span className="shrink-0 text-xs font-medium text-gray-500">{label}</span>
-      <span className="min-w-0 text-right text-sm font-semibold text-gray-950">{value || '-'}</span>
+      <span className="min-w-0 text-right text-xs font-semibold text-gray-950">{value || '-'}</span>
     </div>
   )
 }

@@ -50,7 +50,6 @@ export default function ChatRoomPage() {
   const [showParticipants, setShowParticipants] = useState(false)
   const [showCallConsentModal, setShowCallConsentModal] = useState(false)
   const [selectedCallParticipant, setSelectedCallParticipant] = useState<RoomParticipant | null>(null)
-  const [showHostGuide, setShowHostGuide] = useState(false)
   const [hostAppearance, setHostAppearance] = useState('')
   const [hostAppearanceLoaded, setHostAppearanceLoaded] = useState(false)
   const [hostAppearanceDraft, setHostAppearanceDraft] = useState('')
@@ -62,7 +61,6 @@ export default function ChatRoomPage() {
   const [reportReason, setReportReason] = useState('')
   const [reportTarget, setReportTarget] = useState<string>('')
   const [timestampReveal, setTimestampReveal] = useState(0)
-  const hostGuideStorageKey = useMemo(() => `gatita:room-host-guide:${roomId}`, [roomId])
   const roomGuideStorageKey = useMemo(
     () => `gatita:room-entry-guide:${roomId}:${user?.id ?? 'anonymous'}`,
     [roomId, user?.id]
@@ -713,19 +711,6 @@ export default function ChatRoomPage() {
 
   useEffect(() => {
     if (loading || !room || !user) return
-    if (room.created_by !== user.id) return
-    if (!hostAppearanceLoaded) return
-    if (hostAppearance.trim()) {
-      window.localStorage.setItem(hostGuideStorageKey, 'true')
-      return
-    }
-    if (window.localStorage.getItem(hostGuideStorageKey)) return
-
-    setShowHostGuide(true)
-  }, [hostAppearance, hostAppearanceLoaded, hostGuideStorageKey, loading, room, user])
-
-  useEffect(() => {
-    if (loading || !room || !user) return
     if (!isParticipant) return
     if (room.created_by === user.id) return
     if (window.localStorage.getItem(roomGuideStorageKey)) return
@@ -1050,18 +1035,16 @@ export default function ChatRoomPage() {
 
       if (error) throw error
 
-      window.localStorage.setItem(hostGuideStorageKey, 'true')
       setHostAppearance(hostAppearanceDraft.trim())
-      setShowHostGuide(false)
       setHostAppearanceDraft('')
       trackEvent('host_guide_saved', {
         room_id: roomId,
         appearance_length: hostAppearanceDraft.trim().length,
       })
-      toast.success('방장 안내가 저장되었습니다')
+      toast.success('인상착의가 저장되었습니다')
     } catch (error) {
-      console.error('Save host guide error:', error)
-      toast.error('방장 안내 저장 중 오류가 발생했습니다')
+      console.error('Save host appearance error:', error)
+      toast.error('인상착의 저장 중 오류가 발생했습니다')
     } finally {
       setIsSubmittingHostGuide(false)
     }
@@ -1249,6 +1232,74 @@ export default function ChatRoomPage() {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* 방장 안내: 차단형 모달 대신 대화 시작 전까지 빈 채팅 배경으로 표시 */}
+      {isRoomCreator && (
+        <div
+          className={`chat-host-watermark${messages.length > 0 ? ' is-gone' : ''}`}
+          aria-hidden={messages.length > 0}
+        >
+          <div className="chat-host-watermark__panel">
+            <p className="chat-host-watermark__kicker">방장 안내</p>
+            <h2 className="chat-host-watermark__title">출발 전 체크</h2>
+            <ul className="chat-host-watermark__list">
+              <li>
+                <span aria-hidden="true">💳</span>
+                <p>정산이 필요하면 방장이 결제 후 정산해요. 채팅방 상단에 방장 계좌가 표시돼요.</p>
+              </li>
+              <li>
+                <span aria-hidden="true">🤝</span>
+                <p>출발 5분 전부터 갑자기 방을 나가면 서비스 이용이 정지될 수 있어요.</p>
+              </li>
+              <li>
+                <span aria-hidden="true">📞</span>
+                <p>멤버들과 전화번호가 노출될 수 있어요. 동행 목적에만 사용해주세요.</p>
+              </li>
+            </ul>
+
+            {hostAppearanceLoaded && (
+              hostAppearance ? (
+                <p className="chat-host-watermark__saved">
+                  <span aria-hidden="true">🧍</span> 인상착의 저장됨 · {hostAppearance}
+                </p>
+              ) : (
+                <div className="chat-host-watermark__appearance">
+                  <label htmlFor="host-appearance" className="chat-host-watermark__appearance-label">
+                    <span aria-hidden="true">🧍</span> 인상착의 한 줄 <em>(선택)</em>
+                  </label>
+                  <div className="chat-host-watermark__appearance-row">
+                    <input
+                      ref={hostAppearanceInputRef}
+                      id="host-appearance"
+                      type="text"
+                      value={hostAppearanceDraft}
+                      onChange={(event) => setHostAppearanceDraft(event.target.value)}
+                      onFocus={scrollHostAppearanceInputIntoView}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' && hostAppearanceDraft.trim()) {
+                          event.preventDefault()
+                          handleSubmitHostGuide()
+                        }
+                      }}
+                      placeholder="예: 검은 백팩, 파란 후드"
+                      maxLength={60}
+                      className="chat-host-watermark__input"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSubmitHostGuide}
+                      disabled={!hostAppearanceDraft.trim() || isSubmittingHostGuide}
+                      className="chat-host-watermark__submit"
+                    >
+                      {isSubmittingHostGuide ? '저장 중' : '남기기'}
+                    </button>
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 메시지 입력 영역 */}
       <div ref={composerRef} className="chat-composer fixed inset-x-0 z-30 border-t border-gray-100 bg-white px-3 pt-3">
         {isParticipant ? (
@@ -1381,63 +1432,6 @@ export default function ChatRoomPage() {
       )}
 
       {/* 방장 최초 안내 모달 */}
-      {showHostGuide && (
-        <div
-          className="fixed inset-x-0 top-0 z-50 flex items-end bg-gray-950/35 px-3 pb-3 pt-16"
-          style={{ height: 'var(--chat-viewport-height)' }}
-        >
-          <div className="chat-guide-sheet w-full rounded-2xl bg-white p-4 shadow-2xl">
-            <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-gray-200" />
-            <div className="mb-4">
-              <p className="text-xs font-black text-primary-600">방장 안내</p>
-              <h2 className="mt-1 text-xl font-black leading-tight text-gray-950">출발 전 체크</h2>
-            </div>
-
-            <div className="chat-guide-card">
-              <div className="chat-guide-line">
-                <span className="chat-guide-icon">💳</span>
-                <p>정산이 필요할 경우 방장이 결제 후 정산해요.<br />채팅방 상단에는 방장의 계좌번호가 나올 거예요.</p>
-              </div>
-              <div className="chat-guide-line">
-                <span className="chat-guide-icon">🤝</span>
-                <p>출발 5분 전부터는 갑자기 방을 나가면 서비스 이용이 정지될 수 있어요.</p>
-              </div>
-              <div className="chat-guide-line">
-                <span className="chat-guide-icon">📞</span>
-                <p>
-                  방장과 멤버들은 서로 전화번호가 노출될 수 있어요.<br />지각, 노쇼, 출발 위치 확인 등 동행 목적에만 사용해주세요.
-                </p>
-              </div>
-            </div>
-
-            <label className="mt-4 flex items-center gap-2 text-sm font-black text-gray-800" htmlFor="host-appearance">
-              <span className="text-lg">🧍</span>
-              방장 인상착의
-            </label>
-            <input
-              ref={hostAppearanceInputRef}
-              id="host-appearance"
-              type="text"
-              value={hostAppearanceDraft}
-              onChange={(event) => setHostAppearanceDraft(event.target.value)}
-              onFocus={scrollHostAppearanceInputIntoView}
-              placeholder="예: 검은 백팩, 파란 후드"
-              maxLength={60}
-              className="input-field mt-2 text-base"
-            />
-
-            <button
-              type="button"
-              onClick={handleSubmitHostGuide}
-              disabled={!hostAppearanceDraft.trim() || isSubmittingHostGuide}
-              className="mt-4 inline-flex h-12 w-full items-center justify-center rounded-xl bg-gray-950 text-sm font-black text-white transition hover:bg-gray-800 disabled:bg-gray-300"
-            >
-              {isSubmittingHostGuide ? '저장 중...' : '확인했어요'}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* 입장 안내 모달 */}
       {showRoomGuide && (
         <div className="fixed inset-0 z-50 flex items-end bg-gray-950/35 px-3 pb-3 pt-16">

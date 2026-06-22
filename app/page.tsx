@@ -58,8 +58,14 @@ type MyProfilePayload = {
   error?: string
 }
 
-const PWA_ONBOARDING_STORAGE_KEY = 'gatita:pwa-onboarding-dismissed'
+// Browser-only PWA prompt. Stores the last shown local date so it appears at most
+// once per calendar day, re-appears on later days, and never re-fires on
+// intra-session navigation back to the map (it was already shown today).
+const PWA_PROMPT_LAST_SHOWN_KEY = 'gatita:pwa-prompt-last-shown'
 const ROUTE_COACHMARK_STORAGE_KEY = 'gatita:route-coachmark-seen'
+
+// Local calendar day as YYYY-MM-DD (en-CA yields ISO-like format in local tz).
+const getLocalDateKey = () => new Date().toLocaleDateString('en-CA')
 const PWA_INSTALLED_DETECTED_STORAGE_KEY = 'gatita:pwa-installed-detected'
 const ANALYTICS_PENDING_LOGIN_KEY = 'gatita:analytics-pending-login'
 
@@ -770,10 +776,14 @@ export default function HomePage() {
   useEffect(() => {
     if (!hasAuthenticatedSession || !hasEnteredApp) return
     if (requiresProfile) return
-    if (isInstalled()) return
-    if (window.localStorage.getItem(PWA_ONBOARDING_STORAGE_KEY)) return
+    if (isInstalled()) return // never prompt inside the installed PWA
+    // Show once per calendar day in the browser. Already shown today (incl. after
+    // returning to /map from settings/chat) → skip; a new day → show again.
+    const today = getLocalDateKey()
+    if (window.localStorage.getItem(PWA_PROMPT_LAST_SHOWN_KEY) === today) return
 
     const timerId = window.setTimeout(() => {
+      window.localStorage.setItem(PWA_PROMPT_LAST_SHOWN_KEY, today)
       setShowPwaOnboarding(true)
       trackEvent('pwa_install_instruction_shown', {
         source: 'map_onboarding',
@@ -805,9 +815,10 @@ export default function HomePage() {
     if (requiresProfile) return
     if (showPwaOnboarding || fromLocation) return
     if (window.localStorage.getItem(ROUTE_COACHMARK_STORAGE_KEY)) return
-    // Wait until the PWA install step is resolved (installed, or its modal already dismissed)
+    // Wait until the PWA install step is resolved this session (installed, or today's
+    // prompt already shown — and thus dismissed, since this runs when it's not open)
     // so the two onboarding prompts never overlap.
-    if (!isInstalled() && !window.localStorage.getItem(PWA_ONBOARDING_STORAGE_KEY)) return
+    if (!isInstalled() && window.localStorage.getItem(PWA_PROMPT_LAST_SHOWN_KEY) !== getLocalDateKey()) return
 
     const timerId = window.setTimeout(() => {
       setRouteCoachStep((current) => (current === 'hidden' ? 'select' : current))
@@ -1163,7 +1174,8 @@ export default function HomePage() {
     trackEvent('pwa_install_instruction_dismissed', {
       action,
     })
-    window.localStorage.setItem(PWA_ONBOARDING_STORAGE_KEY, 'true')
+    // "Shown today" is already recorded when the prompt opens, so dismissing just
+    // closes it; it won't reappear until the next calendar day.
     setShowPwaOnboarding(false)
   }, [])
 

@@ -245,7 +245,7 @@
   }
 
   .legal-shell {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-family: var(--font-paperlogy), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", "Malgun Gothic", sans-serif;
     font-size: 0.8125rem;
   }
 

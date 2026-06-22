@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import {
   AUTH_CALLBACK_ERROR_MESSAGE,
@@ -46,7 +47,15 @@ export async function GET(request: Request) {
   }
 
   if (!isGachonEmail(data.user?.email)) {
+    const nonGachonUserId = data.user?.id
     await supabase.auth.signOut()
+    if (nonGachonUserId) {
+      try {
+        await createAdminSupabase().auth.admin.deleteUser(nonGachonUserId)
+      } catch (deleteError) {
+        console.error('Failed to delete non-gachon auth user:', deleteError)
+      }
+    }
     return redirectToHome(origin, { auth_error: NON_GACHON_ACCOUNT_MESSAGE })
   }
 

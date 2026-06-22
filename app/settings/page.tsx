@@ -419,30 +419,31 @@ export default function SettingsPage() {
     setAccountError('')
 
     try {
-      const { data, error } = await supabase
-        .from('user_payout_accounts')
-        .upsert({
-          user_id: user.id,
-          ...nextAccount,
-        }, { onConflict: 'user_id' })
-        .select('user_id, bank_name, account_number, account_holder, created_at, updated_at')
-        .single()
+      const response = await fetch('/api/profile/payout', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nextAccount),
+      })
+      const result = await response.json().catch(() => null)
 
-      if (error) throw error
+      if (!response.ok) {
+        throw new Error(result?.error ?? '계좌 정보 저장 중 오류가 발생했습니다')
+      }
 
-      setPayoutAccount(data)
+      const saved = result.payoutAccount
+      setPayoutAccount(saved)
       setAccountForm({
-        bank_name: data.bank_name,
-        account_number: data.account_number,
-        account_holder: data.account_holder,
+        bank_name: saved.bank_name,
+        account_number: saved.account_number,
+        account_holder: saved.account_holder,
       })
       trackEvent('payout_account_updated', {
-        bank_name: data.bank_name,
+        bank_name: saved.bank_name,
       })
       toast.success('계좌 정보가 저장되었습니다')
     } catch (error) {
       console.error('Payout account save error:', error)
-      toast.error('계좌 정보 저장 중 오류가 발생했습니다')
+      toast.error(error instanceof Error ? error.message : '계좌 정보 저장 중 오류가 발생했습니다')
     } finally {
       setIsSavingAccount(false)
     }

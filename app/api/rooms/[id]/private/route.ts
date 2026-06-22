@@ -57,7 +57,7 @@ async function getRoomPrivateInfo(
           .in('user_id', participantIds)
       : Promise.resolve({ data: [], error: null }),
     admin
-      .from('user_payout_accounts')
+      .from('user_private_profiles')
       .select('user_id, bank_name, account_number, account_holder, created_at, updated_at')
       .eq('user_id', room.created_by)
       .maybeSingle(),
@@ -75,9 +75,11 @@ async function getRoomPrivateInfo(
     (phonesResult.data ?? []).map((profile) => [profile.user_id, profile.phone])
   )
 
+  const creatorPayout = payoutResult.data
+
   return NextResponse.json({
     phonesByUserId,
-    creatorPayoutAccount: payoutResult.data ?? null,
+    creatorPayoutAccount: creatorPayout?.bank_name ? creatorPayout : null,
   })
 }
 

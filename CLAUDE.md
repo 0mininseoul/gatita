@@ -90,7 +90,9 @@ Required in `.env.local`:
 - `SUPABASE_SERVICE_ROLE_KEY` - (Optional) Service role key for admin operations
 
 ### Signup Flow
-Signup uses Google OAuth first, then creates a service profile in `public.users` with name, phone, nickname, and department. The app no longer uses email/password auth or password reset routes.
+Google OAuth login first. For Gachon (`@gachon.ac.kr`) accounts, a DB trigger (`handle_new_user`) auto-creates a `public.users` row (public: department + avatar from Google) and a `user_private_profiles` row (private: email + name from Google) at login — so every Gachon login counts as a user even before onboarding. Non-Gachon accounts are rejected in the callback and their `auth.users` row is deleted.
+
+Onboarding (the `/api/profile/complete` route) then fills nickname (public), and phone + bank/payout fields (private), and sets `user_private_profiles.onboarded_at`. **Onboarding completion is determined solely by `onboarded_at IS NOT NULL`.** Payout/bank info lives on `user_private_profiles` (the separate `user_payout_accounts` table was merged in and removed); account edits go through `/api/profile/payout`. The app no longer uses email/password auth or password reset routes.
 
 ### RLS Policies
 - Room messages only accessible to participants (enforced via `room_participants` join)

@@ -243,9 +243,10 @@ async function getDashboard(request: Request) {
 
   if (creatorIds.length > 0) {
     const { data: payoutAccounts, error: payoutError } = await admin
-      .from('user_payout_accounts')
+      .from('user_private_profiles')
       .select('user_id, bank_name, account_number, account_holder, created_at, updated_at')
       .in('user_id', creatorIds)
+      .not('bank_name', 'is', null)
 
     if (payoutError) {
       console.error('Admin payout account load error:', payoutError)

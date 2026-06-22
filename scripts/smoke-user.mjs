@@ -173,14 +173,7 @@ async function getState(supabase, email) {
   const privateProfile = await maybeSingle(
     supabase,
     'user_private_profiles',
-    'user_id,email,status,is_admin,created_at,updated_at',
-    'user_id',
-    authUser.id,
-  )
-  const payoutAccount = await maybeSingle(
-    supabase,
-    'user_payout_accounts',
-    'user_id,bank_name,created_at,updated_at',
+    'user_id,email,status,is_admin,onboarded_at,bank_name,created_at,updated_at',
     'user_id',
     authUser.id,
   )
@@ -192,8 +185,8 @@ async function getState(supabase, email) {
     providers: [...new Set(authProviders(authUser))],
     hasPublicProfile: Boolean(publicProfile),
     hasPrivateProfile: Boolean(privateProfile),
-    hasPayoutAccount: Boolean(payoutAccount),
-    profileCompleted: Boolean(publicProfile && privateProfile && payoutAccount),
+    hasPayoutAccount: Boolean(privateProfile?.bank_name),
+    profileCompleted: Boolean(privateProfile?.onboarded_at),
     isAdmin: Boolean(privateProfile?.is_admin),
     status: privateProfile?.status ?? null,
     counts: {
@@ -255,7 +248,6 @@ async function prepare(supabase, email) {
     messages: await deleteByColumn(supabase, 'messages', 'user_id', before.authUserId),
     roomMemberships: await deleteByColumn(supabase, 'room_participants', 'user_id', before.authUserId),
     createdRooms: await deleteByColumn(supabase, 'chat_rooms', 'created_by', before.authUserId),
-    payoutAccount: await deleteByColumn(supabase, 'user_payout_accounts', 'user_id', before.authUserId),
     privateProfile: await deleteByColumn(supabase, 'user_private_profiles', 'user_id', before.authUserId),
     profilePhotos: await removeProfilePhotos(supabase, before.authUserId),
   }
@@ -263,7 +255,7 @@ async function prepare(supabase, email) {
   if (before.hasPublicProfile) {
     const { error } = await supabase
       .from('users')
-      .update({ avatar_url: null })
+      .update({ avatar_url: null, nickname: null, nickname_updated_at: null })
       .eq('id', before.authUserId)
     if (error) throw error
   }

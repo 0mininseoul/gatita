@@ -36,6 +36,12 @@ type AuthMode = 'signup' | null
 
 type MyRoomSummary = CampusMapRoom & {
   departure_date: string
+  unread_count: number
+}
+
+type UnreadRoomCount = {
+  room_id: string
+  unread_count: number
 }
 
 type ModerationWarning = {
@@ -329,6 +335,14 @@ export default function HomePage() {
 
       if (roomsError) throw roomsError
 
+      const { data: unreadRoomCounts, error: unreadRoomCountsError } = await supabase.rpc('get_my_unread_room_counts')
+
+      if (unreadRoomCountsError) throw unreadRoomCountsError
+
+      const unreadCountByRoomId = new Map(
+        ((unreadRoomCounts ?? []) as UnreadRoomCount[]).map((row) => [row.room_id, row.unread_count])
+      )
+
       setMyRooms(((rooms ?? []) as ChatRoom[]).map((room) => ({
         id: room.id,
         from_location: room.from_location,
@@ -340,6 +354,7 @@ export default function HomePage() {
           id: participant.id,
           user_id: participant.user_id,
         })),
+        unread_count: unreadCountByRoomId.get(room.id) ?? 0,
       })))
     } catch (error) {
       console.error('Load my rooms error:', error)
@@ -579,6 +594,7 @@ export default function HomePage() {
       unreadDebounceId = setTimeout(() => {
         unreadDebounceId = null
         loadUnreadCount()
+        if (showMyRooms) loadMyRooms()
       }, 600)
     }
 
@@ -593,6 +609,7 @@ export default function HomePage() {
     const refreshAll = () => {
       loadMapRooms()
       loadUnreadCount()
+      if (showMyRooms) loadMyRooms()
     }
     const safetyId = window.setInterval(refreshAll, 120000)
     const handleVisibility = () => {
@@ -607,7 +624,7 @@ export default function HomePage() {
       document.removeEventListener('visibilitychange', handleVisibility)
       supabase.removeChannel(channel)
     }
-  }, [authMode, hasAuthenticatedSession, hasEnteredApp, loadMapRooms, loadUnreadCount, supabase])
+  }, [authMode, hasAuthenticatedSession, hasEnteredApp, loadMapRooms, loadMyRooms, loadUnreadCount, showMyRooms, supabase])
 
   const onlineDisplayCount = usePresenceDisplayCount(
     supabase,
@@ -1433,6 +1450,7 @@ export default function HomePage() {
                   <button
                     key={room.id}
                     type="button"
+                    aria-label={`${LOCATIONS[room.from_location]}에서 ${LOCATIONS[room.to_location]} ${room.departure_date.slice(5).replace('-', '/')} ${room.departure_time.slice(0, 5)} 나의 방${room.unread_count > 0 ? `, 안 읽은 메시지 ${room.unread_count > 99 ? '99+' : room.unread_count}개` : ''}`}
                     onClick={() => router.push(`/rooms/${room.id}`)}
                     className="w-full rounded-lg border border-gray-100 bg-gray-50 px-3 py-3 text-left transition hover:border-primary-100 hover:bg-primary-50"
                   >
@@ -1450,6 +1468,11 @@ export default function HomePage() {
                       <span className="truncate">{LOCATIONS[room.from_location]}</span>
                       <ArrowRight className="h-3.5 w-3.5 shrink-0 text-gray-400" />
                       <span className="truncate">{LOCATIONS[room.to_location]}</span>
+                      {room.unread_count > 0 && (
+                        <span className="ml-auto inline-flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-black leading-none text-white">
+                          {room.unread_count > 99 ? '99+' : room.unread_count}
+                        </span>
+                      )}
                     </div>
                   </button>
                 ))}

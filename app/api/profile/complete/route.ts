@@ -69,24 +69,17 @@ async function completeProfile(request: Request) {
   }
 
   const admin = createAdminSupabase()
-  const [existingPrivateResult, existingPayoutResult] = await Promise.all([
-    admin
-      .from('user_private_profiles')
-      .select('user_id')
-      .eq('user_id', authUser.id)
-      .maybeSingle(),
-    admin
-      .from('user_payout_accounts')
-      .select('user_id')
-      .eq('user_id', authUser.id)
-      .maybeSingle(),
-  ])
+  const { data: existingPrivate, error: existingPrivateError } = await admin
+    .from('user_private_profiles')
+    .select('onboarded_at')
+    .eq('user_id', authUser.id)
+    .maybeSingle()
 
-  if (existingPrivateResult.error || existingPayoutResult.error) {
+  if (existingPrivateError) {
     return NextResponse.json({ error: '프로필 상태를 확인하지 못했습니다' }, { status: 500 })
   }
 
-  if (existingPrivateResult.data && existingPayoutResult.data) {
+  if (existingPrivate?.onboarded_at) {
     return NextResponse.json({ error: '이미 프로필 세팅이 완료되었습니다' }, { status: 409 })
   }
 
@@ -128,25 +121,15 @@ async function completeProfile(request: Request) {
       email,
       name: validated.data.name,
       phone: validated.data.phone,
+      bank_name: validated.data.bankName,
+      account_number: validated.data.accountNumber,
+      account_holder: validated.data.accountHolder,
+      onboarded_at: new Date().toISOString(),
     }, { onConflict: 'user_id' })
 
   if (privateProfileError) {
     console.error('Private profile creation error:', privateProfileError)
     return NextResponse.json({ error: '비공개 프로필을 생성하지 못했습니다' }, { status: 500 })
-  }
-
-  const { error: payoutError } = await admin
-    .from('user_payout_accounts')
-    .upsert({
-      user_id: authUser.id,
-      bank_name: validated.data.bankName,
-      account_number: validated.data.accountNumber,
-      account_holder: validated.data.accountHolder,
-    }, { onConflict: 'user_id' })
-
-  if (payoutError) {
-    console.error('Payout account creation error:', payoutError)
-    return NextResponse.json({ error: '계좌 정보를 저장하지 못했습니다' }, { status: 500 })
   }
 
   return NextResponse.json({ ok: true })

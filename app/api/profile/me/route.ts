@@ -16,7 +16,7 @@ async function getMyProfile() {
 
   const admin = createAdminSupabase()
 
-  const [publicProfileResult, privateProfileResult, payoutResult] = await Promise.all([
+  const [publicProfileResult, privateProfileResult] = await Promise.all([
     admin
       .from('users')
       .select('id, nickname, nickname_updated_at, department, avatar_url, created_at, updated_at')
@@ -24,17 +24,12 @@ async function getMyProfile() {
       .maybeSingle(),
     admin
       .from('user_private_profiles')
-      .select('user_id, email, name, phone, phone_verified_at, phone_mfa_factor_id, status, suspended_until, suspension_reason, moderation_updated_at, is_admin, created_at, updated_at')
-      .eq('user_id', authUser.id)
-      .maybeSingle(),
-    admin
-      .from('user_payout_accounts')
-      .select('user_id, bank_name, account_number, account_holder, created_at, updated_at')
+      .select('user_id, email, name, phone, phone_verified_at, phone_mfa_factor_id, bank_name, account_number, account_holder, status, suspended_until, suspension_reason, moderation_updated_at, is_admin, onboarded_at, created_at, updated_at')
       .eq('user_id', authUser.id)
       .maybeSingle(),
   ])
 
-  const firstError = publicProfileResult.error || privateProfileResult.error || payoutResult.error
+  const firstError = publicProfileResult.error || privateProfileResult.error
 
   if (firstError) {
     console.error('Profile me load error:', firstError)
@@ -44,9 +39,7 @@ async function getMyProfile() {
   const publicProfile = publicProfileResult.data
   const privateProfile = privateProfileResult.data
 
-  const payoutAccount = payoutResult.data
-
-  if (!publicProfile || !privateProfile || !payoutAccount) {
+  if (!publicProfile || !privateProfile || !privateProfile.onboarded_at) {
     return NextResponse.json({
       profileCompleted: false,
       user: null,
@@ -54,10 +47,27 @@ async function getMyProfile() {
     })
   }
 
+  const payoutAccount = privateProfile.bank_name
+    ? {
+        user_id: privateProfile.user_id,
+        bank_name: privateProfile.bank_name,
+        account_number: privateProfile.account_number,
+        account_holder: privateProfile.account_holder,
+        created_at: privateProfile.created_at,
+        updated_at: privateProfile.updated_at,
+      }
+    : null
+
   return NextResponse.json({
     profileCompleted: true,
     user: {
-      ...publicProfile,
+      id: publicProfile.id,
+      nickname: publicProfile.nickname,
+      nickname_updated_at: publicProfile.nickname_updated_at,
+      department: publicProfile.department,
+      avatar_url: publicProfile.avatar_url,
+      created_at: publicProfile.created_at,
+      updated_at: publicProfile.updated_at,
       email: privateProfile.email,
       name: privateProfile.name,
       phone: privateProfile.phone,

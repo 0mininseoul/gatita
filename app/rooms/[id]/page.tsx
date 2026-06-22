@@ -1466,12 +1466,12 @@ export default function ChatRoomPage() {
               <h2 className="mt-1 text-xl font-black leading-tight text-gray-950">동행 전 체크</h2>
             </div>
 
-            <div className="mb-3 rounded-xl border border-primary-100 bg-primary-50 px-3 py-3">
-              <p className="text-xs font-black text-primary-700">🧍 방장 인상착의</p>
-              <p className="mt-1 text-base font-black leading-6 text-gray-950">
-                {hostAppearance || '방장이 아직 인상착의를 입력하지 않았습니다.'}
-              </p>
-            </div>
+            {hostAppearance && (
+              <div className="mb-3 rounded-xl border border-primary-100 bg-primary-50 px-3 py-3">
+                <p className="text-xs font-black text-primary-700">🧍 방장 인상착의</p>
+                <p className="mt-1 text-base font-black leading-6 text-gray-950">{hostAppearance}</p>
+              </div>
+            )}
 
             <div className="chat-guide-card">
               <div className="chat-guide-line">

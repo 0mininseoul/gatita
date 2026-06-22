@@ -325,7 +325,8 @@ test('host appearance is hidden from chat and shown in entry guide and participa
   assert.match(source, /꼭 도착지까지 가지 않아도/)
   assert.match(source, /출발 5분 전부터는 갑자기 방을 나가면 서비스 이용이 정지될 수 있어요/)
   assert.match(source, /setShowRoomGuide\(true\)/)
-  assert.match(source, /\{hostAppearance \|\| '방장이 아직 인상착의를 입력하지 않았습니다\.'\}/)
+  assert.match(source, /\{hostAppearance && \(/)
+  assert.doesNotMatch(source, /방장이 아직 인상착의를 입력하지 않았습니다\./)
   assert.match(source, /participant\.user_id === room\.created_by && hostAppearance/)
 })
 

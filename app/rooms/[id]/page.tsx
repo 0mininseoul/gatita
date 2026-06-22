@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, Fragment, type CSSProperties, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import Image from 'next/image'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { ChatRoom, User, Message, RoomParticipant, PayoutAccount, LOCATIONS } from '@/lib/supabase'
+import { ChatRoom, User, Message, RoomParticipant, PayoutAccount, LOCATIONS, isRoomJoinable } from '@/lib/supabase'
 import {
   extractHostAppearanceFromMessage,
   splitMessages,
@@ -16,7 +16,8 @@ import {
 } from '@/lib/chat/messages'
 import { formatAccountNumberForBank } from '@/lib/banks'
 import { identifyAnalyticsUser, trackEvent } from '@/lib/analytics/client'
-import { ArrowLeft, Users, Clock, Send, Flag, X, LogOut, Phone, CreditCard, Copy } from 'lucide-react'
+import { buildRoomInviteSharePayload } from '@/lib/roomInvite'
+import { ArrowLeft, Users, Clock, Send, Flag, X, LogOut, Phone, CreditCard, Copy, Share2 } from 'lucide-react'
 import { format, isSameDay } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -33,7 +34,9 @@ type RoomPrivateInfoPayload = {
 export default function ChatRoomPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const roomId = params.id as string
+  const isInviteEntry = searchParams.get('invite') === '1'
 
   const [user, setUser] = useState<User | null>(null)
   const [room, setRoom] = useState<ChatRoom | null>(null)
@@ -46,6 +49,7 @@ export default function ChatRoomPage() {
   const [loading, setLoading] = useState(true)
   const [isConfirmed, setIsConfirmed] = useState(false)
   const [isConfirmingParticipation, setIsConfirmingParticipation] = useState(false)
+  const [isJoiningInvitedRoom, setIsJoiningInvitedRoom] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
   const [showParticipants, setShowParticipants] = useState(false)
   const [showCallConsentModal, setShowCallConsentModal] = useState(false)
@@ -348,6 +352,9 @@ export default function ChatRoomPage() {
   }) as CSSProperties, [timestampReveal])
   const isRoomCreator = room?.created_by === user?.id
   const isParticipant = participants.some(p => p.user_id === user?.id)
+  const isRoomInviteAvailable = room
+    ? isRoomJoinable(room.departure_date, room.departure_time) && participants.length < room.max_participants
+    : false
   const formattedCreatorAccountNumber = useMemo(() => (
     creatorPayoutAccount
       ? formatAccountNumberForBank(creatorPayoutAccount.bank_name, creatorPayoutAccount.account_number)
@@ -630,7 +637,11 @@ export default function ChatRoomPage() {
       const authUser = session?.user
 
       if (!authUser) {
-        router.push('/')
+        if (isInviteEntry) {
+          router.push(`/?redirect=${encodeURIComponent(`/rooms/${roomId}?invite=1`)}`)
+        } else {
+          router.push('/')
+        }
         return
       }
 
@@ -672,7 +683,7 @@ export default function ChatRoomPage() {
     } finally {
       setLoading(false)
     }
-  }, [checkParticipation, loadMessages, loadParticipants, loadRoom, markRoomRead, router, supabase])
+  }, [checkParticipation, isInviteEntry, loadMessages, loadParticipants, loadRoom, markRoomRead, roomId, router, supabase])
 
   useEffect(() => {
     if (!roomId) {
@@ -710,6 +721,134 @@ export default function ChatRoomPage() {
       console.error('Broadcast room sync error:', error)
     }
   }, [roomId])
+
+  const handleShareRoomInvite = useCallback(async () => {
+    if (!room || !isRoomInviteAvailable) return
+
+    const sharePayload = buildRoomInviteSharePayload({
+      origin: window.location.origin,
+      roomId,
+      fromLabel: LOCATIONS[room.from_location],
+      toLabel: LOCATIONS[room.to_location],
+      departureDate: room.departure_date,
+      departureTime: room.departure_time,
+      participantCount: participants.length,
+      maxParticipants: room.max_participants,
+    })
+
+    try {
+      if (navigator.share) {
+        await navigator.share(sharePayload)
+      } else {
+        await navigator.clipboard.writeText(sharePayload.text)
+      }
+
+      trackEvent('room_invite_shared', {
+        room_id: roomId,
+        from_location: room.from_location,
+        to_location: room.to_location,
+        departure_date: room.departure_date,
+        departure_time: room.departure_time,
+        participant_count: participants.length,
+      })
+      toast.success('초대 링크를 공유했습니다')
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
+
+      console.error('Share room invite error:', error)
+      toast.error('초대 링크를 공유하지 못했습니다')
+    }
+  }, [isRoomInviteAvailable, participants.length, room, roomId])
+
+  const handleJoinInvitedRoom = useCallback(async () => {
+    if (!user || !room || isJoiningInvitedRoom) return
+
+    if (!isRoomJoinable(room.departure_date, room.departure_time)) {
+      toast.error('이미 지난 출발 시간입니다')
+      return
+    }
+
+    if (participants.length >= room.max_participants) {
+      toast.error('채팅방이 가득 찼습니다')
+      return
+    }
+
+    setIsJoiningInvitedRoom(true)
+
+    try {
+      trackEvent('room_join_started', {
+        room_id: roomId,
+        from_location: room.from_location,
+        to_location: room.to_location,
+        departure_date: room.departure_date,
+        departure_time: room.departure_time,
+        source: 'room_invite',
+      })
+
+      let response = await fetch(`/api/rooms/${roomId}/join`, {
+        method: 'POST',
+        cache: 'no-store',
+        credentials: 'same-origin',
+      })
+
+      if (response.status === 401 && await refreshServerSession()) {
+        response = await fetch(`/api/rooms/${roomId}/join`, {
+          method: 'POST',
+          cache: 'no-store',
+          credentials: 'same-origin',
+        })
+      }
+
+      if (response.status === 401) {
+        handleExpiredRoomSession()
+        return
+      }
+
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        throw new Error(result?.error ?? '채팅방 참여 중 오류가 발생했습니다')
+      }
+
+      await Promise.all([
+        loadParticipants(),
+        checkParticipation(user.id),
+        loadMessages(),
+      ])
+      await broadcastRoomSync('participants')
+      trackEvent('room_joined', {
+        room_id: roomId,
+        from_location: room.from_location,
+        to_location: room.to_location,
+        departure_date: room.departure_date,
+        departure_time: room.departure_time,
+        source: 'room_invite',
+        already_joined: Boolean(result?.alreadyJoined),
+      })
+      toast.success('채팅방에 참여했습니다')
+    } catch (error) {
+      console.error('Join invited room error:', error)
+      trackEvent('room_join_failed', {
+        room_id: roomId,
+        source: 'room_invite',
+      })
+      toast.error(error instanceof Error ? error.message : '채팅방 참여 중 오류가 발생했습니다')
+    } finally {
+      setIsJoiningInvitedRoom(false)
+    }
+  }, [
+    broadcastRoomSync,
+    checkParticipation,
+    handleExpiredRoomSession,
+    isJoiningInvitedRoom,
+    loadMessages,
+    loadParticipants,
+    participants.length,
+    refreshServerSession,
+    room,
+    roomId,
+    user,
+  ])
 
   useEffect(() => {
     if (!room) return
@@ -1236,33 +1375,35 @@ export default function ChatRoomPage() {
         </div>
 
         {/* 방장 계좌 */}
-        <div className="mt-2 rounded-xl border border-primary-100 bg-primary-50/90 px-3 py-2">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-primary-700">
-              <CreditCard className="h-3.5 w-3.5" />
-              <span>방장 계좌</span>
+        {isParticipant && (
+          <div className="mt-2 rounded-xl border border-primary-100 bg-primary-50/90 px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-primary-700">
+                <CreditCard className="h-3.5 w-3.5" />
+                <span>방장 계좌</span>
+              </div>
+              {creatorPayoutAccount && (
+                <button
+                  type="button"
+                  onClick={copyCreatorPayoutAccount}
+                  className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-white px-2 text-[11px] font-black text-primary-700 shadow-sm ring-1 ring-primary-100 transition hover:bg-primary-50"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  복사
+                </button>
+              )}
             </div>
-            {creatorPayoutAccount && (
-              <button
-                type="button"
-                onClick={copyCreatorPayoutAccount}
-                className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-white px-2 text-[11px] font-black text-primary-700 shadow-sm ring-1 ring-primary-100 transition hover:bg-primary-50"
-              >
-                <Copy className="h-3.5 w-3.5" />
-                복사
-              </button>
+            {creatorPayoutAccount !== null ? (
+              <p className="chat-payout-account mt-1 truncate text-xs font-semibold text-gray-900">
+                {creatorPayoutAccount.bank_name} {formattedCreatorAccountNumber} {creatorPayoutAccount.account_holder}
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-gray-500">
+                방장 계좌 정보가 아직 등록되지 않았습니다.
+              </p>
             )}
           </div>
-          {creatorPayoutAccount ? (
-            <p className="chat-payout-account mt-1 truncate text-xs font-semibold text-gray-900">
-              {creatorPayoutAccount.bank_name} {formattedCreatorAccountNumber} {creatorPayoutAccount.account_holder}
-            </p>
-          ) : (
-            <p className="mt-1 text-xs text-gray-500">
-              방장 계좌 정보가 아직 등록되지 않았습니다.
-            </p>
-          )}
-        </div>
+        )}
 
         {/* 참여 확정 버튼 */}
         {isParticipant && !isConfirmed && (
@@ -1289,61 +1430,97 @@ export default function ChatRoomPage() {
         onPointerCancel={handleMessagesPointerEnd}
         onPointerLeave={handleMessagesPointerEnd}
       >
-        {hasMoreMessages && (
-          <div className="flex justify-center py-2">
-            <button
-              type="button"
-              onClick={loadOlderMessages}
-              disabled={isLoadingOlderMessages}
-              className="rounded-full bg-gray-100 px-4 py-1.5 text-xs text-gray-600 transition active:scale-95 disabled:opacity-50"
-            >
-              {isLoadingOlderMessages ? '불러오는 중…' : '이전 메시지 더보기'}
-            </button>
-          </div>
-        )}
-        {messages.map((message, index) => {
-          const isOwnMessage = message.user_id === user.id
-          const previousMessage = messages[index - 1]
-          const nextMessage = messages[index + 1]
-          const messageDate = new Date(message.created_at)
-          // 이전 메시지와 날짜가 다르면(또는 첫 메시지면) 카카오톡처럼 날짜 구분선을 먼저 그린다
-          const showDateDivider = !previousMessage || !isSameDay(new Date(previousMessage.created_at), messageDate)
-          const nextStartsNewDay = !!nextMessage && !isSameDay(messageDate, new Date(nextMessage.created_at))
-          const startsMessageGroup = showDateDivider || !previousMessage || previousMessage.user_id !== message.user_id
-          const endsMessageGroup = nextStartsNewDay || !nextMessage || nextMessage.user_id !== message.user_id
+        {isParticipant ? (
+          <>
+            {hasMoreMessages && (
+              <div className="flex justify-center py-2">
+                <button
+                  type="button"
+                  onClick={loadOlderMessages}
+                  disabled={isLoadingOlderMessages}
+                  className="rounded-full bg-gray-100 px-4 py-1.5 text-xs text-gray-600 transition active:scale-95 disabled:opacity-50"
+                >
+                  {isLoadingOlderMessages ? '불러오는 중…' : '이전 메시지 더보기'}
+                </button>
+              </div>
+            )}
+            {messages.map((message, index) => {
+              const isOwnMessage = message.user_id === user.id
+              const previousMessage = messages[index - 1]
+              const nextMessage = messages[index + 1]
+              const messageDate = new Date(message.created_at)
+              // 이전 메시지와 날짜가 다르면(또는 첫 메시지면) 카카오톡처럼 날짜 구분선을 먼저 그린다
+              const showDateDivider = !previousMessage || !isSameDay(new Date(previousMessage.created_at), messageDate)
+              const nextStartsNewDay = !!nextMessage && !isSameDay(messageDate, new Date(nextMessage.created_at))
+              const startsMessageGroup = showDateDivider || !previousMessage || previousMessage.user_id !== message.user_id
+              const endsMessageGroup = nextStartsNewDay || !nextMessage || nextMessage.user_id !== message.user_id
 
-          return (
-            <Fragment key={message.id}>
-              {showDateDivider && (
-                <div className="chat-date-divider" role="separator">
-                  <span>{format(messageDate, 'yyyy년 M월 d일 EEEE', { locale: ko })}</span>
-                </div>
-              )}
-              <div
-                className={`chat-message-row flex w-full min-w-0 ${startsMessageGroup ? 'is-new-author' : 'is-same-author'} ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
-              >
-                <div className={`chat-message-bubble-stack min-w-0 max-w-[min(78vw,18rem)] ${isOwnMessage ? 'ml-7' : 'mr-7'}`}>
-                  {!isOwnMessage && startsMessageGroup && (
-                    <p className="chat-message-author">
-                      {message.user?.nickname} ({message.user?.department})
-                    </p>
+              return (
+                <Fragment key={message.id}>
+                  {showDateDivider && (
+                    <div className="chat-date-divider" role="separator">
+                      <span>{format(messageDate, 'yyyy년 M월 d일 EEEE', { locale: ko })}</span>
+                    </div>
                   )}
                   <div
-                    className={`chat-message max-w-full ${
-                      isOwnMessage ? 'chat-message-own' : 'chat-message-other'
-                    } ${startsMessageGroup ? 'chat-message-group-start' : 'chat-message-group-follow'} ${endsMessageGroup ? 'chat-message-group-end' : 'chat-message-group-continue'}`}
+                    className={`chat-message-row flex w-full min-w-0 ${startsMessageGroup ? 'is-new-author' : 'is-same-author'} ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
                   >
-                    {message.content}
+                    <div className={`chat-message-bubble-stack min-w-0 max-w-[min(78vw,18rem)] ${isOwnMessage ? 'ml-7' : 'mr-7'}`}>
+                      {!isOwnMessage && startsMessageGroup && (
+                        <p className="chat-message-author">
+                          {message.user?.nickname} ({message.user?.department})
+                        </p>
+                      )}
+                      <div
+                        className={`chat-message max-w-full ${
+                          isOwnMessage ? 'chat-message-own' : 'chat-message-other'
+                        } ${startsMessageGroup ? 'chat-message-group-start' : 'chat-message-group-follow'} ${endsMessageGroup ? 'chat-message-group-end' : 'chat-message-group-continue'}`}
+                      >
+                        {message.content}
+                      </div>
+                    </div>
+                    <time className="chat-message-time" dateTime={message.created_at}>
+                      {format(messageDate, 'HH:mm')}
+                    </time>
                   </div>
-                </div>
-                <time className="chat-message-time" dateTime={message.created_at}>
-                  {format(messageDate, 'HH:mm')}
-                </time>
+                </Fragment>
+              )
+            })}
+            <div ref={messagesEndRef} />
+          </>
+        ) : (
+          <div className="flex min-h-full items-center justify-center py-8">
+            <div className="w-full max-w-sm rounded-2xl border border-white/80 bg-white/95 p-4 text-center shadow-[0_18px_48px_rgba(17,24,39,0.16)]">
+              <p className="text-xs font-black text-primary-600">
+                {isInviteEntry ? '초대받은 방' : '채팅방 미참여'}
+              </p>
+              <h2 className="mt-2 text-lg font-black text-gray-950">
+                {LOCATIONS[room.from_location]} → {LOCATIONS[room.to_location]}
+              </h2>
+              <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs font-bold text-gray-600">
+                <span>{format(new Date(`${room.departure_date}T${room.departure_time}`), 'M월 d일 HH:mm', { locale: ko })}</span>
+                <span>{participants.length}/{room.max_participants}명 참여 중</span>
               </div>
-            </Fragment>
-          )
-        })}
-        <div ref={messagesEndRef} />
+              <p className="mt-3 text-sm font-bold leading-5 text-gray-600">
+                채팅방에 참여하면 메시지를 볼 수 있습니다.
+              </p>
+              {isRoomInviteAvailable ? (
+                <button
+                  type="button"
+                  onClick={handleJoinInvitedRoom}
+                  disabled={isJoiningInvitedRoom}
+                  className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl bg-primary-600 text-sm font-black text-white transition hover:bg-primary-700 disabled:bg-gray-300"
+                >
+                  {isJoiningInvitedRoom ? '참여 중...' : '참여하고 채팅 보기'}
+                </button>
+              ) : (
+                <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-sm font-black text-gray-500">
+                  이 방은 마감됐어요
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 방장 안내: 차단형 모달 대신 대화 시작 전까지 빈 채팅 배경으로 표시 */}
@@ -1445,7 +1622,7 @@ export default function ChatRoomPage() {
           </div>
         ) : (
           <p className="text-gray-600 text-sm">
-            채팅방에 참여해야 메시지를 보낼 수 있습니다
+            채팅방에 참여하면 메시지를 볼 수 있습니다
           </p>
         )}
       </div>
@@ -1474,6 +1651,21 @@ export default function ChatRoomPage() {
                 <X className="h-5 w-5" />
               </button>
             </div>
+
+            {isRoomInviteAvailable ? (
+              <button
+                type="button"
+                onClick={handleShareRoomInvite}
+                className="mb-3 inline-flex h-11 w-full items-center justify-center rounded-xl bg-primary-600 text-sm font-black text-white transition hover:bg-primary-700"
+              >
+                <Share2 className="mr-2 h-4 w-4" />
+                초대 링크 공유
+              </button>
+            ) : (
+              <p className="mb-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-center text-xs font-bold text-gray-500">
+                방이 마감되면 초대할 수 없어요
+              </p>
+            )}
 
             <div className="max-h-[42vh] space-y-2 overflow-y-auto">
               {participants.map(participant => {

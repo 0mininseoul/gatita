@@ -8,12 +8,25 @@ export const AUTH_CODE_MISSING_MESSAGE = '로그인 인증 정보를 받지 못�
 export const isGachonEmail = (email?: string | null): email is string =>
   typeof email === 'string' && email.toLowerCase().endsWith(GACHON_EMAIL_DOMAIN)
 
-export const getGoogleOAuthOptions = () => ({
-  redirectTo: `${window.location.origin}/auth/callback`,
-  queryParams: {
-    hd: GACHON_GOOGLE_DOMAIN,
-  },
-})
+function getSafeRedirectPath(redirectPath?: string) {
+  if (!redirectPath) return ''
+  if (!redirectPath.startsWith('/') || redirectPath.startsWith('//')) return ''
+  return redirectPath
+}
+
+export function getGoogleOAuthOptions(redirectPath?: string) {
+  const safeRedirectPath = getSafeRedirectPath(redirectPath)
+  const callbackSearch = safeRedirectPath
+    ? `?redirect=${encodeURIComponent(safeRedirectPath)}`
+    : ''
+
+  return {
+    redirectTo: `${window.location.origin}/auth/callback${callbackSearch}`,
+    queryParams: {
+      hd: GACHON_GOOGLE_DOMAIN,
+    },
+  }
+}
 
 export function extractGachonProfileFromMetadata(metadata?: Record<string, unknown> | null) {
   const displayName = [

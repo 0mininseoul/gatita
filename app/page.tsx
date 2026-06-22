@@ -174,6 +174,13 @@ export default function HomePage() {
   const router = useRouter()
   const pathname = usePathname()
   const isMapRoute = pathname === '/map'
+  const currentSearch = typeof window !== 'undefined' ? window.location.search : ''
+  const explicitRedirectPath = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('redirect')
+    : null
+  const inviteRedirectPath = pathname.startsWith('/rooms/')
+    ? `${pathname}${currentSearch}`
+    : explicitRedirectPath?.startsWith('/rooms/') ? explicitRedirectPath : undefined
   const previewTestLoginEnabled = isPreviewTestLoginEnabled()
 
   const supabase = useMemo(() => {
@@ -1177,7 +1184,7 @@ export default function HomePage() {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: getGoogleOAuthOptions(),
+        options: getGoogleOAuthOptions(inviteRedirectPath),
       })
       if (error) throw error
     } catch (error) {

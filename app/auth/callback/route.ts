@@ -19,8 +19,10 @@ const getRedirectOrigin = (request: Request, requestUrl: URL) => {
   return requestUrl.origin
 }
 
-const redirectToHome = (origin: string, searchParams?: Record<string, string>) => {
-  const url = new URL('/', origin)
+const redirectToHome = (origin: string, searchParams?: Record<string, string>, redirectPath?: string | null) => {
+  const isSafeRedirectPath = redirectPath?.startsWith('/') && !redirectPath.startsWith('//')
+  const destinationPath = isSafeRedirectPath && redirectPath ? redirectPath : '/'
+  const url = new URL(destinationPath, origin)
 
   Object.entries(searchParams ?? {}).forEach(([key, value]) => {
     url.searchParams.set(key, value)
@@ -33,6 +35,7 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url)
   const origin = getRedirectOrigin(request, requestUrl)
   const code = requestUrl.searchParams.get('code')
+  const redirectPath = requestUrl.searchParams.get('redirect')
 
   if (!code) {
     return redirectToHome(origin, { auth_error: AUTH_CODE_MISSING_MESSAGE })
@@ -59,5 +62,5 @@ export async function GET(request: Request) {
     return redirectToHome(origin, { auth_error: NON_GACHON_ACCOUNT_MESSAGE })
   }
 
-  return redirectToHome(origin, { auth: 'complete' })
+  return redirectToHome(origin, { auth: 'complete' }, redirectPath)
 }

@@ -74,6 +74,7 @@ export default function ChatRoomPage() {
   const composerSendButtonRef = useRef<HTMLButtonElement>(null)
   const hostAppearanceInputRef = useRef<HTMLInputElement>(null)
   const isComposerFocusedRef = useRef(false)
+  const isHostAppearanceFocusedRef = useRef(false)
   const visualViewportBaselineRef = useRef(0)
   const timestampDragRef = useRef({
     isTracking: false,
@@ -121,15 +122,17 @@ export default function ChatRoomPage() {
     const visualViewport = window.visualViewport
     const viewportHeight = visualViewport?.height ?? window.innerHeight
 
+    const isKeyboardInputFocused = isComposerFocusedRef.current || isHostAppearanceFocusedRef.current
+
     if (
-      !isComposerFocusedRef.current
+      !isKeyboardInputFocused
       || visualViewportBaselineRef.current === 0
       || viewportHeight > visualViewportBaselineRef.current
     ) {
       visualViewportBaselineRef.current = viewportHeight
     }
 
-    const keyboardInset = isComposerFocusedRef.current
+    const keyboardInset = isKeyboardInputFocused
       ? Math.max(0, visualViewportBaselineRef.current - viewportHeight)
       : 0
     const headerHeight = headerRef.current?.getBoundingClientRect().height ?? 0
@@ -147,13 +150,24 @@ export default function ChatRoomPage() {
   }, [keepWindowPinned, syncChatChrome])
 
   const scrollHostAppearanceInputIntoView = useCallback(() => {
-    window.setTimeout(() => {
+    isHostAppearanceFocusedRef.current = true
+
+    const revealInput = () => {
+      syncAndPinChat()
       hostAppearanceInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }, 120)
-    window.setTimeout(() => {
-      hostAppearanceInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }, 320)
-  }, [])
+    }
+
+    revealInput()
+    requestAnimationFrame(revealInput)
+    window.setTimeout(revealInput, 120)
+    window.setTimeout(revealInput, 320)
+  }, [syncAndPinChat])
+
+  const handleHostAppearanceBlur = useCallback(() => {
+    isHostAppearanceFocusedRef.current = false
+    syncAndPinChat()
+    window.setTimeout(syncAndPinChat, 80)
+  }, [syncAndPinChat])
 
   useEffect(() => {
     const root = document.documentElement
@@ -1274,6 +1288,7 @@ export default function ChatRoomPage() {
                       value={hostAppearanceDraft}
                       onChange={(event) => setHostAppearanceDraft(event.target.value)}
                       onFocus={scrollHostAppearanceInputIntoView}
+                      onBlur={handleHostAppearanceBlur}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter' && hostAppearanceDraft.trim()) {
                           event.preventDefault()

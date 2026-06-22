@@ -437,9 +437,9 @@
     bottom: calc(var(--chat-composer-height) + var(--chat-keyboard-inset) + 0.75rem);
     z-index: 20;
     display: flex;
-    align-items: center;
-    justify-content: center;
     padding: 1.25rem;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     pointer-events: none;
     opacity: 1;
     transition: opacity 380ms ease;
@@ -450,82 +450,91 @@
     visibility: hidden;
   }
 
+  /* margin:auto centers the card when it fits and lets it scroll (instead of
+     clipping) when the keyboard shrinks the area, keeping the input reachable. */
   .chat-host-watermark__panel {
     position: relative;
     width: 100%;
     max-width: 21rem;
-    padding: 1.1rem 1.15rem 1.2rem;
+    margin: auto;
+    padding: 1.15rem 1.2rem 1.25rem;
     border-radius: 1.1rem;
     pointer-events: auto;
-    color: #94a3b8;
-    background-image:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E"),
-      linear-gradient(180deg, rgba(248, 250, 255, 0.55), rgba(236, 241, 250, 0.55));
-    background-blend-mode: overlay, normal;
-    overflow: hidden;
+    color: #374151;
+    background: #ffffff;
+    border: 1px solid rgba(31, 78, 200, 0.1);
+    box-shadow: 0 14px 34px rgba(31, 78, 200, 0.12);
   }
 
   .chat-host-watermark__kicker {
-    font-size: 0.66rem;
+    font-size: 0.7rem;
     font-weight: 800;
     letter-spacing: 0.02em;
-    color: #b6c0cf;
+    color: #2563eb;
   }
 
   .chat-host-watermark__title {
     margin-top: 0.15rem;
-    font-size: 1.05rem;
+    font-size: 1.1rem;
     font-weight: 900;
-    color: #8a96a6;
+    color: #111827;
   }
 
   .chat-host-watermark__list {
-    margin-top: 0.7rem;
+    margin-top: 0.9rem;
     display: grid;
-    gap: 0.5rem;
+    gap: 0.6rem;
   }
 
   .chat-host-watermark__list li {
     display: grid;
-    grid-template-columns: 1.1rem minmax(0, 1fr);
+    grid-template-columns: 1.65rem minmax(0, 1fr);
     align-items: start;
-    gap: 0.4rem;
-    font-size: 0.72rem;
-    font-weight: 600;
-    line-height: 1.45;
-    color: #9aa6b4;
+    gap: 0.55rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    line-height: 1.5;
+    color: #374151;
   }
 
   .chat-host-watermark__list span {
-    line-height: 1.45;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.65rem;
+    height: 1.65rem;
+    border-radius: 0.55rem;
+    background: rgba(39, 130, 255, 0.1);
+    font-size: 0.85rem;
+    line-height: 1;
   }
 
   .chat-host-watermark__saved {
-    margin-top: 0.85rem;
-    padding-top: 0.7rem;
-    border-top: 1px dashed rgba(148, 163, 184, 0.4);
-    font-size: 0.72rem;
-    font-weight: 800;
-    color: #64748b;
+    margin-top: 0.95rem;
+    padding-top: 0.8rem;
+    border-top: 1px solid rgba(31, 78, 200, 0.1);
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #1f2937;
   }
 
   .chat-host-watermark__appearance {
-    margin-top: 0.85rem;
-    padding-top: 0.8rem;
-    border-top: 1px dashed rgba(148, 163, 184, 0.4);
+    margin-top: 0.95rem;
+    padding-top: 0.85rem;
+    border-top: 1px solid rgba(31, 78, 200, 0.1);
   }
 
   .chat-host-watermark__appearance-label {
     display: block;
-    font-size: 0.72rem;
+    font-size: 0.78rem;
     font-weight: 800;
-    color: #6b7686;
+    color: #1f2937;
   }
 
   .chat-host-watermark__appearance-label em {
     font-style: normal;
-    font-weight: 700;
-    color: #aab4c2;
+    font-weight: 600;
+    color: #6b7280;
   }
 
   .chat-host-watermark__appearance-row {

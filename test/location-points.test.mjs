@@ -445,11 +445,14 @@ test('map shows a once-per-day PWA home screen onboarding modal', () => {
 test('service worker refreshes navigations before falling back to cached app shell', () => {
   const source = readProjectFile('public/sw.js')
 
-  assert.match(source, /gatita-v1\.0\.1/)
+  assert.match(source, /gatita-v1\.0\.2/)
   assert.match(source, /'\/map'/, 'PWA start URL should be cached as an app shell')
-  assert.match(source, /event\.request\.mode === 'navigate'/)
+  assert.match(source, /event\.request\.mode !== 'navigate'/)
   assert.match(source, /fetch\(event\.request\)/)
   assert.match(source, /cache\.put\(event\.request, responseToCache\)/)
+  assert.match(source, /requestUrl\.pathname\.startsWith\('\/api\/'\)/)
+  assert.match(source, /event\.respondWith\(fetch\(event\.request\)\)/)
+  assert.match(source, /isCacheableAppShellRequest/)
   assert.doesNotMatch(source, /if \(response\) \{\s*return response\s*\}/)
 })
 

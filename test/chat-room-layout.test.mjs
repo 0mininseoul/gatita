@@ -330,6 +330,18 @@ test('host appearance is hidden from chat and shown in entry guide and participa
   assert.match(source, /participant\.user_id === room\.created_by && hostAppearance/)
 })
 
+test('chat room treats authenticated room API 401s as expired sessions', () => {
+  const source = readProjectFile('app/rooms/[id]/page.tsx')
+
+  assert.match(source, /handleExpiredRoomSession/)
+  assert.match(source, /privateResponse\.status === 401/)
+  assert.match(source, /readResponse\.status !== 401/)
+  assert.match(source, /retryReadResponse\.status !== 401/)
+  assert.match(source, /response\.status === 401[\s\S]*handleExpiredRoomSession/)
+  assert.match(source, /toast\.error\('로그인이 만료되었습니다\. 다시 로그인해주세요'/)
+  assert.match(source, /router\.replace\('\/'\)/)
+})
+
 test('room creator transfer is required before leaving a room with members', () => {
   const source = readProjectFile('app/rooms/[id]/page.tsx')
   const routePath = 'app/api/rooms/[id]/leave/route.ts'

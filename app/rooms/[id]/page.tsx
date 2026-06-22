@@ -508,6 +508,26 @@ export default function ChatRoomPage() {
     } as Message))
   }, [ensureAuthors])
 
+  const handleExpiredRoomSession = useCallback(() => {
+    toast.error('로그인이 만료되었습니다. 다시 로그인해주세요', { id: 'room-session-expired' })
+    router.replace('/')
+  }, [router])
+
+  const refreshServerSession = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session?.user) {
+      return false
+    }
+
+    const response = await fetch('/api/profile/me', {
+      cache: 'no-store',
+      credentials: 'same-origin',
+    })
+
+    return response.ok
+  }, [supabase])
+
   const loadParticipants = useCallback(async () => {
     try {
       const { data } = await supabase
@@ -519,7 +539,23 @@ export default function ChatRoomPage() {
         .eq('room_id', roomId)
 
       if (data) {
-        const privateResponse = await fetch(`/api/rooms/${roomId}/private`)
+        let privateResponse = await fetch(`/api/rooms/${roomId}/private`, {
+          cache: 'no-store',
+          credentials: 'same-origin',
+        })
+
+        if (privateResponse.status === 401 && await refreshServerSession()) {
+          privateResponse = await fetch(`/api/rooms/${roomId}/private`, {
+            cache: 'no-store',
+            credentials: 'same-origin',
+          })
+        }
+
+        if (privateResponse.status === 401) {
+          handleExpiredRoomSession()
+          return
+        }
+
         const privateResult = await privateResponse.json().catch(() => null) as RoomPrivateInfoPayload | null
         const phonesByUserId = privateResponse.ok ? privateResult?.phonesByUserId ?? {} : {}
 
@@ -542,7 +578,7 @@ export default function ChatRoomPage() {
     } catch (error) {
       console.error('Load participants error:', error)
     }
-  }, [roomId, supabase])
+  }, [handleExpiredRoomSession, refreshServerSession, roomId, supabase])
 
   const checkParticipation = useCallback(async (userId: string) => {
     try {
@@ -563,10 +599,30 @@ export default function ChatRoomPage() {
     }
   }, [roomId, supabase])
 
-  const markRoomRead = useCallback(() => {
+  const markRoomRead = useCallback((options: { redirectOnUnauthorized?: boolean } = {}) => {
     // Fire-and-forget; keepalive lets it survive navigation away from the room.
-    fetch(`/api/rooms/${roomId}/read`, { method: 'POST', keepalive: true }).catch(() => {})
-  }, [roomId])
+    fetch(`/api/rooms/${roomId}/read`, {
+      method: 'POST',
+      keepalive: true,
+      cache: 'no-store',
+      credentials: 'same-origin',
+    }).then(async (readResponse) => {
+      if (readResponse.status !== 401 || !options.redirectOnUnauthorized) return
+
+      if (await refreshServerSession()) {
+        const retryReadResponse = await fetch(`/api/rooms/${roomId}/read`, {
+          method: 'POST',
+          keepalive: true,
+          cache: 'no-store',
+          credentials: 'same-origin',
+        })
+
+        if (retryReadResponse.status !== 401) return
+      }
+
+      handleExpiredRoomSession()
+    }).catch(() => {})
+  }, [handleExpiredRoomSession, refreshServerSession, roomId])
 
   const checkAuthAndLoadData = useCallback(async () => {
     try {
@@ -609,7 +665,7 @@ export default function ChatRoomPage() {
         loadParticipants(),
         checkParticipation(userData.id)
       ])
-      markRoomRead()
+      markRoomRead({ redirectOnUnauthorized: true })
     } catch (error) {
       console.error('Auth/data loading error:', error)
       router.push('/')
@@ -868,9 +924,25 @@ export default function ChatRoomPage() {
     setIsConfirmingParticipation(true)
 
     try {
-      const response = await fetch(`/api/rooms/${roomId}/confirm`, {
+      let response = await fetch(`/api/rooms/${roomId}/confirm`, {
         method: 'POST',
+        cache: 'no-store',
+        credentials: 'same-origin',
       })
+
+      if (response.status === 401 && await refreshServerSession()) {
+        response = await fetch(`/api/rooms/${roomId}/confirm`, {
+          method: 'POST',
+          cache: 'no-store',
+          credentials: 'same-origin',
+        })
+      }
+
+      if (response.status === 401) {
+        handleExpiredRoomSession()
+        return
+      }
+
       const result = await response.json().catch(() => null)
 
       if (!response.ok) {
@@ -897,11 +969,30 @@ export default function ChatRoomPage() {
     if (!user) return
 
     try {
-      const response = await fetch(`/api/rooms/${roomId}/leave`, {
+      const leaveRequestBody = JSON.stringify({ nextHostId: transferHostId ?? null })
+      let response = await fetch(`/api/rooms/${roomId}/leave`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nextHostId: transferHostId ?? null }),
+        body: leaveRequestBody,
+        cache: 'no-store',
+        credentials: 'same-origin',
       })
+
+      if (response.status === 401 && await refreshServerSession()) {
+        response = await fetch(`/api/rooms/${roomId}/leave`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: leaveRequestBody,
+          cache: 'no-store',
+          credentials: 'same-origin',
+        })
+      }
+
+      if (response.status === 401) {
+        handleExpiredRoomSession()
+        return
+      }
+
       const result = await response.json().catch(() => null)
 
       if (!response.ok) {

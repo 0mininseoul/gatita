@@ -105,3 +105,15 @@ test('profile onboarding uses section-based mobile form and keeps account number
   assert.match(banks, /formatAccountNumberForBank/, 'bank helpers should format stored account numbers for display')
   assert.match(settings, /\.\.\.\(field === 'bank_name' \? \{ account_number: '' \} : \{\}\)/, 'changing bank should clear a stale account number format')
 })
+
+test('profile onboarding requires a separate no paid private-car transport compliance check', () => {
+  const signup = readProjectFile('components', 'auth', 'SignupForm.tsx')
+
+  assert.match(signup, /hasAcceptedUsageRules/, 'signup should track service-use compliance separately from legal/privacy consent')
+  assert.match(signup, /usageRules/, 'signup should validate the service-use compliance checkbox as its own review error')
+  assert.match(signup, /자가용·렌터카 유상 운송/, 'compliance copy should explicitly prohibit paid private-car or rental-car transport')
+  assert.match(signup, /기름값·수고비·사례비/, 'compliance copy should prohibit receiving driving-related compensation')
+  assert.match(signup, /택시 동승 및 실제 공동 이용 비용 정산 조율/, 'compliance copy should anchor the product to taxi sharing and actual shared-cost settlement')
+  assert.match(signup, /개인정보처리방침[\s\S]*에 동의합니다\.[\s\S]*자가용·렌터카 유상 운송/, 'service-use compliance should render below the legal/privacy consent checkbox')
+  assert.match(signup, /hasAcceptedRequiredTerms && hasAcceptedUsageRules/, 'the final CTA should require both legal/privacy consent and service-use compliance')
+})

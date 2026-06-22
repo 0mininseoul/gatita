@@ -131,6 +131,7 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
   const [isLoading, setIsLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [hasAcceptedRequiredTerms, setHasAcceptedRequiredTerms] = useState(false)
+  const [hasAcceptedUsageRules, setHasAcceptedUsageRules] = useState(false)
   const supabase = useMemo(() => createClient(), [])
 
   const currentSection = SIGNUP_SECTIONS[currentStep]
@@ -277,6 +278,9 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
 
     if (isLastStep && !hasAcceptedRequiredTerms) {
       nextErrors.consent = '개인정보처리방침과 서비스약관에 동의해주세요'
+    }
+    if (isLastStep && !hasAcceptedUsageRules) {
+      nextErrors.usageRules = '서비스 이용 준수사항을 확인해주세요'
     }
 
     setErrors(nextErrors)
@@ -459,10 +463,10 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
 
   const canContinue = useMemo(() => {
     if (!currentSection || isLoading) return false
-    if (isLastStep) return hasAcceptedRequiredTerms
+    if (isLastStep) return hasAcceptedRequiredTerms && hasAcceptedUsageRules
 
     return currentSection.fields.every((fieldId) => Boolean((formData[fieldId] || '').trim()))
-  }, [currentSection, formData, hasAcceptedRequiredTerms, isLastStep, isLoading])
+  }, [currentSection, formData, hasAcceptedRequiredTerms, hasAcceptedUsageRules, isLastStep, isLoading])
 
   const formattedAccountNumber = useMemo(
     () => formatAccountNumberForBank(formData.bank_name, formData.account_number || ''),
@@ -721,6 +725,8 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
               formattedAccountNumber={formattedAccountNumber}
               hasAcceptedRequiredTerms={hasAcceptedRequiredTerms}
               setHasAcceptedRequiredTerms={setHasAcceptedRequiredTerms}
+              hasAcceptedUsageRules={hasAcceptedUsageRules}
+              setHasAcceptedUsageRules={setHasAcceptedUsageRules}
               clearConsentError={() => {
                 if (errors.consent) {
                   setErrors(prev => {
@@ -730,7 +736,17 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
                   })
                 }
               }}
+              clearUsageRulesError={() => {
+                if (errors.usageRules) {
+                  setErrors(prev => {
+                    const next = { ...prev }
+                    delete next.usageRules
+                    return next
+                  })
+                }
+              }}
               consentError={errors.consent}
+              usageRulesError={errors.usageRules}
             />
           )}
         </section>
@@ -795,15 +811,23 @@ function ReviewPanel({
   formattedAccountNumber,
   hasAcceptedRequiredTerms,
   setHasAcceptedRequiredTerms,
+  hasAcceptedUsageRules,
+  setHasAcceptedUsageRules,
   clearConsentError,
+  clearUsageRulesError,
   consentError,
+  usageRulesError,
 }: {
   formData: Record<string, string>
   formattedAccountNumber: string
   hasAcceptedRequiredTerms: boolean
   setHasAcceptedRequiredTerms: (value: boolean) => void
+  hasAcceptedUsageRules: boolean
+  setHasAcceptedUsageRules: (value: boolean) => void
   clearConsentError: () => void
+  clearUsageRulesError: () => void
   consentError?: string
+  usageRulesError?: string
 }) {
   return (
     <div className="mt-6 space-y-4">
@@ -850,6 +874,27 @@ function ReviewPanel({
           <div className="mt-2 flex items-center text-xs font-semibold text-red-500">
             <AlertCircle className="mr-1 h-3.5 w-3.5" />
             {consentError}
+          </div>
+        )}
+        <label className="mt-3 flex items-start gap-2 border-t border-gray-100 pt-3 text-xs font-semibold leading-5 text-gray-700">
+          <input
+            type="checkbox"
+            checked={hasAcceptedUsageRules}
+            onChange={(event) => {
+              setHasAcceptedUsageRules(event.target.checked)
+              clearUsageRulesError()
+            }}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+          />
+          <span>
+            같이타를 자가용·렌터카 유상 운송, 운전자 모집, 기름값·수고비·사례비를 받는 운전 제공에 사용하지 않겠습니다.
+            같이타는 택시 동승 및 실제 공동 이용 비용 정산 조율 목적으로만 사용하겠습니다.
+          </span>
+        </label>
+        {usageRulesError && (
+          <div className="mt-2 flex items-center text-xs font-semibold text-red-500">
+            <AlertCircle className="mr-1 h-3.5 w-3.5" />
+            {usageRulesError}
           </div>
         )}
       </div>

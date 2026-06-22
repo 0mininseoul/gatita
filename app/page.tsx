@@ -150,6 +150,7 @@ export default function HomePage() {
   const [isLoadingMapRooms, setIsLoadingMapRooms] = useState(false)
   const [isLoadingMyRooms, setIsLoadingMyRooms] = useState(false)
   const [showMyRooms, setShowMyRooms] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
   const [isCreatingMapRoom, setIsCreatingMapRoom] = useState(false)
   const [isStartingGoogle, setIsStartingGoogle] = useState(false)
   const [hasEnteredApp, setHasEnteredApp] = useState(false)
@@ -272,6 +273,18 @@ export default function HomePage() {
       console.error('Load map rooms error:', error)
     } finally {
       setIsLoadingMapRooms(false)
+    }
+  }, [supabase])
+
+  const loadUnreadCount = useCallback(async () => {
+    if (!supabase) return
+
+    try {
+      const { data, error } = await supabase.rpc('get_my_unread_count')
+      if (error) throw error
+      setUnreadCount(typeof data === 'number' ? data : 0)
+    } catch (error) {
+      console.error('Load unread count error:', error)
     }
   }, [supabase])
 
@@ -547,6 +560,7 @@ export default function HomePage() {
     if (!supabase || !hasAuthenticatedSession || !hasEnteredApp || authMode === 'signup') return
 
     loadMapRooms()
+    loadUnreadCount()
 
     // 30초 전체 폴링 대신 실시간 구독 + 디바운스 재조회 (chat_rooms는 마이그레이션 적용 후 발화)
     let debounceId: ReturnType<typeof setTimeout> | null = null
@@ -558,26 +572,42 @@ export default function HomePage() {
       }, 500)
     }
 
+    // 새 메시지가 오면 안 읽은 수 배지를 갱신 (내 방만 RPC에서 필터됨)
+    let unreadDebounceId: ReturnType<typeof setTimeout> | null = null
+    const scheduleUnreadReload = () => {
+      if (unreadDebounceId) clearTimeout(unreadDebounceId)
+      unreadDebounceId = setTimeout(() => {
+        unreadDebounceId = null
+        loadUnreadCount()
+      }, 600)
+    }
+
     const channel = supabase
       .channel('map-rooms')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_rooms' }, scheduleReload)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'room_participants' }, scheduleReload)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, scheduleUnreadReload)
       .subscribe()
 
     // 실시간 누락 대비 저빈도 안전망 + 탭 복귀 시 갱신
-    const safetyId = window.setInterval(loadMapRooms, 120000)
+    const refreshAll = () => {
+      loadMapRooms()
+      loadUnreadCount()
+    }
+    const safetyId = window.setInterval(refreshAll, 120000)
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') loadMapRooms()
+      if (document.visibilityState === 'visible') refreshAll()
     }
     document.addEventListener('visibilitychange', handleVisibility)
 
     return () => {
       if (debounceId) clearTimeout(debounceId)
+      if (unreadDebounceId) clearTimeout(unreadDebounceId)
       window.clearInterval(safetyId)
       document.removeEventListener('visibilitychange', handleVisibility)
       supabase.removeChannel(channel)
     }
-  }, [authMode, hasAuthenticatedSession, hasEnteredApp, loadMapRooms, supabase])
+  }, [authMode, hasAuthenticatedSession, hasEnteredApp, loadMapRooms, loadUnreadCount, supabase])
 
   const onlineDisplayCount = usePresenceDisplayCount(
     supabase,
@@ -1622,11 +1652,16 @@ export default function HomePage() {
           <div className="flex shrink-0 items-center gap-1">
             <button
               type="button"
-              aria-label="나의 방"
+              aria-label={unreadCount > 0 ? `나의 방, 안 읽은 메시지 ${unreadCount > 99 ? '99+' : unreadCount}개` : '나의 방'}
               onClick={handleOpenMyRooms}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition hover:bg-gray-100 hover:text-gray-950"
+              className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition hover:bg-gray-100 hover:text-gray-950"
             >
               <MessageSquareText className="h-5 w-5" />
+              {unreadCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-black leading-none text-white">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
             </button>
             <button
               type="button"

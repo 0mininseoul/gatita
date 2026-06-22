@@ -563,6 +563,11 @@ export default function ChatRoomPage() {
     }
   }, [roomId, supabase])
 
+  const markRoomRead = useCallback(() => {
+    // Fire-and-forget; keepalive lets it survive navigation away from the room.
+    fetch(`/api/rooms/${roomId}/read`, { method: 'POST', keepalive: true }).catch(() => {})
+  }, [roomId])
+
   const checkAuthAndLoadData = useCallback(async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -604,13 +609,14 @@ export default function ChatRoomPage() {
         loadParticipants(),
         checkParticipation(userData.id)
       ])
+      markRoomRead()
     } catch (error) {
       console.error('Auth/data loading error:', error)
       router.push('/')
     } finally {
       setLoading(false)
     }
-  }, [checkParticipation, loadMessages, loadParticipants, loadRoom, router, supabase])
+  }, [checkParticipation, loadMessages, loadParticipants, loadRoom, markRoomRead, router, supabase])
 
   useEffect(() => {
     if (!roomId) {
@@ -620,6 +626,9 @@ export default function ChatRoomPage() {
 
     checkAuthAndLoadData()
   }, [checkAuthAndLoadData, roomId, router])
+
+  // Mark read on leaving so messages seen during the visit clear the map badge.
+  useEffect(() => () => markRoomRead(), [markRoomRead])
 
   const handleParticipantsRefresh = useCallback(async () => {
     await Promise.all([

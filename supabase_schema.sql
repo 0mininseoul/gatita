@@ -68,6 +68,7 @@ create table public.room_participants (
   user_id uuid references public.users(id) on delete cascade not null,
   confirmed boolean default false,
   joined_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  last_read_at timestamp with time zone,
   unique(room_id, user_id)
 );
 
@@ -427,6 +428,26 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- Total unread messages across the caller's active rooms (for the map badge).
+create or replace function public.get_my_unread_count()
+returns integer
+language sql
+security definer
+set search_path = public
+as $$
+  select count(*)::int
+  from public.messages m
+  join public.room_participants rp on rp.room_id = m.room_id
+  join public.chat_rooms r on r.id = m.room_id
+  where rp.user_id = auth.uid()
+    and r.status = 'active'
+    and m.user_id <> auth.uid()
+    and m.created_at > coalesce(rp.last_read_at, rp.joined_at);
+$$;
+
+revoke all on function public.get_my_unread_count() from public, anon;
+grant execute on function public.get_my_unread_count() to authenticated;
 
 -- Guard room capacity at the database level.
 create or replace function public.enforce_room_capacity()

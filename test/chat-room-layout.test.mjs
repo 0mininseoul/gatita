@@ -280,34 +280,18 @@ test('confirming participation is guarded against duplicate toasts', () => {
   assert.match(route, /\.from\('room_participants'\)[\s\S]*\.update\(\{ confirmed: true \}\)/)
 })
 
-test('room creators see a first-room guide and submit a one-line appearance note', () => {
+test('room creators submit a one-line host appearance note from the chat watermark', () => {
   const source = readProjectFile('app/rooms/[id]/page.tsx')
 
-  assert.match(source, /showHostGuide/)
-  assert.match(source, /gatita:room-host-guide:/)
-  assert.match(source, /💳/)
-  assert.match(source, /🧍/)
-  assert.match(source, /🤝/)
-  assert.match(source, /📞/)
-  assert.match(source, /정산이 필요할 경우 방장이 결제 후 정산해요/)
-  assert.match(source, /채팅방 상단에는 방장의 계좌번호가 나올 거예요/)
-  assert.match(source, /출발 5분 전부터는 갑자기 방을 나가면 서비스 이용이 정지될 수 있어요/)
-  assert.match(source, /방장과 멤버들은 서로 전화번호가 노출될 수 있어요\./)
-  assert.match(source, /지각, 노쇼, 출발 위치 확인 등 동행 목적에만 사용해주세요\./)
-  assert.match(source, /chat-guide-sheet/)
-  assert.match(source, /chat-guide-card/)
-  assert.match(source, /chat-guide-line/)
-  assert.doesNotMatch(source, /whitespace-nowrap text-\[9\.5px\] leading-4 tracking-\[-0\.08em\]/)
-  assert.doesNotMatch(source, /<p className="text-sm font-black text-gray-950">정산<\/p>/)
-  assert.doesNotMatch(source, /<p className="text-sm font-black text-gray-950">약속<\/p>/)
-  assert.doesNotMatch(source, /<p className="text-sm font-black text-gray-950">전화번호<\/p>/)
   assert.match(source, /hostAppearance/)
   assert.match(source, /hostAppearanceLoaded/)
   assert.match(source, /hostAppearanceDraft/)
-  assert.match(source, /style=\{\{ height: 'var\(--chat-viewport-height\)' \}\}/)
+  assert.match(source, /chat-host-watermark__appearance-label/)
+  assert.match(source, /chat-host-watermark__input/)
   assert.match(source, /ref=\{hostAppearanceInputRef\}/)
   assert.match(source, /onFocus=\{scrollHostAppearanceInputIntoView\}/)
-  assert.match(source, /방장 인상착의/)
+  assert.match(source, /인상착의 한 줄/)
+  assert.match(source, /placeholder="예: 검은 백팩, 파란 후드"/)
   assert.match(source, /HOST_APPEARANCE_MESSAGE_PREFIX/)
   assert.match(source, /content: `\$\{HOST_APPEARANCE_MESSAGE_PREFIX\}\$\{hostAppearanceDraft\.trim\(\)\}`/)
   assert.doesNotMatch(source, /content: `방장 인상착의: \$\{hostAppearance/)
@@ -341,7 +325,7 @@ test('host appearance is hidden from chat and shown in entry guide and participa
   assert.match(source, /꼭 도착지까지 가지 않아도/)
   assert.match(source, /출발 5분 전부터는 갑자기 방을 나가면 서비스 이용이 정지될 수 있어요/)
   assert.match(source, /setShowRoomGuide\(true\)/)
-  assert.match(source, /if \(hostAppearance\.trim\(\)\) \{/)
+  assert.match(source, /\{hostAppearance \|\| '방장이 아직 인상착의를 입력하지 않았습니다\.'\}/)
   assert.match(source, /participant\.user_id === room\.created_by && hostAppearance/)
 })
 
@@ -391,7 +375,8 @@ test('map app and bottom sheet use the visual viewport and internal sheet scroll
     'close button pointerdown handler should preventDefault and close on the first touch',
   )
   assert.match(mapSource, /gatita-bottom-sheet-body">\s*<div className="pr-14"/, 'sheet body should clear the enlarged close button')
-  assert.doesNotMatch(mapSource, /bottom-3/)
+  // The bottom sheet is positioned via the .gatita-bottom-sheet CSS block (asserted below),
+  // not Tailwind bottom-3; a decorative pointer-events-none overlay may still use bottom-3.
   assert.match(sheetBlock, /max-height:\s*min\(72vh, calc\(var\(--app-viewport-height\) - 8\.75rem\)\);/)
   assert.match(sheetBlock, /bottom:\s*max\(1rem, env\(safe-area-inset-bottom\)\);/)
   assert.doesNotMatch(sheetBlock, /padding-right:\s*2rem;/, 'bottom sheet body should not create extra right whitespace')
@@ -399,8 +384,10 @@ test('map app and bottom sheet use the visual viewport and internal sheet scroll
 
 test('chat room editable inputs avoid iOS Safari focus zoom', () => {
   const source = readProjectFile('app/rooms/[id]/page.tsx')
+  const cssSource = readProjectFile('app/globals.css')
 
-  assert.match(source, /id="host-appearance"[\s\S]*className="input-field mt-2 text-base"/, 'host appearance input should use at least 16px text')
+  assert.match(source, /id="host-appearance"[\s\S]*className="chat-host-watermark__input"/, 'host appearance input should use the watermark input class')
+  assert.match(cssSource, /\.chat-host-watermark__input\s*\{[^}]*font-size:\s*1rem/, 'host appearance input should use at least 16px text to avoid iOS zoom')
   assert.match(source, /placeholder="메시지를 입력하세요\.\.\."[\s\S]*className="[^"]*text-base[^"]*"/, 'message composer input should use at least 16px text')
   assert.match(source, /value=\{nextHostId\}[\s\S]*className="input-field text-base font-bold"/, 'host transfer select should use at least 16px text')
 })

@@ -252,7 +252,7 @@ test('admin moderation schema stores action history and timed suspensions', () =
   assert.match(joinRoute, /서비스 이용이 정지된 계정입니다/)
 })
 
-test('legal pages use a compact system-font document layout', () => {
+test('legal pages use a compact Paperlogy document layout', () => {
   const shellSource = readProjectFile('components/legal/LegalShell.tsx')
   const cssSource = readProjectFile('app/globals.css')
 
@@ -261,7 +261,7 @@ test('legal pages use a compact system-font document layout', () => {
   assert.match(shellSource, /\/brand\/gatita-logo\.png/)
   assert.doesNotMatch(shellSource, />개인정보처리방침<[\s\S]*>서비스약관</)
   assert.match(cssSource, /\.legal-shell\s*\{/)
-  assert.match(cssSource, /font-family:\s*-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;/)
+  assert.match(cssSource, /font-family:\s*var\(--font-paperlogy\)/)
   assert.match(cssSource, /font-size:\s*0\.8125rem;/)
 })
 

@@ -543,7 +543,8 @@
     border-radius: 0.6rem;
     background: rgba(255, 255, 255, 0.92);
     color: #1f2937;
-    font-size: 0.85rem;
+    /* 16px keeps iOS Safari from zooming the page on focus. */
+    font-size: 1rem;
     font-weight: 600;
     outline: none;
   }

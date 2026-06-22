@@ -411,7 +411,7 @@ test('landing does not expose the removed email password test login', () => {
   assert.doesNotMatch(source, /테스트 계정으로 로그인/)
 })
 
-test('map shows a one-time PWA home screen onboarding modal', () => {
+test('map shows a once-per-day PWA home screen onboarding modal', () => {
   const source = readProjectFile('app/page.tsx')
   const manifest = readProjectFile('public/manifest.json')
   const onboardingStart = source.indexOf('{showPwaOnboarding && (')
@@ -419,7 +419,8 @@ test('map shows a one-time PWA home screen onboarding modal', () => {
   const onboardingBlock = source.slice(onboardingStart, onboardingEnd)
 
   assert.match(source, /showPwaOnboarding/)
-  assert.match(source, /gatita:pwa-onboarding-dismissed/)
+  assert.match(source, /gatita:pwa-prompt-last-shown/)
+  assert.match(source, /getLocalDateKey/, 'PWA prompt should be gated to once per calendar day')
   assert.match(source, /gatita:pwa-installed-detected/)
   assert.match(source, /pwa_install_instruction_shown/)
   assert.match(source, /pwa_install_instruction_dismissed/)
@@ -428,7 +429,7 @@ test('map shows a one-time PWA home screen onboarding modal', () => {
   assert.match(source, /window\.addEventListener\('appinstalled'/)
   assert.match(source, /detection_source:\s*'standalone_open'/)
   assert.match(source, /홈 화면에 추가/)
-  assert.match(source, /지금 할게요/)
+  assert.match(source, /확인했어요/)
   assert.match(source, /브라우저의 공유/)
   assert.match(source, /<Share2 className="mx-1 inline h-3\.5 w-3\.5/)
   assert.doesNotMatch(onboardingBlock, />PWA</)

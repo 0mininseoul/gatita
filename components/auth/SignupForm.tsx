@@ -886,9 +886,8 @@ function ReviewPanel({
             }}
             className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
           />
-          <span>
-            같이타를 자가용·렌터카 유상 운송, 운전자 모집, 기름값·수고비·사례비를 받는 운전 제공에 사용하지 않겠습니다.
-            같이타는 택시 동승 및 실제 공동 이용 비용 정산 조율 목적으로만 사용하겠습니다.
+          <span className="line-clamp-2 leading-5">
+            &lt;같이타&gt;를 자가용 유상 운송, 운전자 모집, 기름값/사례비를 받는 운전 제공에 사용하지 않겠습니다.
           </span>
         </label>
         {usageRulesError && (

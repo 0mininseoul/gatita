@@ -111,11 +111,11 @@ test('profile onboarding requires a separate no paid private-car transport compl
 
   assert.match(signup, /hasAcceptedUsageRules/, 'signup should track service-use compliance separately from legal/privacy consent')
   assert.match(signup, /usageRules/, 'signup should validate the service-use compliance checkbox as its own review error')
-  assert.match(signup, /&lt;같이타&gt;를 자가용 유상 운송, 운전자 모집, 기름값\/사례비를 받는 운전 제공에 사용하지 않겠습니다\./, 'compliance copy should use the concise requested wording')
+  assert.match(signup, /&lt;같이타&gt;를 자가용 차량으로 돈을 받고 동승자를 태워주는 데 사용하지 않겠습니다\./, 'compliance copy should clearly prohibit paid private-car rides')
   assert.match(signup, /className="line-clamp-2/, 'compliance copy should be visually capped at two lines')
   assert.doesNotMatch(signup, /렌터카/, 'compliance copy should remove the older rental-car wording')
   assert.doesNotMatch(signup, /수고비/, 'compliance copy should remove the older compensation wording')
   assert.doesNotMatch(signup, /택시 동승 및 실제 공동 이용 비용 정산 조율/, 'compliance copy should remove the extra explanatory sentence')
-  assert.match(signup, /개인정보처리방침[\s\S]*에 동의합니다\.[\s\S]*&lt;같이타&gt;를 자가용 유상 운송/, 'service-use compliance should render below the legal/privacy consent checkbox')
+  assert.match(signup, /개인정보처리방침[\s\S]*에 동의합니다\.[\s\S]*&lt;같이타&gt;를 자가용 차량으로 돈을 받고/, 'service-use compliance should render below the legal/privacy consent checkbox')
   assert.match(signup, /hasAcceptedRequiredTerms && hasAcceptedUsageRules/, 'the final CTA should require both legal/privacy consent and service-use compliance')
 })

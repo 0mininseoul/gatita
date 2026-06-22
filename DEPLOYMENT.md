@@ -2,7 +2,7 @@
 
 ## 현재 배포 대상
 
-- Production URL: `https://gatitagachon.vercel.app/`
+- Production URL: `https://gatita.kro.kr/`
 - Vercel project: `0minseouls-projects/gatita`
 - Supabase project: `GATITA-new`
 - Supabase ref: `hggpwrtasyngpjcbwjzg`
@@ -27,7 +27,7 @@ Google OAuth provider를 활성화하고 Google Cloud Console에 Supabase callba
 https://your-project-id.supabase.co/auth/v1/callback
 ```
 
-앱 도메인 `https://gatitagachon.vercel.app`은 Google OAuth JavaScript origin에 등록합니다.
+앱 도메인 `https://gatita.kro.kr`은 Supabase Auth URL Configuration과 Kakao Developers 웹 플랫폼 도메인에 등록합니다.
 
 ## DB 변경
 

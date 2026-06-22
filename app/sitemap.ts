@@ -5,19 +5,19 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   return [
     {
-      url: 'https://gatitagachon.vercel.app',
+      url: 'https://gatita.kro.kr',
       lastModified,
       changeFrequency: 'daily',
       priority: 1,
     },
     {
-      url: 'https://gatitagachon.vercel.app/privacy',
+      url: 'https://gatita.kro.kr/privacy',
       lastModified,
       changeFrequency: 'monthly',
       priority: 0.6,
     },
     {
-      url: 'https://gatitagachon.vercel.app/terms',
+      url: 'https://gatita.kro.kr/terms',
       lastModified,
       changeFrequency: 'monthly',
       priority: 0.6,

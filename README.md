@@ -4,7 +4,7 @@
 
 ## 현재 운영 환경
 
-- Production: `https://gatitagachon.vercel.app/`
+- Production: `https://gatita.kro.kr/`
 - Frontend: Next.js 14, TypeScript, Tailwind CSS
 - Backend: Supabase Auth, Postgres, Realtime
 - Deploy: Vercel

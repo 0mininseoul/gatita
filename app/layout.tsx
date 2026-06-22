@@ -21,7 +21,7 @@ const paperlogy = localFont({
   display: 'swap',
   fallback: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
 })
-const siteUrl = 'https://gatitagachon.vercel.app'
+const siteUrl = 'https://gatita.kro.kr'
 const SPLASH_ASSET_VERSION = '20260621-01'
 const splashImageUrl = (fileName: string) => `/splash/${fileName}.png?v=${SPLASH_ASSET_VERSION}`
 

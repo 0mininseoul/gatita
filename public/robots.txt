@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://gatitagachon.vercel.app/sitemap.xml
+Sitemap: https://gatita.kro.kr/sitemap.xml

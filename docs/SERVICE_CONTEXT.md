@@ -12,7 +12,7 @@ Last updated: 2026-06-17
 
 ## 현재 운영 환경
 
-- Production URL: `https://gatitagachon.vercel.app/`
+- Production URL: `https://gatita.kro.kr/`
 - Vercel project: `0minseouls-projects/gatita`
 - Supabase project: `GATITA-new`
 - Supabase ref: `hggpwrtasyngpjcbwjzg`
@@ -138,7 +138,7 @@ manifest와 service worker의 아이콘 경로는 실제 파일 위치에 맞췄
 
 - `npm run lint`: 통과
 - `npm run build`: 통과
-- OAuth URL 생성 검사: `provider=google`, `hd=gachon.ac.kr`, `redirect_to=https://gatitagachon.vercel.app/auth/callback` 확인
+- OAuth URL 생성 검사: `provider=google`, `hd=gachon.ac.kr`, `redirect_to=https://gatita.kro.kr/auth/callback` 확인
 - 로컬 callback route 검사: `/auth/callback`에 code 없이 접근 시 루트로 오류 안내 redirect 확인
 - 모바일 Playwright viewport `390x844`: 비가천대 계정 실패 안내 UI 확인
 - 로컬 개발 서버: `http://127.0.0.1:3000`

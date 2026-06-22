@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { Clock, Compass, MapPin, Minus, Plus, Users, X } from 'lucide-react'
+import { Clock, Compass, MapPin, Minus, Plus, Sparkles, Users, X } from 'lucide-react'
 import {
   getDepartureTimeOptions,
   getDestinationOptions,
@@ -47,8 +47,8 @@ type CampusRouteMapProps = {
     departureTime: string
   }) => void | Promise<void>
   onJoinRoom: (roomId: string) => void
-  showRouteHint?: boolean
-  onDismissRouteHint?: () => void
+  routeHintStep?: 'hidden' | 'select' | 'action'
+  onCloseRouteHint?: (action: 'select-close' | 'action-close') => void
 }
 
 declare global {
@@ -173,8 +173,8 @@ export default function CampusRouteMap({
   onSelectFrom,
   onCreateRoom,
   onJoinRoom,
-  showRouteHint = false,
-  onDismissRouteHint,
+  routeHintStep = 'hidden',
+  onCloseRouteHint,
 }: CampusRouteMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<any>(null)
@@ -430,13 +430,14 @@ export default function CampusRouteMap({
     ? originStats.get(selectedFrom) ?? emptyStat()
     : emptyStat()
   const isSheetOpen = Boolean(selectedFrom)
-  const routeHintActive = showRouteHint && !selectedFrom && mapStatus === 'ready'
+  const showSelectHint = routeHintStep === 'select' && !selectedFrom && mapStatus === 'ready'
+  const showActionHint = routeHintStep === 'action' && !isCreateMode
 
   return (
     <section className="relative h-full w-full overflow-hidden bg-[#e7edf4]">
       <div
         ref={mapContainerRef}
-        className={`gatita-kakao-map absolute inset-0 h-full w-full${routeHintActive ? ' gatita-kakao-map--hint' : ''}`}
+        className={`gatita-kakao-map absolute inset-0 h-full w-full${showSelectHint ? ' gatita-kakao-map--hint' : ''}`}
       />
 
       <div className="gatita-map-stats pointer-events-none absolute left-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap gap-2 sm:left-4">
@@ -523,7 +524,7 @@ export default function CampusRouteMap({
         <div className="pointer-events-none absolute inset-0 bg-[#e7edf4]" />
       )}
 
-      {routeHintActive && (
+      {showSelectHint && (
         <div className="pointer-events-none absolute inset-x-3 bottom-3 z-30 flex justify-center">
           <div
             role="status"
@@ -546,7 +547,7 @@ export default function CampusRouteMap({
               <button
                 type="button"
                 aria-label="안내 닫기"
-                onClick={() => onDismissRouteHint?.()}
+                onClick={() => onCloseRouteHint?.('select-close')}
                 className="-mr-1 -mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-950"
               >
                 <X className="h-4 w-4" />
@@ -584,6 +585,23 @@ export default function CampusRouteMap({
                   {selectedOriginStat.nextTime ? ` · 다음 출발 ${formatRoomTime(selectedOriginStat.nextTime)}` : ''}
                 </p>
               </div>
+
+              {showActionHint && (
+                <div className="mt-3 flex items-start gap-2 rounded-lg border border-primary-100 bg-primary-50/80 px-3 py-2">
+                  <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
+                  <p className="min-w-0 flex-1 text-xs font-bold leading-5 text-primary-800">
+                    마음에 드는 방에 ‘입장’하거나, 아래 ‘방 생성하기’로 새 방을 만들어 보세요.
+                  </p>
+                  <button
+                    type="button"
+                    aria-label="안내 닫기"
+                    onClick={() => onCloseRouteHint?.('action-close')}
+                    className="-mr-1 -mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-primary-400 transition hover:bg-primary-100/70 hover:text-primary-700"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
 
               {selectedOriginRooms.length > 0 ? (
                 <div className="mt-3 space-y-2">

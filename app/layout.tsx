@@ -139,6 +139,10 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  // Lock page scale so iOS Safari doesn't auto-zoom when focusing sub-16px inputs.
+  // The Kakao map keeps its own pinch/zoom gestures, so map zoom is unaffected.
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: 'cover',
   themeColor: '#ffffff',
 }

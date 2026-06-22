@@ -148,7 +148,7 @@ export default function HomePage() {
   const [isStartingGoogle, setIsStartingGoogle] = useState(false)
   const [hasEnteredApp, setHasEnteredApp] = useState(false)
   const [showPwaOnboarding, setShowPwaOnboarding] = useState(false)
-  const [showRouteCoachmark, setShowRouteCoachmark] = useState(false)
+  const [routeCoachStep, setRouteCoachStep] = useState<'hidden' | 'select' | 'action'>('hidden')
   const [authNotice, setAuthNotice] = useState<string | null>(null)
   const [moderationStatus, setModerationStatus] = useState<ModerationStatusPayload | null>(null)
   const [moderationModal, setModerationModal] = useState<'warning' | 'suspension' | null>(null)
@@ -783,14 +783,21 @@ export default function HomePage() {
     return () => window.clearTimeout(timerId)
   }, [hasAuthenticatedSession, hasEnteredApp, requiresProfile])
 
-  const dismissRouteCoachmark = useCallback((action: 'select' | 'close' = 'close') => {
-    setShowRouteCoachmark((current) => {
-      if (current) {
-        trackEvent('route_coachmark_dismissed', { action })
-      }
-      return false
-    })
+  const endRouteCoachmark = useCallback((action: 'select-close' | 'action-close' = 'action-close') => {
     window.localStorage.setItem(ROUTE_COACHMARK_STORAGE_KEY, 'true')
+    setRouteCoachStep((current) => {
+      if (current !== 'hidden') {
+        trackEvent('route_coachmark_dismissed', { action, step: current })
+      }
+      return 'hidden'
+    })
+  }, [])
+
+  // Step 1 → Step 2: once a departure is chosen, swap the floating "select" hint for the
+  // in-sheet "join or create" nudge, and persist so the onboarding never reappears later.
+  const advanceRouteCoachmark = useCallback(() => {
+    window.localStorage.setItem(ROUTE_COACHMARK_STORAGE_KEY, 'true')
+    setRouteCoachStep((current) => (current === 'select' ? 'action' : current))
   }, [])
 
   useEffect(() => {
@@ -803,7 +810,7 @@ export default function HomePage() {
     if (!isInstalled() && !window.localStorage.getItem(PWA_ONBOARDING_STORAGE_KEY)) return
 
     const timerId = window.setTimeout(() => {
-      setShowRouteCoachmark(true)
+      setRouteCoachStep((current) => (current === 'hidden' ? 'select' : current))
       trackEvent('route_coachmark_shown', {
         source: 'map_onboarding',
       })
@@ -856,7 +863,7 @@ export default function HomePage() {
 
     setFromLocation(location)
     if (location) {
-      dismissRouteCoachmark('select')
+      advanceRouteCoachmark()
       trackEvent('fixed_point_selected', {
         from_location: location,
       })
@@ -1346,8 +1353,8 @@ export default function HomePage() {
         onSelectFrom={handleFromLocationChange}
         onCreateRoom={handleCreateMapRoom}
         onJoinRoom={handleJoinMapRoom}
-        showRouteHint={showRouteCoachmark}
-        onDismissRouteHint={() => dismissRouteCoachmark('close')}
+        routeHintStep={routeCoachStep}
+        onCloseRouteHint={endRouteCoachmark}
       />
 
       {showMyRooms && (

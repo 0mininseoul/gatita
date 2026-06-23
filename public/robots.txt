@@ -1,4 +1,38 @@
+# 같이타 — 가천대 택시 동승 플랫폼
+# 모든 검색엔진 크롤러 허용
 User-agent: *
+Allow: /
+
+# AI 생성형 엔진 크롤러 명시 허용 (GEO: ChatGPT, Claude, Perplexity, Gemini 등)
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+# 네이버 검색 크롤러
+User-agent: Yeti
 Allow: /
 
 Sitemap: https://gatita.kro.kr/sitemap.xml

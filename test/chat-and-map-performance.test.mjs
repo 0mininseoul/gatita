@@ -73,7 +73,7 @@ test('chat and map routes render an instant skeleton/loader during segment load'
 })
 
 test('map replaces 30s polling with a realtime subscription', () => {
-  const source = readProjectFile('app/page.tsx')
+  const source = readProjectFile('components/HomeClient.tsx')
 
   // 30초 전체 폴링 제거
   assert.doesNotMatch(source, /setInterval\(loadMapRooms, 30000\)/)

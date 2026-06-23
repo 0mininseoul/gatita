@@ -41,7 +41,7 @@ test('profile setup analytics records blocked progress and navigation actions', 
 })
 
 test('profile-required modal analytics records prompt exposure and dismissal', () => {
-  const page = readProjectFile('app', 'page.tsx')
+  const page = readProjectFile('components', 'HomeClient.tsx')
 
   assert.match(page, /profile_required_modal_shown/, 'automatic profile-required prompt exposure should be tracked')
   assert.match(page, /profile_required_modal_dismissed/, 'profile-required prompt dismissal should be tracked')

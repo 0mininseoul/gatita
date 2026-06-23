@@ -23,7 +23,7 @@ test('PWA install sync API marks only the authenticated user as installed', () =
 })
 
 test('installed PWA openings sync to Supabase even when analytics localStorage already exists', () => {
-  const source = readProjectFile('app/page.tsx')
+  const source = readProjectFile('components/HomeClient.tsx')
 
   assert.match(source, /syncPwaInstalledToSupabase/)
   assert.match(source, /fetch\('\/api\/profile\/pwa-install'/)

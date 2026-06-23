@@ -9,7 +9,7 @@ function readProjectFile(path) {
 
 test('map marker prioritizes the current user room state over room count and selected origin text', () => {
   const mapSource = readProjectFile('components/CampusRouteMap.tsx')
-  const pageSource = readProjectFile('app/page.tsx')
+  const pageSource = readProjectFile('components/HomeClient.tsx')
   const cssSource = readProjectFile('app/globals.css')
 
   assert.match(mapSource, /currentUserId\?: string/)

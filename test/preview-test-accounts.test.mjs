@@ -45,7 +45,7 @@ test('preview login API is server-gated and never exposes the service role key',
 })
 
 test('landing page exposes preview account buttons only behind a public flag', () => {
-  const page = readProjectFile('app/page.tsx')
+  const page = readProjectFile('components/HomeClient.tsx')
 
   assert.match(page, /isPreviewTestLoginEnabled/)
   assert.match(page, /PREVIEW_TEST_ACCOUNTS/)

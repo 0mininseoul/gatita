@@ -151,7 +151,10 @@ export function identifyAnalyticsUser(
   }
 
   if (!userId) {
-    amplitude.reset()
+    // reset()은 deviceId까지 새 UUID로 재생성해 세션 리플레이 deviceId와 어긋나게
+    // 만든다(세션 리플레이 플러그인은 setup 시점 deviceId를 고정하고 갱신하지 않음).
+    // 사용자 식별만 해제하고 deviceId는 유지한다.
+    amplitude.setUserId(undefined)
     return
   }
 

@@ -913,7 +913,17 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
           className="rounded-2xl bg-white px-5 py-5 shadow-sm shadow-gray-950/[0.04]"
         >
           <p className="mb-2 text-sm font-semibold text-primary-600">{currentSection.shortTitle}</p>
-          <h2 className="text-[26px] font-extrabold leading-tight tracking-normal text-gray-950">
+          <h2
+            className="whitespace-nowrap font-extrabold leading-tight tracking-normal text-gray-950"
+            style={{
+              // 좁은 iOS 화면에서도 헤드라인이 항상 1줄로 보이도록 폭에 맞춰 글자 크기를 줄인다.
+              // (가장 긴 카피 '연락처와 닉네임을 입력해주세요' 기준으로 320px까지 1줄 보장, 넓은 화면은 26px로 캡)
+              fontSize: 'clamp(15px, calc(6.9vw - 6px), 26px)',
+              // iOS Safari의 자동 텍스트 확대로 줄바꿈되는 것을 방지
+              WebkitTextSizeAdjust: '100%',
+              textSizeAdjust: '100%',
+            }}
+          >
             {currentSection.title}
           </h2>
           <p className="mt-2 text-sm font-medium leading-5 text-gray-500">

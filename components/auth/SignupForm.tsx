@@ -11,8 +11,8 @@ import { identifyAnalyticsUser, trackEvent } from '@/lib/analytics/client'
 import { AlertCircle, CheckCircle2, ChevronDown } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-type SignupFieldId = 'name' | 'phone' | 'bank_name' | 'account_number' | 'account_holder' | 'nickname'
-type SignupSectionId = 'basic' | 'payout' | 'profile' | 'review'
+type SignupFieldId = 'phone' | 'bank_name' | 'account_number' | 'account_holder' | 'nickname'
+type SignupSectionId = 'basic' | 'payout' | 'review'
 
 type SignupField = {
   id: SignupFieldId
@@ -33,15 +33,6 @@ type SignupSection = {
 }
 
 const SIGNUP_FIELDS: Record<SignupFieldId, SignupField> = {
-  name: {
-    id: 'name',
-    label: '실명',
-    errorLabel: '실명',
-    placeholder: '홍길동',
-    type: 'text',
-    required: true,
-    description: 'Google 계정에서 가져온 이름이 맞는지 확인해주세요.',
-  },
   phone: {
     id: 'phone',
     label: '전화번호',
@@ -93,9 +84,9 @@ const SIGNUP_SECTIONS: SignupSection[] = [
   {
     id: 'basic',
     shortTitle: '기본 정보',
-    title: '기본 정보를 확인해주세요',
-    description: '학교 계정 정보와 연락처를 한 번만 확인합니다.',
-    fields: ['name', 'phone'],
+    title: '연락처와 닉네임을 입력해주세요',
+    description: '학교 계정 정보를 불러왔어요. 전화번호는 가입 후 변경할 수 없어요.',
+    fields: ['phone', 'nickname'],
   },
   {
     id: 'payout',
@@ -103,13 +94,6 @@ const SIGNUP_SECTIONS: SignupSection[] = [
     title: '정산 계좌를 등록해주세요',
     description: '방을 개설했을 때 같이 탄 멤버가 송금할 계좌입니다.',
     fields: ['bank_name', 'account_number', 'account_holder'],
-  },
-  {
-    id: 'profile',
-    shortTitle: '공개 프로필',
-    title: '보여질 이름을 정해주세요',
-    description: '실명 대신 닉네임이 방 목록과 채팅에 표시됩니다.',
-    fields: ['nickname'],
   },
   {
     id: 'review',
@@ -295,7 +279,7 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
       return
     }
 
-    if (currentSection.id === 'profile') {
+    if (currentSection.fields.includes('nickname')) {
       setIsLoading(true)
       try {
         const { data } = await supabase
@@ -352,6 +336,9 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
       }
 
       const userId = sessionData.session.user.id
+      const signupGoogleProfile = extractGachonProfileFromMetadata(sessionData.session.user.user_metadata)
+      const resolvedName = (formData.name || signupGoogleProfile.name).trim()
+      const resolvedDepartment = formData.department || signupGoogleProfile.department || '학과 미확인'
 
       const response = await fetch('/api/profile/complete', {
         method: 'POST',
@@ -359,7 +346,7 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: formData.name.trim(),
+          name: resolvedName,
           phone: formData.phone.trim(),
           nickname: formData.nickname.trim(),
           bank_name: (formData.bank_name ?? '').trim(),
@@ -378,10 +365,10 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
         profile_completed: true,
         account_status: 'active',
         is_admin: false,
-        department: formData.department || '학과 미확인',
+        department: resolvedDepartment,
       })
       trackEvent('profile_completed', {
-        department: formData.department || '학과 미확인',
+        department: resolvedDepartment,
       })
       onSuccess()
     } catch (error: any) {
@@ -495,8 +482,8 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
       case 'basic':
         return {
           title: '기본 정보',
-          value: `${formData.name || '실명 미입력'} · ${formData.department || '학과 미확인'}`,
-          detail: formData.phone || '전화번호 미입력',
+          value: `${formData.name || '이름 미확인'} · ${formData.nickname || '닉네임 미입력'}`,
+          detail: `${formData.department || '학과 미확인'} · ${formData.phone || '전화번호 미입력'}`,
         }
       case 'payout':
         return {
@@ -505,12 +492,6 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
           detail: formData.bank_name
             ? (formattedAccountNumber ? `${formattedAccountNumber} · ${formData.account_holder || '예금주 미입력'}` : '계좌번호 미입력')
             : '설정에서 추가할 수 있어요',
-        }
-      case 'profile':
-        return {
-          title: '공개 프로필',
-          value: formData.nickname || '닉네임 미입력',
-          detail: '방 목록과 채팅에서 표시됩니다.',
         }
       case 'review':
         return {
@@ -607,7 +588,7 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
           onKeyDown={handleKeyDown}
           placeholder={field.placeholder}
           error={errors[fieldId]}
-          autoComplete={fieldId === 'name' ? 'name' : 'off'}
+          autoComplete="off"
           enterKeyHint="next"
         />
       </FormField>
@@ -753,9 +734,13 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
             {currentSection.description}
           </p>
 
-          {currentSection.id === 'basic' && formData.department && (
-            <div className="mt-4 rounded-xl border border-primary-100 bg-primary-50 px-3 py-2 text-sm font-semibold leading-5 text-primary-700">
-              학과는 Google 계정 정보에서 {formData.department}(으)로 자동 등록됩니다.
+          {currentSection.id === 'basic' && (
+            <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50">
+              <ReadOnlyProfileRow
+                label="이름"
+                value={formData.name || '이름 미확인'}
+                detail={formData.department ? `${formData.department} · Google 계정 정보` : 'Google 계정 정보'}
+              />
             </div>
           )}
 
@@ -824,6 +809,28 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
           )}
         </button>
       </footer>
+    </div>
+  )
+}
+
+function ReadOnlyProfileRow({
+  label,
+  value,
+  detail,
+}: {
+  label: string
+  value: string
+  detail?: string
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 px-3 py-3">
+      <span className="shrink-0 text-xs font-semibold text-gray-500">{label}</span>
+      <span className="min-w-0 text-right">
+        <span className="block truncate text-sm font-extrabold text-gray-950">{value}</span>
+        {detail && (
+          <span className="mt-0.5 block truncate text-[11px] font-semibold text-gray-500">{detail}</span>
+        )}
+      </span>
     </div>
   )
 }

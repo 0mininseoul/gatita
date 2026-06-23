@@ -171,6 +171,8 @@ export default function HomePage() {
   const lastAuthErrorAtRef = useRef(0)
   const hasShownProfileRequiredPromptRef = useRef(false)
   const mapHeaderRef = useRef<HTMLElement>(null)
+  const pwaInstallSyncInFlightRef = useRef(false)
+  const pwaInstallSyncCompletedRef = useRef(false)
   const router = useRouter()
   const pathname = usePathname()
   const isMapRoute = pathname === '/map'
@@ -221,6 +223,32 @@ export default function HomePage() {
       await supabase.auth.signOut()
     }
   }, [showAuthError, supabase])
+
+  const syncPwaInstalledToSupabase = useCallback(async (
+    { requireInstalledDisplayMode = true }: { requireInstalledDisplayMode?: boolean } = {},
+  ) => {
+    if (!hasAuthenticatedSession || !hasEnteredApp) return
+    if (requireInstalledDisplayMode && !isInstalled()) return
+    if (pwaInstallSyncInFlightRef.current || pwaInstallSyncCompletedRef.current) return
+
+    pwaInstallSyncInFlightRef.current = true
+
+    try {
+      const response = await fetch('/api/profile/pwa-install', {
+        method: 'POST',
+      })
+
+      if (response.ok) {
+        pwaInstallSyncCompletedRef.current = true
+      } else if (response.status >= 500) {
+        console.error('PWA install sync failed:', response.status)
+      }
+    } catch (error) {
+      console.error('PWA install sync error:', error)
+    } finally {
+      pwaInstallSyncInFlightRef.current = false
+    }
+  }, [hasAuthenticatedSession, hasEnteredApp])
 
   const loadModerationStatus = useCallback(async () => {
     try {
@@ -536,6 +564,7 @@ export default function HomePage() {
         setModerationModal(null)
         setAuthMode(null)
         setHasEnteredApp(false)
+        pwaInstallSyncCompletedRef.current = false
       }
     })
 
@@ -549,6 +578,8 @@ export default function HomePage() {
   useEffect(() => {
     if (!isInstalled()) return
 
+    void syncPwaInstalledToSupabase()
+
     if (!window.localStorage.getItem(PWA_INSTALLED_DETECTED_STORAGE_KEY)) {
       window.localStorage.setItem(PWA_INSTALLED_DETECTED_STORAGE_KEY, 'true')
       trackEvent('pwa_installed_detected', {
@@ -556,7 +587,7 @@ export default function HomePage() {
       })
     }
 
-  }, [])
+  }, [syncPwaInstalledToSupabase])
 
   useEffect(() => {
     const handleBeforeInstallPrompt = () => {
@@ -566,6 +597,7 @@ export default function HomePage() {
     }
 
     const handleAppInstalled = () => {
+      void syncPwaInstalledToSupabase({ requireInstalledDisplayMode: false })
       window.localStorage.setItem(PWA_INSTALLED_DETECTED_STORAGE_KEY, 'true')
       trackEvent('pwa_installed_detected', {
         detection_source: 'appinstalled',
@@ -579,7 +611,7 @@ export default function HomePage() {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
       window.removeEventListener('appinstalled', handleAppInstalled)
     }
-  }, [])
+  }, [syncPwaInstalledToSupabase])
 
   useEffect(() => {
     if (!supabase || !hasAuthenticatedSession || !hasEnteredApp || authMode === 'signup') return

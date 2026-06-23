@@ -43,6 +43,7 @@ create table public.user_private_profiles (
   moderation_updated_at timestamp with time zone,
   is_admin boolean not null default false,
   onboarded_at timestamp with time zone,
+  pwa_installed boolean not null default false,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );

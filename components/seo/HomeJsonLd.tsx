@@ -21,14 +21,6 @@ export default function HomeJsonLd() {
         description: SITE_DESCRIPTION,
         inLanguage: 'ko-KR',
         publisher: { '@id': `${SITE_URL}/#organization` },
-        potentialAction: {
-          '@type': 'SearchAction',
-          target: {
-            '@type': 'EntryPoint',
-            urlTemplate: `${SITE_URL}/rooms?from={search_term_string}`,
-          },
-          'query-input': 'required name=search_term_string',
-        },
       },
       {
         '@type': 'Organization',

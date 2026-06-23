@@ -96,9 +96,6 @@ export const metadata: Metadata = {
   keywords: '같이타, 가천대 같이타, 가천대 택시, 가천대 택시앱, 가천대 택시 어플, 가천대역 택시, 가천대 기숙사 택시, 가천대 통학, 가천대학교, 택시 합승, 동승자 찾기',
   authors: [{ name: '같이타' }],
   creator: '같이타',
-  alternates: {
-    canonical: '/',
-  },
   icons: {
     icon: '/favicon.png',
     shortcut: '/favicon.ico',

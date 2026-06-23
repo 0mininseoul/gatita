@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { withAxiomRoute } from '@/lib/axiom/server'
 import { extractGachonProfileFromMetadata, isGachonEmail } from '@/lib/auth'
 import { isAccountNumberCompleteForBank } from '@/lib/banks'
+import { validateAccountHolderName, validateAccountNumberPattern, validatePhoneNumber } from '@/lib/validation'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 
@@ -13,8 +14,6 @@ type CompleteProfilePayload = {
   account_number?: string
   account_holder?: string
 }
-
-const PHONE_REGEX = /^010-\d{4}-\d{4}$/
 
 function cleanText(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
@@ -29,7 +28,8 @@ function validatePayload(payload: CompleteProfilePayload | null) {
   const accountHolder = cleanText(payload?.account_holder)
 
   if (name.length < 2 || name.length > 100) return { error: '실명을 확인해주세요' }
-  if (!PHONE_REGEX.test(phone)) return { error: '전화번호 형식을 확인해주세요' }
+  const phoneError = validatePhoneNumber(phone)
+  if (phoneError) return { error: phoneError }
   if (nickname.length < 2 || nickname.length > 10) return { error: '닉네임은 2-10자로 입력해주세요' }
 
   // 계좌는 온보딩에서 '나중에' 건너뛸 수 있다. 셋 다 비면 통과(미입력), 하나라도 채우면 전부 검증.
@@ -37,7 +37,10 @@ function validatePayload(payload: CompleteProfilePayload | null) {
   if (hasAnyAccountField) {
     if (!bankName) return { error: '계좌은행명을 선택해주세요' }
     if (!isAccountNumberCompleteForBank(bankName, accountNumber)) return { error: '계좌번호 형식을 확인해주세요' }
-    if (accountHolder.length < 2 || accountHolder.length > 100) return { error: '계좌주 이름을 확인해주세요' }
+    const accountNumberError = validateAccountNumberPattern(accountNumber)
+    if (accountNumberError) return { error: accountNumberError }
+    const accountHolderError = validateAccountHolderName(accountHolder)
+    if (accountHolderError) return { error: accountHolderError }
   }
 
   return {

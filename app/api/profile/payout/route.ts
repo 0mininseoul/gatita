@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { withAxiomRoute } from '@/lib/axiom/server'
 import { isAccountNumberCompleteForBank } from '@/lib/banks'
+import { validateAccountHolderName, validateAccountNumberPattern } from '@/lib/validation'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 
@@ -33,6 +34,14 @@ async function updatePayout(request: Request) {
   }
   if (!isAccountNumberCompleteForBank(bankName, accountNumber)) {
     return NextResponse.json({ error: '선택한 은행의 계좌번호 형식에 맞게 입력해주세요' }, { status: 400 })
+  }
+  const accountNumberError = validateAccountNumberPattern(accountNumber)
+  if (accountNumberError) {
+    return NextResponse.json({ error: accountNumberError }, { status: 400 })
+  }
+  const accountHolderError = validateAccountHolderName(accountHolder)
+  if (accountHolderError) {
+    return NextResponse.json({ error: accountHolderError }, { status: 400 })
   }
 
   const admin = createAdminSupabase()

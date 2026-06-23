@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { PayoutAccount, User } from '@/lib/supabase'
 import { isAccountNumberCompleteForBank } from '@/lib/banks'
+import { validateAccountHolderName, validateAccountNumberPattern } from '@/lib/validation'
 import { AccountNumberSegmentField, BankSelectField } from '@/components/BankAccountFields'
 import { identifyAnalyticsUser, trackEvent } from '@/lib/analytics/client'
 import { ArrowLeft, User as UserIcon, AlertCircle, Bug, Camera, Check, Mail, Trash2, X } from 'lucide-react'
@@ -412,6 +413,18 @@ export default function SettingsPage() {
 
     if (!isAccountNumberCompleteForBank(nextAccount.bank_name, nextAccount.account_number)) {
       setAccountError('선택한 은행의 계좌번호 형식에 맞게 입력해주세요')
+      return
+    }
+
+    const accountNumberError = validateAccountNumberPattern(nextAccount.account_number)
+    if (accountNumberError) {
+      setAccountError(accountNumberError)
+      return
+    }
+
+    const accountHolderError = validateAccountHolderName(nextAccount.account_holder)
+    if (accountHolderError) {
+      setAccountError(accountHolderError)
       return
     }
 

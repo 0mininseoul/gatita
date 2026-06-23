@@ -236,7 +236,7 @@ test('chat room can copy the room creator payout account', () => {
 
 test('chat room realtime subscriptions reload messages and participant membership changes', () => {
   const source = readProjectFile('app/rooms/[id]/page.tsx')
-  const mapPage = readProjectFile('app/page.tsx')
+  const mapPage = readProjectFile('components/HomeClient.tsx')
   const schema = readProjectFile('supabase_schema.sql')
 
   assert.match(source, /const handleParticipantsRefresh = useCallback/)
@@ -362,7 +362,7 @@ test('room creator transfer is required before leaving a room with members', () 
 })
 
 test('map app and bottom sheet use the visual viewport and internal sheet scrolling', () => {
-  const pageSource = readProjectFile('app/page.tsx')
+  const pageSource = readProjectFile('components/HomeClient.tsx')
   const mapSource = readProjectFile('components/CampusRouteMap.tsx')
   const cssSource = readProjectFile('app/globals.css')
   const sheetBlock = cssBlock(cssSource, '.gatita-bottom-sheet')
@@ -417,7 +417,7 @@ test('kakao map zoom control is offset below the app header', () => {
 })
 
 test('map stats are offset from the translucent PWA status bar and room joins disable after departure', () => {
-  const pageSource = readProjectFile('app/page.tsx')
+  const pageSource = readProjectFile('components/HomeClient.tsx')
   const mapSource = readProjectFile('components/CampusRouteMap.tsx')
   const cssSource = readProjectFile('app/globals.css')
 

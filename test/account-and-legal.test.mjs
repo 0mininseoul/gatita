@@ -266,14 +266,14 @@ test('legal pages use a compact Paperlogy document layout', () => {
 })
 
 test('landing headline shadow is tighter and more natural', () => {
-  const source = readProjectFile('app/page.tsx')
+  const source = readProjectFile('components/HomeClient.tsx')
 
   assert.doesNotMatch(source, /0 2px 28px rgba\(28, 22, 92, 0\.45\)/)
   assert.match(source, /0 3px 14px rgba\(21, 28, 72, 0\.30\)/)
 })
 
 test('landing headline uses a more expressive React Bits split text entrance', () => {
-  const pageSource = readProjectFile('app/page.tsx')
+  const pageSource = readProjectFile('components/HomeClient.tsx')
   const splitTextSource = readProjectFile('components/SplitText.tsx')
 
   assert.match(pageSource, /SplitText/)

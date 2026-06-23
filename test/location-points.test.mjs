@@ -257,7 +257,7 @@ test('map bottom sheet room cards show destination only beside departure time', 
 })
 
 test('map room loading keeps only rooms within the visible map window', () => {
-  const source = readProjectFile('app/page.tsx')
+  const source = readProjectFile('components/HomeClient.tsx')
   const loadStart = source.indexOf('const loadMapRooms = useCallback')
   const loadEnd = source.indexOf('\n  const checkAuth', loadStart)
   const loadBlock = source.slice(loadStart, loadEnd)
@@ -283,7 +283,7 @@ test('room join capacity trigger can lock active rooms without granting particip
 })
 
 test('room joins go through a server route that verifies the session and uses the service role safely', () => {
-  const mapSource = readProjectFile('app/page.tsx')
+  const mapSource = readProjectFile('components/HomeClient.tsx')
   const roomsSource = readProjectFile('app/rooms/page.tsx')
   const routeSource = readProjectFile('app/api/rooms/[id]/join/route.ts')
   const schema = readProjectFile('supabase_schema.sql')
@@ -315,7 +315,7 @@ test('room visibility and joinability follow departure time rules', () => {
 })
 
 test('map header exposes my rooms list from the user membership query', () => {
-  const source = readProjectFile('app/page.tsx')
+  const source = readProjectFile('components/HomeClient.tsx')
 
   assert.match(source, /showMyRooms/, 'home map should track my rooms sheet state')
   assert.match(source, /loadMyRooms/, 'home map should load my rooms on demand')
@@ -325,7 +325,7 @@ test('map header exposes my rooms list from the user membership query', () => {
 })
 
 test('map header omits the redundant logout action in favor of settings', () => {
-  const source = readProjectFile('app/page.tsx')
+  const source = readProjectFile('components/HomeClient.tsx')
   const headerStart = source.indexOf('ref={mapHeaderRef}')
   const headerEnd = source.indexOf('</header>', headerStart)
   const headerBlock = source.slice(headerStart, headerEnd)
@@ -339,7 +339,7 @@ test('map header omits the redundant logout action in favor of settings', () => 
 })
 
 test('landing and authenticated map use separate URL paths', () => {
-  const homeSource = readProjectFile('app/page.tsx')
+  const homeSource = readProjectFile('components/HomeClient.tsx')
   const mapRouteSource = readProjectFile('app/map/page.tsx')
   const settingsSource = readProjectFile('app/settings/page.tsx')
   const chatSource = readProjectFile('app/rooms/[id]/page.tsx')
@@ -352,7 +352,7 @@ test('landing and authenticated map use separate URL paths', () => {
 })
 
 test('profileless authenticated users see the map first and complete profile from gated actions', () => {
-  const source = readProjectFile('app/page.tsx')
+  const source = readProjectFile('components/HomeClient.tsx')
   const signup = readProjectFile('components/auth/SignupForm.tsx')
   const noProfileStart = source.indexOf('} else {\n          setPendingProfileName(getGoogleAccountName(email, session.user.user_metadata))')
   const noProfileEnd = source.indexOf('\n        }', noProfileStart)
@@ -401,7 +401,7 @@ test('profileless authenticated users see the map first and complete profile fro
 })
 
 test('landing does not expose the removed email password test login', () => {
-  const source = readProjectFile('app/page.tsx')
+  const source = readProjectFile('components/HomeClient.tsx')
 
   assert.doesNotMatch(source, /test-login/)
   assert.doesNotMatch(source, /showTestLogin/)
@@ -412,7 +412,7 @@ test('landing does not expose the removed email password test login', () => {
 })
 
 test('map shows a once-per-day PWA home screen onboarding modal', () => {
-  const source = readProjectFile('app/page.tsx')
+  const source = readProjectFile('components/HomeClient.tsx')
   const manifest = readProjectFile('public/manifest.json')
   const onboardingStart = source.indexOf('{showPwaOnboarding && (')
   const onboardingEnd = source.indexOf('\n      <header', onboardingStart)
@@ -458,7 +458,7 @@ test('service worker refreshes navigations before falling back to cached app she
 
 test('iOS PWA startup images are generated and registered for current iPhones', () => {
   const layout = readProjectFile('app/layout.tsx')
-  const pageSource = readProjectFile('app/page.tsx')
+  const pageSource = readProjectFile('components/HomeClient.tsx')
   const splashScript = readProjectFile('scripts/generate-ios-splash.mjs')
   const expectedImages = [
     'iphone-17-pro-max.png',

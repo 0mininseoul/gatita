@@ -7,7 +7,7 @@ const root = process.cwd()
 const readProjectFile = (...parts) => readFileSync(join(root, ...parts), 'utf8')
 
 test('map shows an unread message badge backed by per-room read tracking', () => {
-  const page = readProjectFile('app', 'page.tsx')
+  const page = readProjectFile('components', 'HomeClient.tsx')
   const readRoute = readProjectFile('app', 'api', 'rooms', '[id]', 'read', 'route.ts')
   const chat = readProjectFile('app', 'rooms', '[id]', 'page.tsx')
   const schema = readProjectFile('supabase_schema.sql')

@@ -86,7 +86,7 @@ test('invited non-participants can join from the room page without seeing privat
 
 test('OAuth start preserves a room invite return path', () => {
   const auth = readProjectFile('lib/auth.ts')
-  const page = readProjectFile('app/page.tsx')
+  const page = readProjectFile('components/HomeClient.tsx')
   const callback = readProjectFile('app/auth/callback/route.ts')
 
   assert.match(auth, /getGoogleOAuthOptions\(redirectPath\?: string\)/)

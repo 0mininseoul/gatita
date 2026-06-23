@@ -42,7 +42,7 @@ test('real captured Everytime iOS user-agent is detected as in-app + iOS', () =>
 })
 
 test('landing Google login is guarded; iOS shows a two-line guidance toast', () => {
-  const source = readProjectFile('app/page.tsx')
+  const source = readProjectFile('components/HomeClient.tsx')
 
   // 배너는 제거되고 안내는 toast 로만 노출 — 컴포넌트 참조가 남아있으면 안 된다
   assert.doesNotMatch(source, /InAppBrowserNotice/)

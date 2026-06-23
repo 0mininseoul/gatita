@@ -173,6 +173,7 @@ export default function HomePage() {
   const mapHeaderRef = useRef<HTMLElement>(null)
   const pwaInstallSyncInFlightRef = useRef(false)
   const pwaInstallSyncCompletedRef = useRef(false)
+  const profileRequiredModalOpenRef = useRef(showProfileRequiredModal)
   const router = useRouter()
   const pathname = usePathname()
   const isMapRoute = pathname === '/map'
@@ -184,6 +185,8 @@ export default function HomePage() {
     ? `${pathname}${currentSearch}`
     : explicitRedirectPath?.startsWith('/rooms/') ? explicitRedirectPath : undefined
   const previewTestLoginEnabled = isPreviewTestLoginEnabled()
+
+  profileRequiredModalOpenRef.current = showProfileRequiredModal
 
   const supabase = useMemo(() => {
     try {
@@ -223,6 +226,28 @@ export default function HomePage() {
       await supabase.auth.signOut()
     }
   }, [showAuthError, supabase])
+
+  const openProfileRequiredModal = useCallback((source: string) => {
+    if (!profileRequiredModalOpenRef.current) {
+      trackEvent('profile_required_modal_shown', {
+        source,
+      })
+    }
+
+    profileRequiredModalOpenRef.current = true
+    setShowProfileRequiredModal(true)
+  }, [])
+
+  const dismissProfileRequiredModal = useCallback((dismissType: 'outside' | 'close' | 'start_setup') => {
+    if (profileRequiredModalOpenRef.current) {
+      trackEvent('profile_required_modal_dismissed', {
+        dismiss_type: dismissType,
+      })
+    }
+
+    profileRequiredModalOpenRef.current = false
+    setShowProfileRequiredModal(false)
+  }, [])
 
   const syncPwaInstalledToSupabase = useCallback(async (
     { requireInstalledDisplayMode = true }: { requireInstalledDisplayMode?: boolean } = {},
@@ -694,11 +719,11 @@ export default function HomePage() {
 
     hasShownProfileRequiredPromptRef.current = true
     const timerId = window.setTimeout(() => {
-      setShowProfileRequiredModal(true)
+      openProfileRequiredModal('map_auto_prompt')
     }, 300)
 
     return () => window.clearTimeout(timerId)
-  }, [authMode, hasEnteredApp, requiresProfile])
+  }, [authMode, hasEnteredApp, openProfileRequiredModal, requiresProfile])
 
   // iOS Safari keeps scroll position across auth state changes and reports
   // dynamic viewport units differently as the bottom bar expands/collapses.
@@ -952,7 +977,7 @@ export default function HomePage() {
     if (isResolvingMapSession) return
 
     if (requiresProfile) {
-      setShowProfileRequiredModal(true)
+      openProfileRequiredModal('fixed_point_select')
       return
     }
 
@@ -983,7 +1008,7 @@ export default function HomePage() {
 
     if (!user || !supabase) {
       if (requiresProfile) {
-        setShowProfileRequiredModal(true)
+        openProfileRequiredModal('room_create')
       } else {
         toast.error('로그인이 필요합니다')
       }
@@ -1119,7 +1144,7 @@ export default function HomePage() {
 
     if (!user || !supabase) {
       if (requiresProfile) {
-        setShowProfileRequiredModal(true)
+        openProfileRequiredModal('room_join')
       }
       return
     }
@@ -1296,7 +1321,7 @@ export default function HomePage() {
     if (isResolvingMapSession) return
 
     if (requiresProfile) {
-      setShowProfileRequiredModal(true)
+      openProfileRequiredModal('my_rooms')
       return
     }
 
@@ -1308,7 +1333,7 @@ export default function HomePage() {
   }
 
   const openProfileSetup = () => {
-    setShowProfileRequiredModal(false)
+    dismissProfileRequiredModal('start_setup')
     trackEvent('profile_setup_started', {
       source: 'profile_required_modal',
     })
@@ -1673,7 +1698,7 @@ export default function HomePage() {
         <div
           className="fixed inset-x-0 top-0 z-[70] flex items-end bg-gray-950/30 px-3 pb-3 pt-24"
           style={{ height: 'var(--app-viewport-height)' }}
-          onClick={() => setShowProfileRequiredModal(false)}
+          onClick={() => dismissProfileRequiredModal('outside')}
         >
           <div
             role="dialog"
@@ -1693,7 +1718,7 @@ export default function HomePage() {
               <button
                 type="button"
                 aria-label="프로필 안내 닫기"
-                onClick={() => setShowProfileRequiredModal(false)}
+                onClick={() => dismissProfileRequiredModal('close')}
                 className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
               >
                 <X className="h-5 w-5" />
@@ -1815,7 +1840,7 @@ export default function HomePage() {
                 if (isResolvingMapSession) return
 
                 if (requiresProfile) {
-                  setShowProfileRequiredModal(true)
+                  openProfileRequiredModal('settings')
                   return
                 }
 

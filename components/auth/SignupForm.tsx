@@ -32,6 +32,73 @@ type SignupSection = {
   fields: SignupFieldId[]
 }
 
+type ProfileSetupAnalyticsProperties = Record<string, string | number | boolean | null | undefined>
+type ProfileSetupCompletedStep = {
+  id: SignupSectionId
+  index: number
+}
+type ProfileSetupExitType = 'back_button' | 'pagehide' | 'backgrounded'
+
+const PROFILE_SETUP_SESSION_STORAGE_KEY = 'gatita:profile-setup-session-id'
+let profileSetupSessionIdFallback: string | null = null
+
+function createProfileSetupSessionId() {
+  if (typeof window === 'undefined') return 'server'
+
+  return window.crypto?.randomUUID?.()
+    ?? `profile-setup-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function readProfileSetupSessionIdFromStorage() {
+  if (typeof window === 'undefined') return null
+
+  try {
+    return window.sessionStorage.getItem(PROFILE_SETUP_SESSION_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+function writeProfileSetupSessionIdToStorage(sessionId: string) {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.sessionStorage.setItem(PROFILE_SETUP_SESSION_STORAGE_KEY, sessionId)
+  } catch {
+    return
+  }
+}
+
+function removeProfileSetupSessionIdFromStorage() {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.sessionStorage.removeItem(PROFILE_SETUP_SESSION_STORAGE_KEY)
+  } catch {
+    return
+  }
+}
+
+function getProfileSetupSessionId() {
+  if (typeof window === 'undefined') return 'server'
+
+  const existingSessionId = profileSetupSessionIdFallback ?? readProfileSetupSessionIdFromStorage()
+  if (existingSessionId) {
+    profileSetupSessionIdFallback = existingSessionId
+    return existingSessionId
+  }
+
+  const nextSessionId = createProfileSetupSessionId()
+  profileSetupSessionIdFallback = nextSessionId
+  writeProfileSetupSessionIdToStorage(nextSessionId)
+  return nextSessionId
+}
+
+function clearProfileSetupSessionId() {
+  profileSetupSessionIdFallback = null
+  removeProfileSetupSessionIdFromStorage()
+}
+
 const SIGNUP_FIELDS: Record<SignupFieldId, SignupField> = {
   phone: {
     id: 'phone',
@@ -126,6 +193,15 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
   const currentSectionRef = useRef<HTMLDivElement | null>(null)
   const hasCheckedSessionRef = useRef(false)
   const onSuccessRef = useRef(onSuccess)
+  const currentStepRef = useRef(currentStep)
+  const payoutSkippedRef = useRef(payoutSkipped)
+  const lastCompletedStepRef = useRef<ProfileSetupCompletedStep | null>(null)
+  const stepViewSequenceRef = useRef(0)
+  const hasCompletedProfileSetupRef = useRef(false)
+  const hasTrackedProfileSetupExitRef = useRef(false)
+
+  currentStepRef.current = currentStep
+  payoutSkippedRef.current = payoutSkipped
 
   const focusCurrentSection = useCallback(() => {
     window.setTimeout(() => {
@@ -142,9 +218,77 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
     }, 40)
   }, [])
 
+  const trackProfileSetupEvent = useCallback((
+    eventName: string,
+    properties: ProfileSetupAnalyticsProperties = {},
+    stepIndex = currentStepRef.current,
+  ) => {
+    const section = SIGNUP_SECTIONS[stepIndex]
+    if (!section) return
+
+    const lastCompletedStep = lastCompletedStepRef.current
+
+    trackEvent(eventName, {
+      setup_session_id: getProfileSetupSessionId(),
+      step_id: section.id,
+      step_index: stepIndex,
+      step_count: SIGNUP_SECTIONS.length,
+      payout_skipped: payoutSkippedRef.current,
+      last_completed_step_id: lastCompletedStep?.id ?? 'none',
+      last_completed_step_index: lastCompletedStep?.index ?? -1,
+      ...properties,
+    })
+  }, [])
+
+  const trackProfileSetupValidationFailure = useCallback((invalidFields: string[]) => {
+    trackProfileSetupEvent('profile_setup_validation_failed', {
+      invalid_fields: invalidFields.join(','),
+      error_count: invalidFields.length,
+    })
+  }, [trackProfileSetupEvent])
+
+  const trackProfileSetupExit = useCallback((exitType: ProfileSetupExitType) => {
+    if (hasCompletedProfileSetupRef.current || hasTrackedProfileSetupExitRef.current) return
+    if (currentStepRef.current < 0) return
+
+    hasTrackedProfileSetupExitRef.current = true
+    trackProfileSetupEvent('profile_setup_exited', {
+      exit_type: exitType,
+    })
+  }, [trackProfileSetupEvent])
+
   useEffect(() => {
     onSuccessRef.current = onSuccess
   }, [onSuccess])
+
+  useEffect(() => {
+    if (currentStep < 0 || !currentSection) return
+
+    stepViewSequenceRef.current += 1
+    trackProfileSetupEvent('profile_setup_step_viewed', {
+      view_sequence: stepViewSequenceRef.current,
+    }, currentStep)
+  }, [currentSection, currentStep, trackProfileSetupEvent])
+
+  useEffect(() => {
+    const handlePageHide = () => {
+      trackProfileSetupExit('pagehide')
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        trackProfileSetupExit('backgrounded')
+      }
+    }
+
+    window.addEventListener('pagehide', handlePageHide)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('pagehide', handlePageHide)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [trackProfileSetupExit])
 
   const checkSession = useCallback(async () => {
     if (hasCheckedSessionRef.current) return
@@ -270,7 +414,12 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
     }
 
     setErrors(nextErrors)
-    return Object.keys(nextErrors).length === 0
+    const invalidFields = Object.keys(nextErrors)
+    if (invalidFields.length > 0) {
+      trackProfileSetupValidationFailure(invalidFields)
+    }
+
+    return invalidFields.length === 0
   }
 
   const handleNext = async () => {
@@ -290,6 +439,7 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
 
         if (data) {
           setErrors({ nickname: '이미 사용 중인 닉네임입니다' })
+          trackProfileSetupValidationFailure(['nickname'])
           focusCurrentSection()
           setIsLoading(false)
           return
@@ -302,9 +452,16 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
 
     setErrors({})
     trackEvent('profile_setup_step_completed', {
+      setup_session_id: getProfileSetupSessionId(),
       step_id: currentSection.id,
       step_index: currentStep,
+      step_count: SIGNUP_SECTIONS.length,
+      payout_skipped: payoutSkipped,
     })
+    lastCompletedStepRef.current = {
+      id: currentSection.id,
+      index: currentStep,
+    }
 
     if (isLastStep) {
       await handleSignup()
@@ -319,8 +476,16 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
     setFormData(prev => ({ ...prev, bank_name: '', account_number: '', account_holder: '' }))
     setErrors({})
     trackEvent('profile_setup_payout_skipped', {
+      setup_session_id: getProfileSetupSessionId(),
+      step_id: currentSection.id,
       step_index: currentStep,
+      step_count: SIGNUP_SECTIONS.length,
+      payout_skipped: true,
     })
+    lastCompletedStepRef.current = {
+      id: currentSection.id,
+      index: currentStep,
+    }
     setCurrentStep(prev => prev + 1)
     scrollContentToTop()
   }
@@ -336,6 +501,7 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
       }
 
       const userId = sessionData.session.user.id
+      const setupSessionId = getProfileSetupSessionId()
       const signupGoogleProfile = extractGachonProfileFromMetadata(sessionData.session.user.user_metadata)
       const resolvedName = (formData.name || signupGoogleProfile.name).trim()
       const resolvedDepartment = formData.department || signupGoogleProfile.department || '학과 미확인'
@@ -367,14 +533,25 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
         is_admin: false,
         department: resolvedDepartment,
       })
+      hasCompletedProfileSetupRef.current = true
       trackEvent('profile_completed', {
+        setup_session_id: setupSessionId,
+        step_id: currentSection?.id,
+        step_index: currentStep,
+        step_count: SIGNUP_SECTIONS.length,
+        payout_skipped: payoutSkipped,
         department: resolvedDepartment,
       })
+      clearProfileSetupSessionId()
       onSuccess()
     } catch (error: any) {
       console.error('Signup error:', error)
       trackEvent('profile_completion_failed', {
+        setup_session_id: getProfileSetupSessionId(),
         step_id: currentSection?.id,
+        step_index: currentStep,
+        step_count: SIGNUP_SECTIONS.length,
+        payout_skipped: payoutSkipped,
       })
       toast.error(error.message || '회원가입 중 오류가 발생했습니다')
     } finally {
@@ -413,6 +590,12 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
 
   const handleBack = async () => {
     if (currentStep > 0) {
+      const previousSection = SIGNUP_SECTIONS[currentStep - 1]
+      trackProfileSetupEvent('profile_setup_back_clicked', {
+        action: 'previous_step',
+        target_step_id: previousSection.id,
+        target_step_index: currentStep - 1,
+      })
       setCurrentStep(prev => prev - 1)
       setErrors({})
       scrollContentToTop()
@@ -420,6 +603,11 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
     }
 
     if (currentStep === 0) {
+      trackProfileSetupEvent('profile_setup_back_clicked', {
+        action: 'exit',
+      })
+      trackProfileSetupExit('back_button')
+
       if (onBackToLanding) {
         setErrors({})
         onBackToLanding()
@@ -702,6 +890,10 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
                   key={section.id}
                   type="button"
                   onClick={() => {
+                    trackProfileSetupEvent('profile_setup_previous_step_opened', {
+                      target_step_id: section.id,
+                      target_step_index: index,
+                    })
                     setCurrentStep(index)
                     setErrors({})
                     scrollContentToTop()

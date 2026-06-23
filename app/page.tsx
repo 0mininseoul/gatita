@@ -1177,7 +1177,7 @@ export default function HomePage() {
     if (inApp.isInApp) {
       trackEvent('login_blocked_in_app_browser', { is_ios: inApp.isIOS })
       if (inApp.isIOS) {
-        toast.error('인앱 브라우저에서는 Google 로그인이 불가능해요. 안내에 따라 Safari로 열어주세요.')
+        toast.error('인앱 브라우저에서는 Google 로그인이 불가능해요. 안내에 따라 Safari로 열어주세요.', { duration: 5000 })
       } else {
         escapeInAppBrowser()
       }

@@ -38,10 +38,10 @@ export default function InAppBrowserNotice() {
       }}
     >
       <p style={{ fontWeight: 800, color: '#111827', fontSize: '0.9375rem', lineHeight: 1.4 }}>
-        {IN_APP_BROWSER_NOTICE_TITLE}
+        {guide}
       </p>
       <p style={{ marginTop: '0.125rem', fontWeight: 500, color: '#4b5563', fontSize: '0.8125rem', lineHeight: 1.45 }}>
-        {guide}
+        {IN_APP_BROWSER_NOTICE_TITLE}
       </p>
     </div>
   )

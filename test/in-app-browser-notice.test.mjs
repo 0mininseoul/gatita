@@ -77,4 +77,6 @@ test('landing Google login is guarded against in-app browsers', () => {
   const oauthIndex = source.indexOf('signInWithOAuth')
   assert.ok(guardIndex !== -1 && oauthIndex !== -1, 'both guard and oauth call should exist')
   assert.ok(guardIndex < oauthIndex, 'in-app guard must run before signInWithOAuth')
+  // iOS 안내 toast는 기본(4s)보다 1초 더 길게 표시
+  assert.match(source, /duration: 5000/)
 })

@@ -47,16 +47,24 @@ test('in-app browser notice uses "불가능" wording, not "막혀"', () => {
   assert.doesNotMatch(auth, /막혀/)
 })
 
-test('InAppBrowserNotice renders a banner with external-open and iOS copy-link fallback', () => {
+test('InAppBrowserNotice renders a compact two-line notice (no button)', () => {
   const source = readProjectFile('components/InAppBrowserNotice.tsx')
 
   assert.match(source, /detectInAppBrowser/)
-  assert.match(source, /escapeInAppBrowser/)
-  // iOS는 강제 불가 → 안내 + 링크 복사 제공
-  assert.match(source, /Safari로 여는 방법/)
-  assert.match(source, /clipboard\.writeText/)
+  // 두 줄: 제목 + 플랫폼별 안내. 버튼/복사 없이 텍스트만.
+  assert.match(source, /IN_APP_BROWSER_NOTICE_TITLE/)
+  assert.match(source, /IN_APP_BROWSER_IOS_GUIDE/)
+  assert.match(source, /IN_APP_BROWSER_ANDROID_GUIDE/)
+  assert.doesNotMatch(source, /<button/)
+  assert.doesNotMatch(source, /clipboard/)
   // 인앱이 아니면 아무것도 렌더링하지 않는다
   assert.match(source, /if \(!info\.isInApp\) return null/)
+})
+
+test('iOS guide tells users to open in Safari via the share button', () => {
+  const auth = readProjectFile('lib/auth.ts')
+  assert.match(auth, /공유 버튼을 눌러 'Safari에서 열기'/)
+  assert.match(auth, /export const IN_APP_BROWSER_ANDROID_GUIDE/)
 })
 
 test('landing Google login is guarded against in-app browsers', () => {

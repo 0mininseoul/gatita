@@ -336,6 +336,9 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
       }
 
       const userId = sessionData.session.user.id
+      const signupGoogleProfile = extractGachonProfileFromMetadata(sessionData.session.user.user_metadata)
+      const resolvedName = (formData.name || signupGoogleProfile.name).trim()
+      const resolvedDepartment = formData.department || signupGoogleProfile.department || '학과 미확인'
 
       const response = await fetch('/api/profile/complete', {
         method: 'POST',
@@ -343,7 +346,7 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: formData.name.trim(),
+          name: resolvedName,
           phone: formData.phone.trim(),
           nickname: formData.nickname.trim(),
           bank_name: (formData.bank_name ?? '').trim(),
@@ -362,10 +365,10 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
         profile_completed: true,
         account_status: 'active',
         is_admin: false,
-        department: formData.department || '학과 미확인',
+        department: resolvedDepartment,
       })
       trackEvent('profile_completed', {
-        department: formData.department || '학과 미확인',
+        department: resolvedDepartment,
       })
       onSuccess()
     } catch (error: any) {

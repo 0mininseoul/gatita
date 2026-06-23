@@ -2,6 +2,7 @@
 
 import * as amplitude from '@amplitude/analytics-browser'
 import { Identify } from '@amplitude/analytics-browser'
+import { sessionReplayPlugin } from '@amplitude/plugin-session-replay-browser'
 
 type AnalyticsValue = string | number | boolean | null | undefined
 type AnalyticsProperties = Record<string, AnalyticsValue>
@@ -11,6 +12,16 @@ const INTERNAL_DEVICE_STORAGE_KEY = 'gatita:analytics-internal-device'
 
 let initialized = false
 let unavailable = false
+
+function getSessionReplaySampleRate() {
+  // 0~1 사이로 환경변수로 조정 가능. 미설정/빈 값/유효하지 않으면 100% 수집(소규모 앱 기준).
+  // Number('')는 0이라 빈 문자열을 그대로 두면 리플레이가 꺼지므로 먼저 걸러낸다.
+  const raw = process.env.NEXT_PUBLIC_AMPLITUDE_SESSION_REPLAY_SAMPLE_RATE
+  if (!raw || raw.trim() === '') return 1
+  const parsed = Number(raw)
+  if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 1) return parsed
+  return 1
+}
 
 function parseEnvList(value: string | undefined) {
   return (value ?? '')
@@ -62,6 +73,17 @@ export function initAnalytics() {
     unavailable = true
     return false
   }
+
+  // 세션 리플레이 플러그인은 init 이전에 등록해야 한다.
+  // 이 앱은 전화번호·계좌·이메일 등 PII를 다루므로 모든 입력 필드를 마스킹한다.
+  amplitude.add(
+    sessionReplayPlugin({
+      sampleRate: getSessionReplaySampleRate(),
+      privacyConfig: {
+        defaultMaskLevel: 'medium',
+      },
+    }),
+  )
 
   amplitude.init(apiKey, {
     autocapture: false,

@@ -1462,7 +1462,7 @@ export default function ChatRoomPage() {
               <div className="flex items-center gap-1.5 text-xs font-bold text-primary-700">
                 <CreditCard className="h-3.5 w-3.5" />
                 <span>방장 계좌</span>
-                {payoutRevealed && (
+                {isRoomCreator && payoutRevealed && (
                   <span className="rounded-full bg-primary-100 px-1.5 py-0.5 text-[10px] font-bold text-primary-700">공개됨</span>
                 )}
               </div>

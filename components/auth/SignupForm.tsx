@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { NON_GACHON_ACCOUNT_MESSAGE, extractGachonProfileFromMetadata, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
 import { formatAccountNumberForBank, isAccountNumberCompleteForBank } from '@/lib/banks'
+import { validateAccountHolderName, validateAccountNumberPattern, validatePhoneNumber } from '@/lib/validation'
 import { AccountNumberSegmentField, BankSelectField } from '@/components/BankAccountFields'
 import { generateRandomNickname } from '@/lib/nicknames'
 import { identifyAnalyticsUser, trackEvent } from '@/lib/analytics/client'
@@ -365,28 +366,21 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
     }
 
     switch (fieldId) {
-      case 'phone': {
-        const phoneRegex = /^010-\d{4}-\d{4}$/
-        if (!phoneRegex.test(value)) {
-          return '010-0000-0000 형식으로 입력해주세요'
-        }
-        break
-      }
+      case 'phone':
+        return validatePhoneNumber(value)
       case 'bank_name':
         if (value.trim().length < 2) {
           return '은행을 선택하거나 입력해주세요'
         }
         break
-      case 'account_number':
+      case 'account_number': {
         if (!isAccountNumberCompleteForBank(formData.bank_name, value)) {
           return '선택한 은행의 계좌번호 형식에 맞게 입력해주세요'
         }
-        break
+        return validateAccountNumberPattern(value)
+      }
       case 'account_holder':
-        if (value.trim().length < 2) {
-          return '예금주 이름을 2자 이상 입력해주세요'
-        }
-        break
+        return validateAccountHolderName(value)
       case 'nickname':
         if (value.length < 2 || value.length > 10) {
           return '닉네임은 2-10자로 입력해주세요'

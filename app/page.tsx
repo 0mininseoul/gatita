@@ -29,7 +29,6 @@ import toast from 'react-hot-toast'
 import CampusRouteMap, { CampusMapRoom } from '@/components/CampusRouteMap'
 import SignupForm from '@/components/auth/SignupForm'
 import NavigationBar from '@/components/NavigationBar'
-import InAppBrowserNotice from '@/components/InAppBrowserNotice'
 
 const Grainient = dynamic(() => import('@/components/Grainient'), { ssr: false })
 const SplitText = dynamic(() => import('@/components/SplitText'), { ssr: false })
@@ -1177,7 +1176,10 @@ export default function HomePage() {
     if (inApp.isInApp) {
       trackEvent('login_blocked_in_app_browser', { is_ios: inApp.isIOS })
       if (inApp.isIOS) {
-        toast.error('인앱 브라우저에서는 Google 로그인이 불가능해요. 안내에 따라 Safari로 열어주세요.', { duration: 5000 })
+        toast.error(
+          "에브리타임 안에서는 Google 로그인이 안 돼요.\n우측 상단의 공유 버튼을 눌러 'Safari에서 열기'를 선택해주세요.",
+          { duration: 2000, style: { whiteSpace: 'pre-line' } },
+        )
       } else {
         escapeInAppBrowser()
       }
@@ -1391,8 +1393,6 @@ export default function HomePage() {
             }}>
               가천대 학생들을 위한 택시 동승 플랫폼
             </p>
-
-            {!hasAuthenticatedSession && <InAppBrowserNotice />}
 
             <div style={{
               display: 'flex',

@@ -41,42 +41,20 @@ test('real captured Everytime iOS user-agent is detected as in-app + iOS', () =>
   assert.match(auth, /iPhone\|iPad\|iPod/)
 })
 
-test('in-app browser notice uses "불가능" wording, not "막혀"', () => {
-  const auth = readProjectFile('lib/auth.ts')
-  assert.match(auth, /Google 로그인이 불가능해요/)
-  assert.doesNotMatch(auth, /막혀/)
-})
-
-test('InAppBrowserNotice renders a compact two-line notice (no button)', () => {
-  const source = readProjectFile('components/InAppBrowserNotice.tsx')
-
-  assert.match(source, /detectInAppBrowser/)
-  // 두 줄: 제목 + 플랫폼별 안내. 버튼/복사 없이 텍스트만.
-  assert.match(source, /IN_APP_BROWSER_NOTICE_TITLE/)
-  assert.match(source, /IN_APP_BROWSER_IOS_GUIDE/)
-  assert.match(source, /IN_APP_BROWSER_ANDROID_GUIDE/)
-  assert.doesNotMatch(source, /<button/)
-  assert.doesNotMatch(source, /clipboard/)
-  // 인앱이 아니면 아무것도 렌더링하지 않는다
-  assert.match(source, /if \(!info\.isInApp\) return null/)
-})
-
-test('iOS guide tells users to open in Safari via the share button', () => {
-  const auth = readProjectFile('lib/auth.ts')
-  assert.match(auth, /공유 버튼을 눌러 'Safari에서 열기'/)
-  assert.match(auth, /export const IN_APP_BROWSER_ANDROID_GUIDE/)
-})
-
-test('landing Google login is guarded against in-app browsers', () => {
+test('landing Google login is guarded; iOS shows a two-line guidance toast', () => {
   const source = readProjectFile('app/page.tsx')
 
-  assert.match(source, /import InAppBrowserNotice from '@\/components\/InAppBrowserNotice'/)
-  assert.match(source, /<InAppBrowserNotice \/>/)
+  // 배너는 제거되고 안내는 toast 로만 노출 — 컴포넌트 참조가 남아있으면 안 된다
+  assert.doesNotMatch(source, /InAppBrowserNotice/)
+
   // handleGoogleStart는 OAuth 시도 전에 인앱 여부를 확인하고 차단해야 한다
   const guardIndex = source.indexOf('detectInAppBrowser()')
   const oauthIndex = source.indexOf('signInWithOAuth')
   assert.ok(guardIndex !== -1 && oauthIndex !== -1, 'both guard and oauth call should exist')
   assert.ok(guardIndex < oauthIndex, 'in-app guard must run before signInWithOAuth')
-  // iOS 안내 toast는 기본(4s)보다 1초 더 길게 표시
-  assert.match(source, /duration: 5000/)
+
+  // iOS 안내 toast: 두 줄(\n + pre-line), 2초, 정확한 문구
+  assert.match(source, /에브리타임 안에서는 Google 로그인이 안 돼요\.\\n우측 상단의 공유 버튼을 눌러 'Safari에서 열기'를 선택해주세요\./)
+  assert.match(source, /whiteSpace: 'pre-line'/)
+  assert.match(source, /duration: 2000/)
 })

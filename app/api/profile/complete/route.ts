@@ -31,9 +31,14 @@ function validatePayload(payload: CompleteProfilePayload | null) {
   if (name.length < 2 || name.length > 100) return { error: '실명을 확인해주세요' }
   if (!PHONE_REGEX.test(phone)) return { error: '전화번호 형식을 확인해주세요' }
   if (nickname.length < 2 || nickname.length > 10) return { error: '닉네임은 2-10자로 입력해주세요' }
-  if (!bankName) return { error: '계좌은행명을 선택해주세요' }
-  if (!isAccountNumberCompleteForBank(bankName, accountNumber)) return { error: '계좌번호 형식을 확인해주세요' }
-  if (accountHolder.length < 2 || accountHolder.length > 100) return { error: '계좌주 이름을 확인해주세요' }
+
+  // 계좌는 온보딩에서 '나중에' 건너뛸 수 있다. 셋 다 비면 통과(미입력), 하나라도 채우면 전부 검증.
+  const hasAnyAccountField = Boolean(bankName || accountNumber || accountHolder)
+  if (hasAnyAccountField) {
+    if (!bankName) return { error: '계좌은행명을 선택해주세요' }
+    if (!isAccountNumberCompleteForBank(bankName, accountNumber)) return { error: '계좌번호 형식을 확인해주세요' }
+    if (accountHolder.length < 2 || accountHolder.length > 100) return { error: '계좌주 이름을 확인해주세요' }
+  }
 
   return {
     data: {
@@ -121,9 +126,9 @@ async function completeProfile(request: Request) {
       email,
       name: validated.data.name,
       phone: validated.data.phone,
-      bank_name: validated.data.bankName,
-      account_number: validated.data.accountNumber,
-      account_holder: validated.data.accountHolder,
+      bank_name: validated.data.bankName || null,
+      account_number: validated.data.accountNumber || null,
+      account_holder: validated.data.accountHolder || null,
       onboarded_at: new Date().toISOString(),
     }, { onConflict: 'user_id' })
 

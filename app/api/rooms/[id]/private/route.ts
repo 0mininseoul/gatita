@@ -21,7 +21,7 @@ async function getRoomPrivateInfo(
   const admin = createAdminSupabase()
   const { data: room, error: roomError } = await admin
     .from('chat_rooms')
-    .select('id, created_by, status')
+    .select('id, created_by, status, payout_revealed_at')
     .eq('id', roomId)
     .maybeSingle()
 
@@ -76,10 +76,15 @@ async function getRoomPrivateInfo(
   )
 
   const creatorPayout = payoutResult.data
+  const isCreator = authUser.id === room.created_by
+  const payoutRevealed = Boolean(room.payout_revealed_at)
+  const creatorHasPayoutAccount = Boolean(creatorPayout?.bank_name)
 
   return NextResponse.json({
     phonesByUserId,
-    creatorPayoutAccount: creatorPayout?.bank_name ? creatorPayout : null,
+    creatorPayoutAccount: (isCreator || payoutRevealed) && creatorHasPayoutAccount ? creatorPayout : null,
+    creatorHasPayoutAccount,
+    payoutRevealed,
   })
 }
 

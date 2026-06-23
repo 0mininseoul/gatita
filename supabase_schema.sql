@@ -58,6 +58,7 @@ create table public.chat_rooms (
   max_participants integer default 4 check (max_participants >= 2 and max_participants <= 4),
   created_by uuid references public.users(id) on delete cascade not null,
   status varchar(20) default 'active' check (status in ('active', 'closed')),
+  payout_revealed_at timestamp with time zone,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 

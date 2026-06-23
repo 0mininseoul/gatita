@@ -14,7 +14,8 @@ import {
   LEGACY_HOST_APPEARANCE_MESSAGE_PREFIX,
   type MessageAuthor,
 } from '@/lib/chat/messages'
-import { formatAccountNumberForBank } from '@/lib/banks'
+import { formatAccountNumberForBank, isAccountNumberCompleteForBank } from '@/lib/banks'
+import { AccountNumberSegmentField, BankSelectField } from '@/components/BankAccountFields'
 import { identifyAnalyticsUser, trackEvent } from '@/lib/analytics/client'
 import { buildRoomInviteSharePayload } from '@/lib/roomInvite'
 import { ArrowLeft, Users, Clock, Send, Flag, X, LogOut, Phone, CreditCard, Copy, Share2 } from 'lucide-react'
@@ -28,6 +29,8 @@ const MESSAGE_PAGE_SIZE = 50
 type RoomPrivateInfoPayload = {
   phonesByUserId?: Record<string, string | null>
   creatorPayoutAccount?: PayoutAccount | null
+  creatorHasPayoutAccount?: boolean
+  payoutRevealed?: boolean
   error?: string
 }
 
@@ -45,6 +48,13 @@ export default function ChatRoomPage() {
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false)
   const [participants, setParticipants] = useState<RoomParticipant[]>([])
   const [creatorPayoutAccount, setCreatorPayoutAccount] = useState<PayoutAccount | null>(null)
+  const [creatorHasPayoutAccount, setCreatorHasPayoutAccount] = useState(false)
+  const [payoutRevealed, setPayoutRevealed] = useState(false)
+  const [isRevealingPayout, setIsRevealingPayout] = useState(false)
+  const [showInlineAccountForm, setShowInlineAccountForm] = useState(false)
+  const [inlineAccountForm, setInlineAccountForm] = useState({ bank_name: '', account_number: '', account_holder: '' })
+  const [inlineAccountError, setInlineAccountError] = useState('')
+  const [isSavingInlineAccount, setIsSavingInlineAccount] = useState(false)
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const [isConfirmed, setIsConfirmed] = useState(false)
@@ -568,8 +578,12 @@ export default function ChatRoomPage() {
 
         if (privateResponse.ok) {
           setCreatorPayoutAccount(privateResult?.creatorPayoutAccount ?? null)
+          setCreatorHasPayoutAccount(Boolean(privateResult?.creatorHasPayoutAccount))
+          setPayoutRevealed(Boolean(privateResult?.payoutRevealed))
         } else {
           setCreatorPayoutAccount(null)
+          setCreatorHasPayoutAccount(false)
+          setPayoutRevealed(false)
         }
 
         setParticipants(data.map((participant: any) => ({
@@ -1231,6 +1245,73 @@ export default function ChatRoomPage() {
     }
   }, [creatorPayoutAccount, formattedCreatorAccountNumber, roomId])
 
+  const handleRevealPayout = useCallback(async () => {
+    setIsRevealingPayout(true)
+    try {
+      const response = await fetch(`/api/rooms/${roomId}/reveal-payout`, {
+        method: 'POST',
+        cache: 'no-store',
+        credentials: 'same-origin',
+      })
+      const result = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(result?.error ?? '계좌 공개 중 오류가 발생했습니다')
+      }
+      setCreatorPayoutAccount(result?.creatorPayoutAccount ?? null)
+      setCreatorHasPayoutAccount(true)
+      setPayoutRevealed(true)
+      trackEvent('payout_revealed', { room_id: roomId })
+      await broadcastRoomSync('participants')
+      toast.success('계좌를 전체 공개했어요')
+    } catch (error) {
+      console.error('Reveal payout error:', error)
+      toast.error(error instanceof Error ? error.message : '계좌 공개 중 오류가 발생했습니다')
+    } finally {
+      setIsRevealingPayout(false)
+    }
+  }, [broadcastRoomSync, roomId])
+
+  const handleInlineAccountSave = useCallback(async () => {
+    const next = {
+      bank_name: inlineAccountForm.bank_name.trim(),
+      account_number: inlineAccountForm.account_number.trim(),
+      account_holder: inlineAccountForm.account_holder.trim(),
+    }
+    if (!next.bank_name || !next.account_number || !next.account_holder) {
+      setInlineAccountError('은행명, 계좌번호, 계좌주 이름을 모두 입력해주세요')
+      return
+    }
+    if (!isAccountNumberCompleteForBank(next.bank_name, next.account_number)) {
+      setInlineAccountError('선택한 은행의 계좌번호 형식에 맞게 입력해주세요')
+      return
+    }
+    setIsSavingInlineAccount(true)
+    setInlineAccountError('')
+    try {
+      const response = await fetch('/api/profile/payout', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(next),
+      })
+      const result = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(result?.error ?? '계좌 정보 저장 중 오류가 발생했습니다')
+      }
+      setCreatorPayoutAccount(result?.payoutAccount ?? null)
+      setCreatorHasPayoutAccount(true)
+      setShowInlineAccountForm(false)
+      setInlineAccountForm({ bank_name: '', account_number: '', account_holder: '' })
+      trackEvent('payout_account_updated', { bank_name: next.bank_name, source: 'chat_room' })
+      await broadcastRoomSync('participants')
+      toast.success('계좌를 등록했어요. ‘전체 공개’를 누르면 참여자에게 보여져요')
+    } catch (error) {
+      console.error('Inline payout save error:', error)
+      setInlineAccountError(error instanceof Error ? error.message : '계좌 정보 저장 중 오류가 발생했습니다')
+    } finally {
+      setIsSavingInlineAccount(false)
+    }
+  }, [broadcastRoomSync, inlineAccountForm])
+
   const handleCallParticipant = useCallback((participant: RoomParticipant) => {
     if (!participant.user?.phone) {
       toast.error('전화번호가 등록되지 않았습니다')
@@ -1381,8 +1462,20 @@ export default function ChatRoomPage() {
               <div className="flex items-center gap-1.5 text-xs font-bold text-primary-700">
                 <CreditCard className="h-3.5 w-3.5" />
                 <span>방장 계좌</span>
+                {isRoomCreator && payoutRevealed && (
+                  <span className="rounded-full bg-primary-100 px-1.5 py-0.5 text-[10px] font-bold text-primary-700">공개됨</span>
+                )}
               </div>
-              {creatorPayoutAccount && (
+              {isRoomCreator && creatorHasPayoutAccount && !payoutRevealed ? (
+                <button
+                  type="button"
+                  onClick={handleRevealPayout}
+                  disabled={isRevealingPayout}
+                  className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-primary-600 px-2 text-[11px] font-black text-white shadow-sm transition hover:bg-primary-700 disabled:bg-primary-300"
+                >
+                  {isRevealingPayout ? '공개 중...' : '전체 공개'}
+                </button>
+              ) : creatorPayoutAccount && payoutRevealed ? (
                 <button
                   type="button"
                   onClick={copyCreatorPayoutAccount}
@@ -1391,16 +1484,41 @@ export default function ChatRoomPage() {
                   <Copy className="h-3.5 w-3.5" />
                   복사
                 </button>
-              )}
+              ) : null}
             </div>
-            {creatorPayoutAccount !== null ? (
+
+            {isRoomCreator ? (
+              creatorHasPayoutAccount ? (
+                <>
+                  <p className="chat-payout-account mt-1 truncate text-xs font-semibold text-gray-900">
+                    {creatorPayoutAccount?.bank_name} {formattedCreatorAccountNumber} {creatorPayoutAccount?.account_holder}
+                  </p>
+                  {!payoutRevealed && (
+                    <p className="mt-1 text-[11px] text-gray-500">
+                      아직 참여자에게 공개되지 않았어요. ‘전체 공개’를 누르면 보여집니다.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <div className="mt-1">
+                  <p className="text-xs text-gray-500">정산 계좌가 등록되지 않았어요.</p>
+                  <button
+                    type="button"
+                    onClick={() => setShowInlineAccountForm(true)}
+                    className="mt-1.5 inline-flex h-7 items-center rounded-md bg-primary-600 px-2.5 text-[11px] font-bold text-white transition hover:bg-primary-700"
+                  >
+                    계좌 등록하기
+                  </button>
+                </div>
+              )
+            ) : payoutRevealed && creatorPayoutAccount ? (
               <p className="chat-payout-account mt-1 truncate text-xs font-semibold text-gray-900">
                 {creatorPayoutAccount.bank_name} {formattedCreatorAccountNumber} {creatorPayoutAccount.account_holder}
               </p>
+            ) : creatorHasPayoutAccount ? (
+              <p className="mt-1 text-xs text-gray-500">방장이 계좌를 아직 공개하지 않았어요.</p>
             ) : (
-              <p className="mt-1 text-xs text-gray-500">
-                방장 계좌 정보가 아직 등록되지 않았습니다.
-              </p>
+              <p className="mt-1 text-xs text-gray-500">방장이 아직 계좌를 등록하지 않았어요.</p>
             )}
           </div>
         )}
@@ -1418,6 +1536,78 @@ export default function ChatRoomPage() {
           </div>
         )}
       </header>
+
+      {showInlineAccountForm && (
+        <div className="fixed inset-0 z-50">
+          <button
+            type="button"
+            aria-label="계좌 등록 닫기"
+            className="absolute inset-0 bg-black/30"
+            onClick={() => setShowInlineAccountForm(false)}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="absolute inset-x-0 bottom-0 max-h-[88vh] overflow-y-auto rounded-t-2xl bg-white p-5"
+          >
+            <div className="mx-auto mb-4 h-1 w-11 rounded-full bg-gray-200" />
+            <h2 className="text-lg font-extrabold text-gray-950">정산 계좌 등록</h2>
+            <p className="mt-1 text-sm text-gray-500">등록 후 ‘전체 공개’를 눌러야 참여자에게 보여져요.</p>
+            <div className="mt-4 space-y-3">
+              <div>
+                <p className="mb-1 text-sm font-semibold text-gray-900">은행</p>
+                <BankSelectField
+                  value={inlineAccountForm.bank_name}
+                  onChange={(value) => {
+                    setInlineAccountForm(prev => ({ ...prev, bank_name: value }))
+                    setInlineAccountError('')
+                  }}
+                  presentation="sheet"
+                  disabled={isSavingInlineAccount}
+                />
+              </div>
+              <div>
+                <p className="mb-1 text-sm font-semibold text-gray-900">계좌번호</p>
+                <AccountNumberSegmentField
+                  bankName={inlineAccountForm.bank_name}
+                  value={inlineAccountForm.account_number}
+                  onChange={(value) => {
+                    setInlineAccountForm(prev => ({ ...prev, account_number: value }))
+                    setInlineAccountError('')
+                  }}
+                  disabled={isSavingInlineAccount}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-gray-900" htmlFor="inline-account-holder">예금주</label>
+                <input
+                  id="inline-account-holder"
+                  type="text"
+                  value={inlineAccountForm.account_holder}
+                  onChange={(event) => {
+                    setInlineAccountForm(prev => ({ ...prev, account_holder: event.target.value }))
+                    setInlineAccountError('')
+                  }}
+                  className="input-field"
+                  placeholder="예금주 이름"
+                  disabled={isSavingInlineAccount}
+                />
+              </div>
+              {inlineAccountError && (
+                <p className="text-sm text-red-500">{inlineAccountError}</p>
+              )}
+              <button
+                type="button"
+                onClick={handleInlineAccountSave}
+                disabled={isSavingInlineAccount}
+                className="btn-primary w-full"
+              >
+                {isSavingInlineAccount ? '저장 중...' : '저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 채팅 메시지 영역 */}
       <div

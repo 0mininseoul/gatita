@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { ClipboardEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
   BANK_OPTIONS,
   BankOption,
@@ -324,6 +324,20 @@ export function AccountNumberSegmentField({
     inputRefs.current[index - 1]?.focus()
   }
 
+  const handleSegmentPaste = (event: ClipboardEvent<HTMLInputElement>) => {
+    const pastedText = event.clipboardData.getData('text')
+    const pastedDigits = pastedText.replace(/\D/g, '')
+    if (!pastedDigits) return
+
+    event.preventDefault()
+    const pastedSegments = splitAccountNumberForBank(bankName, pastedDigits)
+    onChange(joinAccountSegments(pastedSegments))
+
+    const firstEmpty = pastedSegments.findIndex((segment) => !segment)
+    const focusIndex = firstEmpty >= 0 ? firstEmpty : segments.length - 1
+    inputRefs.current[focusIndex]?.focus()
+  }
+
   return (
     <div>
       <div className="flex min-w-0 items-center gap-1.5">
@@ -335,6 +349,7 @@ export function AccountNumberSegmentField({
               inputMode="numeric"
               value={segmentValues[index] ?? ''}
               onChange={(event) => updateSegment(index, event.target.value)}
+              onPaste={handleSegmentPaste}
               onKeyDown={(event) => handleSegmentKeyDown(index, event)}
               maxLength={length}
               disabled={disabled}

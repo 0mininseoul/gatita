@@ -13,10 +13,12 @@
   },
   "dependencies": {
     "@amplitude/analytics-browser": "^2.44.1",
+    "@amplitude/plugin-session-replay-browser": "^1.32.2",
     "@axiomhq/js": "^1.7.0",
     "@axiomhq/logging": "^0.2.2",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.38.5",
+    "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "date-fns": "^3.0.6",
     "lucide-react": "^0.302.0",

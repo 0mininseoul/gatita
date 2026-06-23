@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   title: '자주 묻는 질문 — 같이타 (가천대 택시 동승)',
   description:
     '같이타 자주 묻는 질문. 가천대 택시 동승 매칭, 이용 자격, 택시비 정산, 운행 지점, 안전, 시작 방법을 한눈에 확인하세요.',
-  keywords: '같이타 사용법, 가천대 택시 동승 방법, 가천대 합승, 가천대 택시비 정산, 같이타 FAQ',
+  keywords: '같이타, 같이타 사용법, 가천대 택시앱, 가천대 택시 어플, 가천대 택시비 정산, 가천대 합승, 같이타 FAQ',
   alternates: {
     canonical: '/faq',
   },

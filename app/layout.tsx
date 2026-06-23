@@ -3,6 +3,7 @@ import localFont from 'next/font/local'
 import { Toaster } from 'react-hot-toast'
 import { Metadata, Viewport } from 'next'
 import AnalyticsProvider from '@/components/AnalyticsProvider'
+import { Analytics } from '@vercel/analytics/next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 
 const paperlogy = localFont({
@@ -92,7 +93,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: '같이타 - 가천대 택시 동승 플랫폼',
   description: '가천대학교 학생들을 위한 택시 동승자 찾기 서비스입니다. 가천대역에서 기숙사까지 안전하고 편리하게 함께 이동하세요.',
-  keywords: '같이타, 가천대 같이타, 가천대 택시, 가천대 택시 동승, 가천대 합승, 가천대역 택시, 가천대 기숙사 택시, 가천대 통학, 가천대학교, 택시 동승, 동승자 찾기',
+  keywords: '같이타, 가천대 같이타, 가천대 택시, 가천대 택시앱, 가천대 택시 어플, 가천대역 택시, 가천대 기숙사 택시, 가천대 통학, 가천대학교, 택시 합승, 동승자 찾기',
   authors: [{ name: '같이타' }],
   creator: '같이타',
   alternates: {
@@ -196,6 +197,7 @@ export default function RootLayout({
             },
           }}
         />
+        <Analytics />
         <SpeedInsights />
       </body>
     </html>

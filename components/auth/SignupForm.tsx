@@ -11,8 +11,8 @@ import { identifyAnalyticsUser, trackEvent } from '@/lib/analytics/client'
 import { AlertCircle, CheckCircle2, ChevronDown } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-type SignupFieldId = 'name' | 'phone' | 'bank_name' | 'account_number' | 'account_holder' | 'nickname'
-type SignupSectionId = 'basic' | 'payout' | 'profile' | 'review'
+type SignupFieldId = 'phone' | 'bank_name' | 'account_number' | 'account_holder' | 'nickname'
+type SignupSectionId = 'basic' | 'payout' | 'review'
 
 type SignupField = {
   id: SignupFieldId
@@ -32,16 +32,74 @@ type SignupSection = {
   fields: SignupFieldId[]
 }
 
+type ProfileSetupAnalyticsProperties = Record<string, string | number | boolean | null | undefined>
+type ProfileSetupCompletedStep = {
+  id: SignupSectionId
+  index: number
+}
+type ProfileSetupExitType = 'back_button' | 'pagehide' | 'backgrounded'
+
+const PROFILE_SETUP_SESSION_STORAGE_KEY = 'gatita:profile-setup-session-id'
+let profileSetupSessionIdFallback: string | null = null
+
+function createProfileSetupSessionId() {
+  if (typeof window === 'undefined') return 'server'
+
+  return window.crypto?.randomUUID?.()
+    ?? `profile-setup-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function readProfileSetupSessionIdFromStorage() {
+  if (typeof window === 'undefined') return null
+
+  try {
+    return window.sessionStorage.getItem(PROFILE_SETUP_SESSION_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+function writeProfileSetupSessionIdToStorage(sessionId: string) {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.sessionStorage.setItem(PROFILE_SETUP_SESSION_STORAGE_KEY, sessionId)
+  } catch {
+    return
+  }
+}
+
+function removeProfileSetupSessionIdFromStorage() {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.sessionStorage.removeItem(PROFILE_SETUP_SESSION_STORAGE_KEY)
+  } catch {
+    return
+  }
+}
+
+function getProfileSetupSessionId() {
+  if (typeof window === 'undefined') return 'server'
+
+  const existingSessionId = profileSetupSessionIdFallback ?? readProfileSetupSessionIdFromStorage()
+  if (existingSessionId) {
+    profileSetupSessionIdFallback = existingSessionId
+    return existingSessionId
+  }
+
+  const nextSessionId = createProfileSetupSessionId()
+  profileSetupSessionIdFallback = nextSessionId
+  writeProfileSetupSessionIdToStorage(nextSessionId)
+  return nextSessionId
+}
+
+function clearProfileSetupSessionId() {
+  profileSetupSessionIdFallback = null
+  removeProfileSetupSessionIdFromStorage()
+}
+
 const SIGNUP_FIELDS: Record<SignupFieldId, SignupField> = {
-  name: {
-    id: 'name',
-    label: '실명',
-    errorLabel: '실명',
-    placeholder: '홍길동',
-    type: 'text',
-    required: true,
-    description: 'Google 계정에서 가져온 이름이 맞는지 확인해주세요.',
-  },
   phone: {
     id: 'phone',
     label: '전화번호',
@@ -93,9 +151,9 @@ const SIGNUP_SECTIONS: SignupSection[] = [
   {
     id: 'basic',
     shortTitle: '기본 정보',
-    title: '기본 정보를 확인해주세요',
-    description: '학교 계정 정보와 연락처를 한 번만 확인합니다.',
-    fields: ['name', 'phone'],
+    title: '연락처와 닉네임을 입력해주세요',
+    description: '학교 계정 정보를 불러왔어요. 전화번호는 가입 후 변경할 수 없어요.',
+    fields: ['phone', 'nickname'],
   },
   {
     id: 'payout',
@@ -103,13 +161,6 @@ const SIGNUP_SECTIONS: SignupSection[] = [
     title: '정산 계좌를 등록해주세요',
     description: '방을 개설했을 때 같이 탄 멤버가 송금할 계좌입니다.',
     fields: ['bank_name', 'account_number', 'account_holder'],
-  },
-  {
-    id: 'profile',
-    shortTitle: '공개 프로필',
-    title: '보여질 이름을 정해주세요',
-    description: '실명 대신 닉네임이 방 목록과 채팅에 표시됩니다.',
-    fields: ['nickname'],
   },
   {
     id: 'review',
@@ -142,6 +193,15 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
   const currentSectionRef = useRef<HTMLDivElement | null>(null)
   const hasCheckedSessionRef = useRef(false)
   const onSuccessRef = useRef(onSuccess)
+  const currentStepRef = useRef(currentStep)
+  const payoutSkippedRef = useRef(payoutSkipped)
+  const lastCompletedStepRef = useRef<ProfileSetupCompletedStep | null>(null)
+  const stepViewSequenceRef = useRef(0)
+  const hasCompletedProfileSetupRef = useRef(false)
+  const hasTrackedProfileSetupExitRef = useRef(false)
+
+  currentStepRef.current = currentStep
+  payoutSkippedRef.current = payoutSkipped
 
   const focusCurrentSection = useCallback(() => {
     window.setTimeout(() => {
@@ -158,9 +218,77 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
     }, 40)
   }, [])
 
+  const trackProfileSetupEvent = useCallback((
+    eventName: string,
+    properties: ProfileSetupAnalyticsProperties = {},
+    stepIndex = currentStepRef.current,
+  ) => {
+    const section = SIGNUP_SECTIONS[stepIndex]
+    if (!section) return
+
+    const lastCompletedStep = lastCompletedStepRef.current
+
+    trackEvent(eventName, {
+      setup_session_id: getProfileSetupSessionId(),
+      step_id: section.id,
+      step_index: stepIndex,
+      step_count: SIGNUP_SECTIONS.length,
+      payout_skipped: payoutSkippedRef.current,
+      last_completed_step_id: lastCompletedStep?.id ?? 'none',
+      last_completed_step_index: lastCompletedStep?.index ?? -1,
+      ...properties,
+    })
+  }, [])
+
+  const trackProfileSetupValidationFailure = useCallback((invalidFields: string[]) => {
+    trackProfileSetupEvent('profile_setup_validation_failed', {
+      invalid_fields: invalidFields.join(','),
+      error_count: invalidFields.length,
+    })
+  }, [trackProfileSetupEvent])
+
+  const trackProfileSetupExit = useCallback((exitType: ProfileSetupExitType) => {
+    if (hasCompletedProfileSetupRef.current || hasTrackedProfileSetupExitRef.current) return
+    if (currentStepRef.current < 0) return
+
+    hasTrackedProfileSetupExitRef.current = true
+    trackProfileSetupEvent('profile_setup_exited', {
+      exit_type: exitType,
+    })
+  }, [trackProfileSetupEvent])
+
   useEffect(() => {
     onSuccessRef.current = onSuccess
   }, [onSuccess])
+
+  useEffect(() => {
+    if (currentStep < 0 || !currentSection) return
+
+    stepViewSequenceRef.current += 1
+    trackProfileSetupEvent('profile_setup_step_viewed', {
+      view_sequence: stepViewSequenceRef.current,
+    }, currentStep)
+  }, [currentSection, currentStep, trackProfileSetupEvent])
+
+  useEffect(() => {
+    const handlePageHide = () => {
+      trackProfileSetupExit('pagehide')
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        trackProfileSetupExit('backgrounded')
+      }
+    }
+
+    window.addEventListener('pagehide', handlePageHide)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('pagehide', handlePageHide)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [trackProfileSetupExit])
 
   const checkSession = useCallback(async () => {
     if (hasCheckedSessionRef.current) return
@@ -286,7 +414,12 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
     }
 
     setErrors(nextErrors)
-    return Object.keys(nextErrors).length === 0
+    const invalidFields = Object.keys(nextErrors)
+    if (invalidFields.length > 0) {
+      trackProfileSetupValidationFailure(invalidFields)
+    }
+
+    return invalidFields.length === 0
   }
 
   const handleNext = async () => {
@@ -295,7 +428,7 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
       return
     }
 
-    if (currentSection.id === 'profile') {
+    if (currentSection.fields.includes('nickname')) {
       setIsLoading(true)
       try {
         const { data } = await supabase
@@ -306,6 +439,7 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
 
         if (data) {
           setErrors({ nickname: '이미 사용 중인 닉네임입니다' })
+          trackProfileSetupValidationFailure(['nickname'])
           focusCurrentSection()
           setIsLoading(false)
           return
@@ -318,9 +452,16 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
 
     setErrors({})
     trackEvent('profile_setup_step_completed', {
+      setup_session_id: getProfileSetupSessionId(),
       step_id: currentSection.id,
       step_index: currentStep,
+      step_count: SIGNUP_SECTIONS.length,
+      payout_skipped: payoutSkipped,
     })
+    lastCompletedStepRef.current = {
+      id: currentSection.id,
+      index: currentStep,
+    }
 
     if (isLastStep) {
       await handleSignup()
@@ -335,8 +476,16 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
     setFormData(prev => ({ ...prev, bank_name: '', account_number: '', account_holder: '' }))
     setErrors({})
     trackEvent('profile_setup_payout_skipped', {
+      setup_session_id: getProfileSetupSessionId(),
+      step_id: currentSection.id,
       step_index: currentStep,
+      step_count: SIGNUP_SECTIONS.length,
+      payout_skipped: true,
     })
+    lastCompletedStepRef.current = {
+      id: currentSection.id,
+      index: currentStep,
+    }
     setCurrentStep(prev => prev + 1)
     scrollContentToTop()
   }
@@ -352,6 +501,10 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
       }
 
       const userId = sessionData.session.user.id
+      const setupSessionId = getProfileSetupSessionId()
+      const signupGoogleProfile = extractGachonProfileFromMetadata(sessionData.session.user.user_metadata)
+      const resolvedName = (formData.name || signupGoogleProfile.name).trim()
+      const resolvedDepartment = formData.department || signupGoogleProfile.department || '학과 미확인'
 
       const response = await fetch('/api/profile/complete', {
         method: 'POST',
@@ -359,7 +512,7 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: formData.name.trim(),
+          name: resolvedName,
           phone: formData.phone.trim(),
           nickname: formData.nickname.trim(),
           bank_name: (formData.bank_name ?? '').trim(),
@@ -378,16 +531,27 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
         profile_completed: true,
         account_status: 'active',
         is_admin: false,
-        department: formData.department || '학과 미확인',
+        department: resolvedDepartment,
       })
+      hasCompletedProfileSetupRef.current = true
       trackEvent('profile_completed', {
-        department: formData.department || '학과 미확인',
+        setup_session_id: setupSessionId,
+        step_id: currentSection?.id,
+        step_index: currentStep,
+        step_count: SIGNUP_SECTIONS.length,
+        payout_skipped: payoutSkipped,
+        department: resolvedDepartment,
       })
+      clearProfileSetupSessionId()
       onSuccess()
     } catch (error: any) {
       console.error('Signup error:', error)
       trackEvent('profile_completion_failed', {
+        setup_session_id: getProfileSetupSessionId(),
         step_id: currentSection?.id,
+        step_index: currentStep,
+        step_count: SIGNUP_SECTIONS.length,
+        payout_skipped: payoutSkipped,
       })
       toast.error(error.message || '회원가입 중 오류가 발생했습니다')
     } finally {
@@ -426,6 +590,12 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
 
   const handleBack = async () => {
     if (currentStep > 0) {
+      const previousSection = SIGNUP_SECTIONS[currentStep - 1]
+      trackProfileSetupEvent('profile_setup_back_clicked', {
+        action: 'previous_step',
+        target_step_id: previousSection.id,
+        target_step_index: currentStep - 1,
+      })
       setCurrentStep(prev => prev - 1)
       setErrors({})
       scrollContentToTop()
@@ -433,6 +603,11 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
     }
 
     if (currentStep === 0) {
+      trackProfileSetupEvent('profile_setup_back_clicked', {
+        action: 'exit',
+      })
+      trackProfileSetupExit('back_button')
+
       if (onBackToLanding) {
         setErrors({})
         onBackToLanding()
@@ -495,8 +670,8 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
       case 'basic':
         return {
           title: '기본 정보',
-          value: `${formData.name || '실명 미입력'} · ${formData.department || '학과 미확인'}`,
-          detail: formData.phone || '전화번호 미입력',
+          value: `${formData.name || '이름 미확인'} · ${formData.nickname || '닉네임 미입력'}`,
+          detail: `${formData.department || '학과 미확인'} · ${formData.phone || '전화번호 미입력'}`,
         }
       case 'payout':
         return {
@@ -505,12 +680,6 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
           detail: formData.bank_name
             ? (formattedAccountNumber ? `${formattedAccountNumber} · ${formData.account_holder || '예금주 미입력'}` : '계좌번호 미입력')
             : '설정에서 추가할 수 있어요',
-        }
-      case 'profile':
-        return {
-          title: '공개 프로필',
-          value: formData.nickname || '닉네임 미입력',
-          detail: '방 목록과 채팅에서 표시됩니다.',
         }
       case 'review':
         return {
@@ -607,7 +776,7 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
           onKeyDown={handleKeyDown}
           placeholder={field.placeholder}
           error={errors[fieldId]}
-          autoComplete={fieldId === 'name' ? 'name' : 'off'}
+          autoComplete="off"
           enterKeyHint="next"
         />
       </FormField>
@@ -721,6 +890,10 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
                   key={section.id}
                   type="button"
                   onClick={() => {
+                    trackProfileSetupEvent('profile_setup_previous_step_opened', {
+                      target_step_id: section.id,
+                      target_step_index: index,
+                    })
                     setCurrentStep(index)
                     setErrors({})
                     scrollContentToTop()
@@ -753,9 +926,13 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
             {currentSection.description}
           </p>
 
-          {currentSection.id === 'basic' && formData.department && (
-            <div className="mt-4 rounded-xl border border-primary-100 bg-primary-50 px-3 py-2 text-sm font-semibold leading-5 text-primary-700">
-              학과는 Google 계정 정보에서 {formData.department}(으)로 자동 등록됩니다.
+          {currentSection.id === 'basic' && (
+            <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50">
+              <ReadOnlyProfileRow
+                label="이름"
+                value={formData.name || '이름 미확인'}
+                detail={formData.department ? `${formData.department} · Google 계정 정보` : 'Google 계정 정보'}
+              />
             </div>
           )}
 
@@ -824,6 +1001,28 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
           )}
         </button>
       </footer>
+    </div>
+  )
+}
+
+function ReadOnlyProfileRow({
+  label,
+  value,
+  detail,
+}: {
+  label: string
+  value: string
+  detail?: string
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 px-3 py-3">
+      <span className="shrink-0 text-xs font-semibold text-gray-500">{label}</span>
+      <span className="min-w-0 text-right">
+        <span className="block truncate text-sm font-extrabold text-gray-950">{value}</span>
+        {detail && (
+          <span className="mt-0.5 block truncate text-[11px] font-semibold text-gray-500">{detail}</span>
+        )}
+      </span>
     </div>
   )
 }

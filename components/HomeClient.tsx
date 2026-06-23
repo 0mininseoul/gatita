@@ -171,6 +171,9 @@ export default function HomeClient() {
   const lastAuthErrorAtRef = useRef(0)
   const hasShownProfileRequiredPromptRef = useRef(false)
   const mapHeaderRef = useRef<HTMLElement>(null)
+  const pwaInstallSyncInFlightRef = useRef(false)
+  const pwaInstallSyncCompletedRef = useRef(false)
+  const profileRequiredModalOpenRef = useRef(showProfileRequiredModal)
   const router = useRouter()
   const pathname = usePathname()
   const isMapRoute = pathname === '/map'
@@ -182,6 +185,8 @@ export default function HomeClient() {
     ? `${pathname}${currentSearch}`
     : explicitRedirectPath?.startsWith('/rooms/') ? explicitRedirectPath : undefined
   const previewTestLoginEnabled = isPreviewTestLoginEnabled()
+
+  profileRequiredModalOpenRef.current = showProfileRequiredModal
 
   const supabase = useMemo(() => {
     try {
@@ -221,6 +226,54 @@ export default function HomeClient() {
       await supabase.auth.signOut()
     }
   }, [showAuthError, supabase])
+
+  const openProfileRequiredModal = useCallback((source: string) => {
+    if (!profileRequiredModalOpenRef.current) {
+      trackEvent('profile_required_modal_shown', {
+        source,
+      })
+    }
+
+    profileRequiredModalOpenRef.current = true
+    setShowProfileRequiredModal(true)
+  }, [])
+
+  const dismissProfileRequiredModal = useCallback((dismissType: 'outside' | 'close' | 'start_setup') => {
+    if (profileRequiredModalOpenRef.current) {
+      trackEvent('profile_required_modal_dismissed', {
+        dismiss_type: dismissType,
+      })
+    }
+
+    profileRequiredModalOpenRef.current = false
+    setShowProfileRequiredModal(false)
+  }, [])
+
+  const syncPwaInstalledToSupabase = useCallback(async (
+    { requireInstalledDisplayMode = true }: { requireInstalledDisplayMode?: boolean } = {},
+  ) => {
+    if (!hasAuthenticatedSession || !hasEnteredApp) return
+    if (requireInstalledDisplayMode && !isInstalled()) return
+    if (pwaInstallSyncInFlightRef.current || pwaInstallSyncCompletedRef.current) return
+
+    pwaInstallSyncInFlightRef.current = true
+
+    try {
+      const response = await fetch('/api/profile/pwa-install', {
+        method: 'POST',
+      })
+
+      if (response.ok) {
+        pwaInstallSyncCompletedRef.current = true
+      } else if (response.status >= 500) {
+        console.error('PWA install sync failed:', response.status)
+      }
+    } catch (error) {
+      console.error('PWA install sync error:', error)
+    } finally {
+      pwaInstallSyncInFlightRef.current = false
+    }
+  }, [hasAuthenticatedSession, hasEnteredApp])
 
   const loadModerationStatus = useCallback(async () => {
     try {
@@ -536,6 +589,7 @@ export default function HomeClient() {
         setModerationModal(null)
         setAuthMode(null)
         setHasEnteredApp(false)
+        pwaInstallSyncCompletedRef.current = false
       }
     })
 
@@ -549,6 +603,8 @@ export default function HomeClient() {
   useEffect(() => {
     if (!isInstalled()) return
 
+    void syncPwaInstalledToSupabase()
+
     if (!window.localStorage.getItem(PWA_INSTALLED_DETECTED_STORAGE_KEY)) {
       window.localStorage.setItem(PWA_INSTALLED_DETECTED_STORAGE_KEY, 'true')
       trackEvent('pwa_installed_detected', {
@@ -556,7 +612,7 @@ export default function HomeClient() {
       })
     }
 
-  }, [])
+  }, [syncPwaInstalledToSupabase])
 
   useEffect(() => {
     const handleBeforeInstallPrompt = () => {
@@ -566,6 +622,7 @@ export default function HomeClient() {
     }
 
     const handleAppInstalled = () => {
+      void syncPwaInstalledToSupabase({ requireInstalledDisplayMode: false })
       window.localStorage.setItem(PWA_INSTALLED_DETECTED_STORAGE_KEY, 'true')
       trackEvent('pwa_installed_detected', {
         detection_source: 'appinstalled',
@@ -579,7 +636,7 @@ export default function HomeClient() {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
       window.removeEventListener('appinstalled', handleAppInstalled)
     }
-  }, [])
+  }, [syncPwaInstalledToSupabase])
 
   useEffect(() => {
     if (!supabase || !hasAuthenticatedSession || !hasEnteredApp || authMode === 'signup') return
@@ -662,11 +719,11 @@ export default function HomeClient() {
 
     hasShownProfileRequiredPromptRef.current = true
     const timerId = window.setTimeout(() => {
-      setShowProfileRequiredModal(true)
+      openProfileRequiredModal('map_auto_prompt')
     }, 300)
 
     return () => window.clearTimeout(timerId)
-  }, [authMode, hasEnteredApp, requiresProfile])
+  }, [authMode, hasEnteredApp, openProfileRequiredModal, requiresProfile])
 
   // iOS Safari keeps scroll position across auth state changes and reports
   // dynamic viewport units differently as the bottom bar expands/collapses.
@@ -920,7 +977,7 @@ export default function HomeClient() {
     if (isResolvingMapSession) return
 
     if (requiresProfile) {
-      setShowProfileRequiredModal(true)
+      openProfileRequiredModal('fixed_point_select')
       return
     }
 
@@ -951,7 +1008,7 @@ export default function HomeClient() {
 
     if (!user || !supabase) {
       if (requiresProfile) {
-        setShowProfileRequiredModal(true)
+        openProfileRequiredModal('room_create')
       } else {
         toast.error('로그인이 필요합니다')
       }
@@ -1087,7 +1144,7 @@ export default function HomeClient() {
 
     if (!user || !supabase) {
       if (requiresProfile) {
-        setShowProfileRequiredModal(true)
+        openProfileRequiredModal('room_join')
       }
       return
     }
@@ -1176,9 +1233,13 @@ export default function HomeClient() {
     if (inApp.isInApp) {
       trackEvent('login_blocked_in_app_browser', { is_ios: inApp.isIOS })
       if (inApp.isIOS) {
-        toast.error(
+        toast(
           "에브리타임 안에서는 Google 로그인이 안 돼요.\n우측 상단의 공유 버튼을 눌러 'Safari에서 열기'를 선택해주세요.",
-          { duration: 2000, style: { whiteSpace: 'pre-line' } },
+          {
+            duration: 2000,
+            icon: '📢',
+            style: { whiteSpace: 'pre-line' },
+          },
         )
       } else {
         escapeInAppBrowser()
@@ -1260,7 +1321,7 @@ export default function HomeClient() {
     if (isResolvingMapSession) return
 
     if (requiresProfile) {
-      setShowProfileRequiredModal(true)
+      openProfileRequiredModal('my_rooms')
       return
     }
 
@@ -1272,7 +1333,7 @@ export default function HomeClient() {
   }
 
   const openProfileSetup = () => {
-    setShowProfileRequiredModal(false)
+    dismissProfileRequiredModal('start_setup')
     trackEvent('profile_setup_started', {
       source: 'profile_required_modal',
     })
@@ -1491,6 +1552,7 @@ export default function HomeClient() {
       <CampusRouteMap
         rooms={mapRooms}
         onlineCount={onlineDisplayCount}
+        currentUserId={user?.id}
         selectedFrom={fromLocation}
         isCreatingRoom={isCreatingMapRoom}
         isLoading={isLoadingMapRooms}
@@ -1636,7 +1698,7 @@ export default function HomeClient() {
         <div
           className="fixed inset-x-0 top-0 z-[70] flex items-end bg-gray-950/30 px-3 pb-3 pt-24"
           style={{ height: 'var(--app-viewport-height)' }}
-          onClick={() => setShowProfileRequiredModal(false)}
+          onClick={() => dismissProfileRequiredModal('outside')}
         >
           <div
             role="dialog"
@@ -1656,7 +1718,7 @@ export default function HomeClient() {
               <button
                 type="button"
                 aria-label="프로필 안내 닫기"
-                onClick={() => setShowProfileRequiredModal(false)}
+                onClick={() => dismissProfileRequiredModal('close')}
                 className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
               >
                 <X className="h-5 w-5" />
@@ -1778,7 +1840,7 @@ export default function HomeClient() {
                 if (isResolvingMapSession) return
 
                 if (requiresProfile) {
-                  setShowProfileRequiredModal(true)
+                  openProfileRequiredModal('settings')
                   return
                 }
 

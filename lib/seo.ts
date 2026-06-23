@@ -4,7 +4,7 @@
 
 export const SITE_URL = 'https://gatita.kro.kr'
 export const SITE_NAME = '같이타'
-export const SITE_ALTERNATE_NAMES = ['Gatita', 'gatita', '가천대 같이타']
+export const SITE_ALTERNATE_NAMES = ['Gatita', 'gatita', '가천대 같이타', '가천대 택시앱']
 
 // Definition-first one-liner (<80 chars body) — the pattern AI retrieval favors.
 export const SITE_TAGLINE = '가천대 택시 동승 플랫폼'
@@ -41,6 +41,11 @@ export const FAQ_ITEMS: FaqItem[] = [
     question: '같이타가 뭐예요?',
     answer:
       '같이타는 가천대학교 학생 전용 택시 동승(합승) 매칭 플랫폼입니다. 가천대역, 정문, 기숙사 같은 캠퍼스 고정 지점 사이를 함께 이동할 동승자를 찾고 채팅으로 조율할 수 있습니다.',
+  },
+  {
+    question: '가천대 택시 앱인가요?',
+    answer:
+      '같이타는 가천대 학생들이 택시를 함께 타기 위한 가천대 택시앱(웹앱)입니다. 직접 택시를 호출하거나 결제하지는 않고, 같은 방향으로 가는 학생을 매칭해 택시비를 나눠 낼 수 있게 도와줍니다.',
   },
   {
     question: '누가 사용할 수 있나요?',

@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase'
 import { NON_GACHON_ACCOUNT_MESSAGE, extractGachonProfileFromMetadata, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
 import { formatAccountNumberForBank, isAccountNumberCompleteForBank } from '@/lib/banks'
 import { AccountNumberSegmentField, BankSelectField } from '@/components/BankAccountFields'
+import { generateRandomNickname } from '@/lib/nicknames'
 import { identifyAnalyticsUser, trackEvent } from '@/lib/analytics/client'
 import { AlertCircle, CheckCircle2, ChevronDown } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -132,6 +133,7 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [hasAcceptedRequiredTerms, setHasAcceptedRequiredTerms] = useState(false)
   const [hasAcceptedUsageRules, setHasAcceptedUsageRules] = useState(false)
+  const [payoutSkipped, setPayoutSkipped] = useState(false)
   const supabase = useMemo(() => createClient(), [])
 
   const currentSection = SIGNUP_SECTIONS[currentStep]
@@ -328,6 +330,17 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
     }
   }
 
+  const handleSkipPayout = () => {
+    setPayoutSkipped(true)
+    setFormData(prev => ({ ...prev, bank_name: '', account_number: '', account_holder: '' }))
+    setErrors({})
+    trackEvent('profile_setup_payout_skipped', {
+      step_index: currentStep,
+    })
+    setCurrentStep(prev => prev + 1)
+    scrollContentToTop()
+  }
+
   const handleSignup = async () => {
     setIsLoading(true)
 
@@ -349,9 +362,9 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
           name: formData.name.trim(),
           phone: formData.phone.trim(),
           nickname: formData.nickname.trim(),
-          bank_name: formData.bank_name.trim(),
-          account_number: formData.account_number.trim(),
-          account_holder: formData.account_holder.trim(),
+          bank_name: (formData.bank_name ?? '').trim(),
+          account_number: (formData.account_number ?? '').trim(),
+          account_holder: (formData.account_holder ?? '').trim(),
         }),
       })
       const result = await response.json().catch(() => null)
@@ -394,6 +407,10 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
         delete newErrors[fieldId]
         return newErrors
       })
+    }
+
+    if (['bank_name', 'account_number', 'account_holder'].includes(fieldId) && value.trim()) {
+      setPayoutSkipped(false)
     }
   }
 
@@ -484,8 +501,10 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
       case 'payout':
         return {
           title: '정산 계좌',
-          value: formData.bank_name || '은행 미선택',
-          detail: formattedAccountNumber ? `${formattedAccountNumber} · ${formData.account_holder || '예금주 미입력'}` : '계좌번호 미입력',
+          value: formData.bank_name || '나중에 입력',
+          detail: formData.bank_name
+            ? (formattedAccountNumber ? `${formattedAccountNumber} · ${formData.account_holder || '예금주 미입력'}` : '계좌번호 미입력')
+            : '설정에서 추가할 수 있어요',
         }
       case 'profile':
         return {
@@ -552,6 +571,32 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
       )
     }
 
+    if (fieldId === 'nickname') {
+      return (
+        <FormField key={fieldId} field={field} error={errors[fieldId]}>
+          <InputField
+            id={`signup-${fieldId}`}
+            type={field.type}
+            value={value}
+            onChange={(nextValue) => handleInputChange(fieldId, nextValue)}
+            onKeyDown={handleKeyDown}
+            placeholder={field.placeholder}
+            error={errors[fieldId]}
+            autoComplete="off"
+            enterKeyHint="done"
+            maxLength={10}
+          />
+          <button
+            type="button"
+            onClick={() => handleInputChange('nickname', generateRandomNickname(formData.nickname))}
+            className="mt-2 inline-flex items-center gap-1 rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-sm font-bold text-primary-700 transition hover:bg-primary-100"
+          >
+            🎲 랜덤 추천
+          </button>
+        </FormField>
+      )
+    }
+
     return (
       <FormField key={fieldId} field={field} error={errors[fieldId]}>
         <InputField
@@ -563,8 +608,7 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
           placeholder={field.placeholder}
           error={errors[fieldId]}
           autoComplete={fieldId === 'name' ? 'name' : 'off'}
-          enterKeyHint={fieldId === 'nickname' ? 'done' : 'next'}
-          maxLength={fieldId === 'nickname' ? 10 : undefined}
+          enterKeyHint="next"
         />
       </FormField>
     )
@@ -719,6 +763,16 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
             {currentSection.fields.map(renderField)}
           </div>
 
+          {currentSection.id === 'payout' && (
+            <button
+              type="button"
+              onClick={handleSkipPayout}
+              className="mt-4 w-full text-center text-sm font-semibold text-gray-500 underline underline-offset-2"
+            >
+              나중에 입력할게요
+            </button>
+          )}
+
           {currentSection.id === 'review' && (
             <ReviewPanel
               formData={formData}
@@ -836,7 +890,10 @@ function ReviewPanel({
         <ReviewRow label="학과" value={formData.department || '학과 미확인'} />
         <ReviewRow label="전화번호" value={formData.phone} />
         <ReviewRow label="닉네임" value={formData.nickname} />
-        <ReviewRow label="정산 계좌" value={`${formData.bank_name} ${formattedAccountNumber} ${formData.account_holder}`} />
+        <ReviewRow
+          label="정산 계좌"
+          value={formData.bank_name ? `${formData.bank_name} ${formattedAccountNumber} ${formData.account_holder}` : '나중에 입력 (설정에서 추가 가능)'}
+        />
       </div>
 
       <div className="rounded-xl border border-primary-100 bg-primary-50 px-3 py-3">

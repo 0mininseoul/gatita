@@ -15,10 +15,13 @@ test('account number segments accept pasted full numbers', () => {
 
 test('nickname generator picks a fixed sample and appends digits within length limit', () => {
   const lib = readProjectFile('lib', 'nicknames.ts')
-  assert.match(lib, /export const NICKNAME_SAMPLES/, 'should expose a fixed sample list')
-  assert.match(lib, /가천대 존잘남/, 'should include the user-provided samples')
-  assert.match(lib, /가천대 존예여신/, 'should include 가천대 존예여신 sample')
-  assert.match(lib, /길여키즈/, 'should include 길여키즈 sample')
+  const samples = readProjectFile('lib', 'nicknameSamples.json')
+
+  assert.match(lib, /nicknameSamples\.json/, 'nickname samples should live in an editable data file')
+  assert.match(lib, /export const NICKNAME_SAMPLES/, 'should expose the loaded sample list')
+  assert.match(samples, /가천대 존잘남/, 'should include the user-provided samples')
+  assert.match(samples, /가천대 존예여신/, 'should include 가천대 존예여신 sample')
+  assert.match(samples, /길여키즈/, 'should include 길여키즈 sample')
   assert.match(lib, /export function generateRandomNickname/, 'should expose a generator')
   assert.match(lib, /10 - base\.length/, 'digit count should be capped so result stays within 10 chars')
 

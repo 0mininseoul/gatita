@@ -161,6 +161,7 @@ const channel = supabase
 
 This is a **non-commercial community platform** for Gachon University students:
 - No payment processing
-- No account number collection
-- Pure matching and communication service
+- Collects phone and payout account details for profile setup and room-scoped coordination
+- Payout account details are stored privately and shown to room participants only when the host registers/discloses them
+- Matching, chat, and settlement coordination service only
 - Designed to avoid taxi-sharing service regulations

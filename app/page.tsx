@@ -19,7 +19,7 @@ import {
   isRestrictedRoutePair,
 } from '@/lib/supabase'
 import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
-import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, extractGachonProfileFromMetadata, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
+import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, detectInAppBrowser, escapeInAppBrowser, extractGachonProfileFromMetadata, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
 import { isInstalled } from '@/lib/pwa'
 import { PREVIEW_TEST_ACCOUNTS, isPreviewTestLoginEnabled } from '@/lib/previewTestAccounts'
 import { identifyAnalyticsUser, shouldSuppressAnalyticsForUser, suppressAnalyticsForCurrentDevice, trackEvent } from '@/lib/analytics/client'
@@ -29,6 +29,7 @@ import toast from 'react-hot-toast'
 import CampusRouteMap, { CampusMapRoom } from '@/components/CampusRouteMap'
 import SignupForm from '@/components/auth/SignupForm'
 import NavigationBar from '@/components/NavigationBar'
+import InAppBrowserNotice from '@/components/InAppBrowserNotice'
 
 const Grainient = dynamic(() => import('@/components/Grainient'), { ssr: false })
 const SplitText = dynamic(() => import('@/components/SplitText'), { ssr: false })
@@ -1170,6 +1171,19 @@ export default function HomePage() {
   }
 
   const handleGoogleStart = async () => {
+    // 인앱 브라우저(에브리타임 등)에서는 Google이 OAuth를 차단(403 disallowed_useragent)하므로
+    // OAuth 시도 자체를 막고 외부 브라우저로 유도한다. Android는 Chrome으로 자동 점프.
+    const inApp = detectInAppBrowser()
+    if (inApp.isInApp) {
+      trackEvent('login_blocked_in_app_browser', { is_ios: inApp.isIOS })
+      if (inApp.isIOS) {
+        toast.error('인앱 브라우저에서는 Google 로그인이 불가능해요. 안내에 따라 Safari로 열어주세요.')
+      } else {
+        escapeInAppBrowser()
+      }
+      return
+    }
+
     if (!supabase) {
       toast.error('인증 설정을 불러오지 못했습니다')
       return
@@ -1377,6 +1391,8 @@ export default function HomePage() {
             }}>
               가천대 학생들을 위한 택시 동승 플랫폼
             </p>
+
+            {!hasAuthenticatedSession && <InAppBrowserNotice />}
 
             <div style={{
               display: 'flex',

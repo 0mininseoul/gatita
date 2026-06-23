@@ -40,6 +40,7 @@ type ProfileSetupCompletedStep = {
 type ProfileSetupExitType = 'back_button' | 'pagehide' | 'backgrounded'
 
 const PROFILE_SETUP_SESSION_STORAGE_KEY = 'gatita:profile-setup-session-id'
+let profileSetupSessionIdFallback: string | null = null
 
 function createProfileSetupSessionId() {
   if (typeof window === 'undefined') return 'server'
@@ -48,21 +49,54 @@ function createProfileSetupSessionId() {
     ?? `profile-setup-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
+function readProfileSetupSessionIdFromStorage() {
+  if (typeof window === 'undefined') return null
+
+  try {
+    return window.sessionStorage.getItem(PROFILE_SETUP_SESSION_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+function writeProfileSetupSessionIdToStorage(sessionId: string) {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.sessionStorage.setItem(PROFILE_SETUP_SESSION_STORAGE_KEY, sessionId)
+  } catch {
+    return
+  }
+}
+
+function removeProfileSetupSessionIdFromStorage() {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.sessionStorage.removeItem(PROFILE_SETUP_SESSION_STORAGE_KEY)
+  } catch {
+    return
+  }
+}
+
 function getProfileSetupSessionId() {
   if (typeof window === 'undefined') return 'server'
 
-  const existingSessionId = window.sessionStorage.getItem(PROFILE_SETUP_SESSION_STORAGE_KEY)
-  if (existingSessionId) return existingSessionId
+  const existingSessionId = profileSetupSessionIdFallback ?? readProfileSetupSessionIdFromStorage()
+  if (existingSessionId) {
+    profileSetupSessionIdFallback = existingSessionId
+    return existingSessionId
+  }
 
   const nextSessionId = createProfileSetupSessionId()
-  window.sessionStorage.setItem(PROFILE_SETUP_SESSION_STORAGE_KEY, nextSessionId)
+  profileSetupSessionIdFallback = nextSessionId
+  writeProfileSetupSessionIdToStorage(nextSessionId)
   return nextSessionId
 }
 
 function clearProfileSetupSessionId() {
-  if (typeof window === 'undefined') return
-
-  window.sessionStorage.removeItem(PROFILE_SETUP_SESSION_STORAGE_KEY)
+  profileSetupSessionIdFallback = null
+  removeProfileSetupSessionIdFromStorage()
 }
 
 const SIGNUP_FIELDS: Record<SignupFieldId, SignupField> = {

@@ -19,6 +19,17 @@ test('profile setup analytics records step views and exits with one setup sessio
   assert.match(signup, /document\.addEventListener\('visibilitychange'/, 'backgrounding the page should be tracked on mobile')
 })
 
+test('profile setup analytics keeps a session id when browser session storage is blocked', () => {
+  const signup = readProjectFile('components', 'auth', 'SignupForm.tsx')
+
+  assert.match(signup, /let profileSetupSessionIdFallback: string \| null = null/, 'analytics should keep an in-memory fallback session id')
+  assert.match(signup, /function readProfileSetupSessionIdFromStorage\(\)[\s\S]*try[\s\S]*window\.sessionStorage\.getItem/, 'session id reads should be guarded')
+  assert.match(signup, /function writeProfileSetupSessionIdToStorage\(sessionId: string\)[\s\S]*try[\s\S]*window\.sessionStorage\.setItem/, 'session id writes should be guarded')
+  assert.match(signup, /function removeProfileSetupSessionIdFromStorage\(\)[\s\S]*try[\s\S]*window\.sessionStorage\.removeItem/, 'session id removal should be guarded')
+  assert.match(signup, /profileSetupSessionIdFallback = nextSessionId/, 'blocked storage should still keep the generated id stable for the current attempt')
+  assert.match(signup, /profileSetupSessionIdFallback = null/, 'profile completion should reset the in-memory fallback id')
+})
+
 test('profile setup analytics records blocked progress and navigation actions', () => {
   const signup = readProjectFile('components', 'auth', 'SignupForm.tsx')
 

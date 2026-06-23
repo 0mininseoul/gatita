@@ -14,9 +14,12 @@ let initialized = false
 let unavailable = false
 
 function getSessionReplaySampleRate() {
-  // 0~1 사이로 환경변수로 조정 가능. 미설정 시 100% 수집(소규모 앱 기준).
-  const raw = Number(process.env.NEXT_PUBLIC_AMPLITUDE_SESSION_REPLAY_SAMPLE_RATE)
-  if (Number.isFinite(raw) && raw >= 0 && raw <= 1) return raw
+  // 0~1 사이로 환경변수로 조정 가능. 미설정/빈 값/유효하지 않으면 100% 수집(소규모 앱 기준).
+  // Number('')는 0이라 빈 문자열을 그대로 두면 리플레이가 꺼지므로 먼저 걸러낸다.
+  const raw = process.env.NEXT_PUBLIC_AMPLITUDE_SESSION_REPLAY_SAMPLE_RATE
+  if (!raw || raw.trim() === '') return 1
+  const parsed = Number(raw)
+  if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 1) return parsed
   return 1
 }
 

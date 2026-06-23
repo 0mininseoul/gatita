@@ -1491,6 +1491,7 @@ export default function HomePage() {
       <CampusRouteMap
         rooms={mapRooms}
         onlineCount={onlineDisplayCount}
+        currentUserId={user?.id}
         selectedFrom={fromLocation}
         isCreatingRoom={isCreatingMapRoom}
         isLoading={isLoadingMapRooms}

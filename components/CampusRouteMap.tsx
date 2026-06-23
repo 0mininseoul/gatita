@@ -30,6 +30,7 @@ export type CampusMapRoom = {
 
 type Stat = {
   roomCount: number
+  myRoomCount: number
   nextTime: string | null
   nextSortKey: string | null
 }
@@ -37,6 +38,7 @@ type Stat = {
 type CampusRouteMapProps = {
   rooms: CampusMapRoom[]
   onlineCount: number
+  currentUserId?: string
   selectedFrom: LocationType | ''
   isCreatingRoom?: boolean
   isLoading?: boolean
@@ -64,6 +66,7 @@ const MIN_MAP_LEVEL = 1
 
 const emptyStat = (): Stat => ({
   roomCount: 0,
+  myRoomCount: 0,
   nextTime: null,
   nextSortKey: null,
 })
@@ -133,7 +136,7 @@ function clampMapToCampus(map: any, kakao: any) {
   }
 }
 
-function buildStats(rooms: CampusMapRoom[]) {
+function buildStats(rooms: CampusMapRoom[], currentUserId?: string) {
   const originStats = new Map<LocationType, Stat>()
 
   LOCATION_ORDER.forEach((location) => {
@@ -143,8 +146,12 @@ function buildStats(rooms: CampusMapRoom[]) {
   rooms.forEach((room) => {
     const currentOriginStat = originStats.get(room.from_location) ?? emptyStat()
     const roomSortKey = getRoomSortKey(room)
+    const isMyRoom = Boolean(currentUserId && room.participants?.some((participant) => participant.user_id === currentUserId))
 
     currentOriginStat.roomCount += 1
+    if (isMyRoom) {
+      currentOriginStat.myRoomCount += 1
+    }
     currentOriginStat.nextTime =
       !currentOriginStat.nextSortKey || roomSortKey < currentOriginStat.nextSortKey
         ? room.departure_time
@@ -167,6 +174,7 @@ function formatRoomTime(time: string | null) {
 export default function CampusRouteMap({
   rooms,
   onlineCount,
+  currentUserId,
   selectedFrom,
   isCreatingRoom = false,
   isLoading = false,
@@ -193,7 +201,7 @@ export default function CampusRouteMap({
   // far beyond the 01:00 cutoff.
   const [departureOptionsNonce, setDepartureOptionsNonce] = useState(0)
 
-  const { originStats } = useMemo(() => buildStats(rooms), [rooms])
+  const { originStats } = useMemo(() => buildStats(rooms, currentUserId), [currentUserId, rooms])
   const destinationOptions = useMemo(() => getDestinationOptions(selectedFrom), [selectedFrom])
   const departureTimeOptions = useMemo(
     // departureOptionsNonce intentionally drives recomputation; new Date() is read fresh.
@@ -319,17 +327,19 @@ export default function CampusRouteMap({
       const marker = new kakao.maps.Marker({ position })
       const originStat = originStats.get(location) ?? emptyStat()
       const isOrigin = selectedFrom === location
-      const isEmpty = !isOrigin && originStat.roomCount === 0
-      const label = isOrigin ? '출발' : `${originStat.roomCount}개`
+      const hasMyOriginRoom = originStat.myRoomCount > 0
+      const isEmpty = !isOrigin && !hasMyOriginRoom && originStat.roomCount === 0
+      const label = hasMyOriginRoom ? '참여중' : isOrigin ? '출발' : `${originStat.roomCount}개`
       const overlayClass = [
         'gatita-map-overlay',
         isOrigin ? 'is-origin' : '',
+        hasMyOriginRoom ? 'is-my-origin' : '',
         isEmpty ? 'is-empty' : '',
       ].filter(Boolean).join(' ')
       const overlayElement = document.createElement('button')
       overlayElement.type = 'button'
       overlayElement.className = overlayClass
-      overlayElement.setAttribute('aria-label', `${point.label} 선택`)
+      overlayElement.setAttribute('aria-label', hasMyOriginRoom ? `${point.label} 참여 중인 방 출발지` : `${point.label} 선택`)
 
       const overlayLabel = document.createElement('span')
       overlayLabel.textContent = point.shortLabel
@@ -497,6 +507,7 @@ export default function CampusRouteMap({
             const point = LOCATION_POINTS[location]
             const originStat = originStats.get(location) ?? emptyStat()
             const isOrigin = selectedFrom === location
+            const hasMyOriginRoom = originStat.myRoomCount > 0
 
             return (
               <button
@@ -504,16 +515,21 @@ export default function CampusRouteMap({
                 type="button"
                 onClick={() => handleLocationSelect(location)}
                 className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-lg border px-3 py-2 text-left text-xs shadow-lg transition ${
-                  isOrigin
-                    ? 'border-primary-600 bg-primary-600 text-white'
-                    : 'border-white bg-white text-gray-900 hover:border-primary-300'
+                  hasMyOriginRoom
+                    ? 'border-primary-500 bg-white text-gray-950 ring-4 ring-primary-500/20'
+                    : isOrigin
+                      ? 'border-primary-600 bg-primary-600 text-white'
+                      : 'border-white bg-white text-gray-900 hover:border-primary-300'
                 }`}
                 style={{ left: `${point.mapX}%`, top: `${point.mapY}%` }}
               >
                 <span className="block whitespace-nowrap font-bold">{point.shortLabel}</span>
                 <span className="block whitespace-nowrap opacity-80">
-                  {isOrigin ? '출발' : `${originStat.roomCount}개 방`}
+                  {hasMyOriginRoom ? '참여중' : isOrigin ? '출발' : `${originStat.roomCount}개 방`}
                 </span>
+                {hasMyOriginRoom && (
+                  <span className="absolute -right-1.5 -top-1.5 h-3 w-3 rounded-full border-2 border-white bg-primary-600 shadow-[0_0_0_4px_rgba(39,130,255,0.18)]" />
+                )}
               </button>
             )
           })}
@@ -609,11 +625,17 @@ export default function CampusRouteMap({
                     const participantCount = room.participants?.length ?? 0
                     const isFull = participantCount >= room.max_participants
                     const isPastDeparture = !isRoomJoinable(room.departure_date, room.departure_time)
+                    const isMyRoom = Boolean(currentUserId && room.participants?.some((participant) => participant.user_id === currentUserId))
+                    const isJoinDisabled = !isMyRoom && isFull
 
                     return (
                       <div
                         key={room.id}
-                        className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
+                        className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 ${
+                          isMyRoom
+                            ? 'border-primary-200 bg-primary-50/80 shadow-[inset_3px_0_0_#2782ff]'
+                            : 'border-gray-100 bg-gray-50'
+                        }`}
                       >
                         <div className="min-w-0">
                           <div className="flex min-w-0 items-center gap-2 text-sm font-black text-gray-950">
@@ -622,6 +644,11 @@ export default function CampusRouteMap({
                             <span className="truncate text-xs font-extrabold text-gray-600">
                               ({LOCATIONS[room.to_location]})
                             </span>
+                            {isMyRoom && (
+                              <span className="shrink-0 rounded-md bg-primary-600 px-1.5 py-0.5 text-[10px] font-black leading-none text-white">
+                                내 방
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
@@ -633,10 +660,12 @@ export default function CampusRouteMap({
                           <button
                             type="button"
                             onClick={() => onJoinRoom(room.id)}
-                            disabled={isFull || isPastDeparture}
-                            className="rounded-md bg-gray-950 px-3 py-1.5 text-xs font-black text-white transition hover:bg-gray-800 disabled:bg-gray-300"
+                            disabled={isJoinDisabled || isPastDeparture}
+                            className={`rounded-md px-3 py-1.5 text-xs font-black text-white transition disabled:bg-gray-300 ${
+                              isMyRoom ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-950 hover:bg-gray-800'
+                            }`}
                           >
-                            {isPastDeparture ? '지난 방' : isFull ? '마감' : '입장'}
+                            {isPastDeparture ? '지난 방' : isMyRoom ? '열기' : isFull ? '마감' : '입장'}
                           </button>
                         </div>
                       </div>

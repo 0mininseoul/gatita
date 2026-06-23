@@ -434,5 +434,6 @@ test('map stats are offset from the translucent PWA status bar and room joins di
   assert.doesNotMatch(cssSource, /9\.25rem/, 'map stat chips should not be pushed deep below the header')
   assert.match(mapSource, /isRoomJoinable/)
   assert.match(mapSource, /isPastDeparture/)
-  assert.match(mapSource, /disabled=\{isFull \|\| isPastDeparture\}/)
+  assert.match(mapSource, /const isJoinDisabled = !isMyRoom && isFull/)
+  assert.match(mapSource, /disabled=\{isJoinDisabled \|\| isPastDeparture\}/)
 })

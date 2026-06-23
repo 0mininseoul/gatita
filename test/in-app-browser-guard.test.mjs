@@ -54,6 +54,8 @@ test('landing Google login is guarded; iOS shows a two-line guidance toast', () 
   assert.ok(guardIndex < oauthIndex, 'in-app guard must run before signInWithOAuth')
 
   // iOS 안내 toast: 두 줄(\n + pre-line), 2초, 정확한 문구
+  assert.doesNotMatch(source, /toast\.error\(\s*"에브리타임 안에서는 Google 로그인이 안 돼요\./)
+  assert.match(source, /icon: '📢'/)
   assert.match(source, /에브리타임 안에서는 Google 로그인이 안 돼요\.\\n우측 상단의 공유 버튼을 눌러 'Safari에서 열기'를 선택해주세요\./)
   assert.match(source, /whiteSpace: 'pre-line'/)
   assert.match(source, /duration: 2000/)

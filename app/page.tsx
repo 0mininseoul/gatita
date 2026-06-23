@@ -1208,9 +1208,13 @@ export default function HomePage() {
     if (inApp.isInApp) {
       trackEvent('login_blocked_in_app_browser', { is_ios: inApp.isIOS })
       if (inApp.isIOS) {
-        toast.error(
+        toast(
           "에브리타임 안에서는 Google 로그인이 안 돼요.\n우측 상단의 공유 버튼을 눌러 'Safari에서 열기'를 선택해주세요.",
-          { duration: 2000, style: { whiteSpace: 'pre-line' } },
+          {
+            duration: 2000,
+            icon: '📢',
+            style: { whiteSpace: 'pre-line' },
+          },
         )
       } else {
         escapeInAppBrowser()

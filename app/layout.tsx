@@ -120,7 +120,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: '같이타 : 가천대 택시 동승 플랫폼',
     description: '가천대역에서 기숙사까지, 택시를 함께 이용할 동승자를 찾아보세요!',
-    images: ['/og-image.png'],
+    images: [OG_IMAGE.url],
   },
   appleWebApp: {
     capable: true,

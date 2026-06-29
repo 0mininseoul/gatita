@@ -5,8 +5,9 @@
 export const SITE_URL = 'https://gatita.kro.kr'
 export const SITE_NAME = '같이타'
 export const SITE_ALTERNATE_NAMES = ['Gatita', 'gatita', '가천대 같이타', '가천대 택시앱']
+export const OG_IMAGE_ASSET_VERSION = '20260629-01'
 export const OG_IMAGE = {
-  url: '/og-image.png',
+  url: `/og-image.png?v=${OG_IMAGE_ASSET_VERSION}`,
   width: 1200,
   height: 630,
   alt: '같이타 - 가천대 택시 동승 플랫폼',

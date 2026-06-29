@@ -5,6 +5,12 @@
 export const SITE_URL = 'https://gatita.kro.kr'
 export const SITE_NAME = '같이타'
 export const SITE_ALTERNATE_NAMES = ['Gatita', 'gatita', '가천대 같이타', '가천대 택시앱']
+export const OG_IMAGE = {
+  url: '/og-image.png',
+  width: 1200,
+  height: 630,
+  alt: '같이타 - 가천대 택시 동승 플랫폼',
+} as const
 
 // Definition-first one-liner (<80 chars body) — the pattern AI retrieval favors.
 export const SITE_TAGLINE = '가천대 택시 동승 플랫폼'

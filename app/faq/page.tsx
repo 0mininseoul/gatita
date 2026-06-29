@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import LegalShell, { LegalSection } from '@/components/legal/LegalShell'
-import { SITE_URL, FAQ_ITEMS } from '@/lib/seo'
+import { OG_IMAGE, SITE_URL, FAQ_ITEMS } from '@/lib/seo'
 
 export const metadata: Metadata = {
   title: '자주 묻는 질문 — 같이타 (가천대 택시 동승)',
@@ -16,6 +16,7 @@ export const metadata: Metadata = {
     title: '자주 묻는 질문 — 같이타',
     description: '가천대 택시 동승 서비스 같이타에 대해 자주 묻는 질문을 모았습니다.',
     url: 'https://gatita.kro.kr/faq',
+    images: [OG_IMAGE],
   },
 }
 

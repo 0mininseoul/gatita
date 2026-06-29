@@ -5,6 +5,7 @@ import { Metadata, Viewport } from 'next'
 import AnalyticsProvider from '@/components/AnalyticsProvider'
 import { Analytics } from '@vercel/analytics/next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
+import { OG_IMAGE, SITE_NAME, SITE_URL } from '@/lib/seo'
 
 const paperlogy = localFont({
   src: [
@@ -22,7 +23,6 @@ const paperlogy = localFont({
   display: 'swap',
   fallback: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
 })
-const siteUrl = 'https://gatita.kro.kr'
 const SPLASH_ASSET_VERSION = '20260621-01'
 const splashImageUrl = (fileName: string) => `/splash/${fileName}.png?v=${SPLASH_ASSET_VERSION}`
 
@@ -90,7 +90,7 @@ const iosStartupImages = [
 ]
 
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
+  metadataBase: new URL(SITE_URL),
   title: '같이타 - 가천대 택시 동승 플랫폼',
   description: '가천대학교 학생들을 위한 택시 동승자 찾기 서비스입니다. 가천대역에서 기숙사까지 안전하고 편리하게 함께 이동하세요.',
   keywords: '같이타, 가천대 같이타, 가천대 택시, 가천대 택시앱, 가천대 택시 어플, 가천대역 택시, 가천대 기숙사 택시, 가천대 통학, 가천대학교, 택시 합승, 동승자 찾기',
@@ -110,18 +110,11 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'ko_KR',
-    url: siteUrl,
-    siteName: '같이타',
+    url: SITE_URL,
+    siteName: SITE_NAME,
     title: '같이타 : 가천대 택시 동승 플랫폼',
     description: '가천대역에서 기숙사까지, 택시를 함께 이용할 동승자를 찾아보세요!',
-    images: [
-      {
-        url: '/og-image.png',
-        width: 1200,
-        height: 1200,
-        alt: '같이타 로고',
-      },
-    ],
+    images: [OG_IMAGE],
   },
   twitter: {
     card: 'summary_large_image',

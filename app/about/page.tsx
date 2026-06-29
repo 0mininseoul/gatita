@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import LegalShell, { LegalSection } from '@/components/legal/LegalShell'
 import {
+  OG_IMAGE,
   SITE_DEFINITION,
   SERVICE_LOCATIONS,
   HOW_IT_WORKS,
@@ -21,6 +22,7 @@ export const metadata: Metadata = {
     description:
       '가천대학교 학생들이 택시를 함께 타고 비용을 나누는 가장 쉬운 방법, 같이타를 소개합니다.',
     url: 'https://gatita.kro.kr/about',
+    images: [OG_IMAGE],
   },
 }
 

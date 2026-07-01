@@ -111,6 +111,13 @@ export function trackEvent(eventName: string, properties: AnalyticsProperties = 
   }))
 }
 
+export function flushAnalytics() {
+  if (!initAnalytics()) return Promise.resolve()
+  if (isCurrentDeviceSuppressed()) return Promise.resolve()
+
+  return amplitude.flush().promise.catch(() => undefined)
+}
+
 export function suppressAnalyticsForCurrentDevice() {
   if (typeof window === 'undefined') return
 

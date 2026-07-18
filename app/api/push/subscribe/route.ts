@@ -53,6 +53,16 @@ async function saveSubscription(request: Request) {
     return NextResponse.json({ error: '구독 저장에 실패했습니다' }, { status: 500 })
   }
 
+  // 푸시 허용 여부 트래킹 (pwa_installed 과 동일 위치). 실패해도 구독은 성공 처리.
+  const { error: trackError } = await admin
+    .from('user_private_profiles')
+    .update({ push_enabled: true })
+    .eq('user_id', user.id)
+
+  if (trackError) {
+    console.error('push_enabled track error:', trackError)
+  }
+
   return NextResponse.json({ ok: true })
 }
 

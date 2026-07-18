@@ -1707,8 +1707,8 @@ export default function HomeClient() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-black tracking-[0.02em] text-primary-600">알림 받기</p>
-                <h2 id="pwa-onboarding-title" className="mt-1 text-lg font-black text-gray-950">
-                  채팅 알림을 받으려면 홈 화면에 추가하세요
+                <h2 id="pwa-onboarding-title" className="mt-1 whitespace-nowrap text-base font-black leading-tight tracking-tight text-gray-950">
+                  지금 홈 화면에 추가하고 알림을 받으세요
                 </h2>
               </div>
               <button
@@ -1722,10 +1722,10 @@ export default function HomeClient() {
             </div>
 
             <div className="mt-4 space-y-2">
-              <div className="flex gap-2 rounded-lg border border-primary-100 bg-primary-50 px-3 py-2">
-                <Bell className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
-                <p className="text-xs font-bold leading-5 text-gray-700">
-                  동승자가 채팅을 보내면 <span className="font-black text-gray-950">홈 화면 앱에서만 푸시 알림</span>을 받을 수 있어요.
+              <div className="flex items-center gap-2 rounded-lg border border-primary-100 bg-primary-50 px-3 py-2.5">
+                <Bell className="h-4 w-4 shrink-0 text-primary-600" />
+                <p className="whitespace-nowrap text-xs font-bold text-gray-700">
+                  동승자가 채팅을 보내면 <span className="font-black text-gray-950">푸시 알림</span>을 받을 수 있어요
                 </p>
               </div>
               <div className="flex gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">

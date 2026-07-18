@@ -22,6 +22,7 @@ pnpm-debug.log*
 *.swp
 
 # Local tool configuration
+.claude/
 .claude/settings.local.json
 mcp.json
 .vercel/

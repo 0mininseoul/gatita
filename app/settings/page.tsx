@@ -9,7 +9,15 @@ import { isAccountNumberCompleteForBank } from '@/lib/banks'
 import { validateAccountHolderName, validateAccountNumberPattern } from '@/lib/validation'
 import { AccountNumberSegmentField, BankSelectField } from '@/components/BankAccountFields'
 import { identifyAnalyticsUser, trackEvent } from '@/lib/analytics/client'
-import { ArrowLeft, User as UserIcon, AlertCircle, Bug, Camera, Check, Mail, Trash2, X } from 'lucide-react'
+import {
+  getNotificationPermission,
+  isPushSupported,
+  isSubscribedToPush,
+  subscribeToPush,
+  unsubscribeFromPush,
+} from '@/lib/push'
+import { isInstalled } from '@/lib/pwa'
+import { ArrowLeft, User as UserIcon, AlertCircle, Bell, Bug, Camera, Check, Mail, Trash2, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 type DeleteStep = 'idle' | 'overview' | 'confirm'
@@ -148,6 +156,11 @@ export default function SettingsPage() {
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
   const [deleteAcknowledged, setDeleteAcknowledged] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [pushSupported, setPushSupported] = useState(false)
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>('default')
+  const [pushSubscribed, setPushSubscribed] = useState(false)
+  const [pushInstalled, setPushInstalled] = useState(false)
+  const [pushBusy, setPushBusy] = useState(false)
   const photoInputRef = useRef<HTMLInputElement | null>(null)
   const persistedAvatarUrlRef = useRef<string | null>(null)
   const photoPreviewUrlRef = useRef<string | null>(null)
@@ -223,6 +236,48 @@ export default function SettingsPage() {
       }
     }
   }, [])
+
+  const refreshPushStatus = useCallback(async () => {
+    const supported = isPushSupported()
+    setPushSupported(supported)
+    setPushInstalled(isInstalled())
+    setPushPermission(getNotificationPermission())
+    if (supported) {
+      setPushSubscribed(await isSubscribedToPush())
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshPushStatus()
+  }, [refreshPushStatus])
+
+  const handleTogglePush = useCallback(async () => {
+    setPushBusy(true)
+    try {
+      if (pushSubscribed) {
+        await unsubscribeFromPush()
+        trackEvent('push_disabled', { source: 'settings' })
+        toast.success('알림을 껐어요.')
+      } else {
+        const result = await subscribeToPush()
+        if (result.ok) {
+          trackEvent('push_enabled', { source: 'settings' })
+          toast.success('알림이 켜졌어요.')
+        } else if (result.reason === 'denied') {
+          trackEvent('push_enable_failed', { reason: 'denied', source: 'settings' })
+          toast.error('알림이 차단되어 있어요. 기기 설정에서 알림을 허용해주세요.')
+        } else if (result.reason === 'unsupported') {
+          toast.error('이 브라우저에서는 알림을 지원하지 않아요.')
+        } else {
+          trackEvent('push_enable_failed', { reason: result.reason, source: 'settings' })
+          toast.error('알림을 켜지 못했어요. 잠시 후 다시 시도해주세요.')
+        }
+      }
+    } finally {
+      await refreshPushStatus()
+      setPushBusy(false)
+    }
+  }, [pushSubscribed, refreshPushStatus])
 
   const canChangeNickname = (lastUpdated?: string) => {
     if (!lastUpdated) return true // 한 번도 변경한 적 없으면 가능
@@ -780,6 +835,58 @@ export default function SettingsPage() {
               )}
             </button>
           </div>
+        </section>
+
+        <section className="settings-section settings-section-tight" aria-labelledby="settings-notifications">
+          <div className="settings-section-heading">
+            <h3 id="settings-notifications">알림</h3>
+          </div>
+
+          {pushSupported ? (
+            <>
+              <div className="settings-row settings-row-standalone">
+                <div className="min-w-0">
+                  <p className="settings-row-label">채팅 새 메시지 알림</p>
+                  <span className="mt-0.5 block text-[0.72rem] font-semibold leading-4 text-gray-500">
+                    참여 중인 채팅방에 새 메시지가 오면 푸시로 알려드려요.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={pushSubscribed}
+                  aria-label="채팅 새 메시지 알림"
+                  onClick={handleTogglePush}
+                  disabled={pushBusy || pushPermission === 'denied'}
+                  className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition disabled:opacity-50 ${
+                    pushSubscribed ? 'bg-primary-600' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+                      pushSubscribed ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+              {pushPermission === 'denied' && (
+                <p className="mt-2 text-[0.72rem] font-semibold leading-4 text-red-500">
+                  기기 설정에서 이 사이트의 알림이 차단되어 있어요. 알림을 허용한 뒤 다시 시도해주세요.
+                </p>
+              )}
+            </>
+          ) : (
+            <div className="settings-row settings-row-standalone">
+              <div className="flex items-start gap-2">
+                <Bell className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+                <p className="text-[0.72rem] font-bold leading-5 text-gray-600">
+                  {pushInstalled
+                    ? '이 브라우저에서는 알림을 사용할 수 없어요.'
+                    : '홈 화면에 추가하면 채팅 새 메시지 알림을 받을 수 있어요.'}
+                </p>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="settings-section settings-section-tight" aria-labelledby="settings-contact">

@@ -21,9 +21,10 @@ import {
 import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
 import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, detectInAppBrowser, escapeInAppBrowser, extractGachonProfileFromMetadata, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
 import { isInstalled } from '@/lib/pwa'
+import { getNotificationPermission, isPushSupported, isSubscribedToPush, subscribeToPush } from '@/lib/push'
 import { PREVIEW_TEST_ACCOUNTS, isPreviewTestLoginEnabled } from '@/lib/previewTestAccounts'
 import { identifyAnalyticsUser, shouldSuppressAnalyticsForUser, suppressAnalyticsForCurrentDevice, trackEvent } from '@/lib/analytics/client'
-import { AlertTriangle, ArrowRight, Ban, Clock, MessageSquareText, Share2, Star, Settings, Users, X } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Ban, Bell, Clock, MessageSquareText, Share2, Star, Settings, Users, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import CampusRouteMap, { CampusMapRoom } from '@/components/CampusRouteMap'
@@ -74,6 +75,7 @@ const ROUTE_COACHMARK_STORAGE_KEY = 'gatita:route-coachmark-seen'
 // Local calendar day as YYYY-MM-DD (en-CA yields ISO-like format in local tz).
 const getLocalDateKey = () => new Date().toLocaleDateString('en-CA')
 const PWA_INSTALLED_DETECTED_STORAGE_KEY = 'gatita:pwa-installed-detected'
+const PUSH_PROMPT_DISMISSED_KEY = 'gatita:push-prompt-dismissed'
 const ANALYTICS_PENDING_LOGIN_KEY = 'gatita:analytics-pending-login'
 
 function rememberPendingLogin(method: string) {
@@ -163,6 +165,8 @@ export default function HomeClient() {
   const [startingPreviewAccountKey, setStartingPreviewAccountKey] = useState<string | null>(null)
   const [hasEnteredApp, setHasEnteredApp] = useState(false)
   const [showPwaOnboarding, setShowPwaOnboarding] = useState(false)
+  const [showPushPrompt, setShowPushPrompt] = useState(false)
+  const [isEnablingPush, setIsEnablingPush] = useState(false)
   const [routeCoachStep, setRouteCoachStep] = useState<'hidden' | 'select' | 'action'>('hidden')
   const [authNotice, setAuthNotice] = useState<string | null>(null)
   const [moderationStatus, setModerationStatus] = useState<ModerationStatusPayload | null>(null)
@@ -907,6 +911,29 @@ export default function HomeClient() {
     return () => window.clearTimeout(timerId)
   }, [hasAuthenticatedSession, hasEnteredApp, requiresProfile])
 
+  // 설치된 PWA에서 알림 권한을 아직 정하지 않은 유저에게 "알림 켜기" 안내를 띄운다.
+  useEffect(() => {
+    if (!hasAuthenticatedSession || !hasEnteredApp) return
+    if (requiresProfile) return
+    if (showPwaOnboarding) return
+    if (!isInstalled() || !isPushSupported()) return
+    if (getNotificationPermission() !== 'default') return
+    if (window.localStorage.getItem(PUSH_PROMPT_DISMISSED_KEY)) return
+
+    let cancelled = false
+    const timerId = window.setTimeout(async () => {
+      const alreadySubscribed = await isSubscribedToPush()
+      if (cancelled || alreadySubscribed) return
+      setShowPushPrompt(true)
+      trackEvent('push_prompt_shown', { source: 'installed_home' })
+    }, 800)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timerId)
+    }
+  }, [hasAuthenticatedSession, hasEnteredApp, requiresProfile, showPwaOnboarding])
+
   const endRouteCoachmark = useCallback((action: 'select-close' | 'action-close' = 'action-close') => {
     window.localStorage.setItem(ROUTE_COACHMARK_STORAGE_KEY, 'true')
     setRouteCoachStep((current) => {
@@ -1349,6 +1376,36 @@ export default function HomeClient() {
     setShowPwaOnboarding(false)
   }, [])
 
+  const dismissPushPrompt = useCallback((action: 'later' | 'outside' | 'close' | 'enabled' = 'later') => {
+    // 한 번 닫으면 다시 띄우지 않는다(설정에서 언제든 켤 수 있음).
+    window.localStorage.setItem(PUSH_PROMPT_DISMISSED_KEY, 'true')
+    setShowPushPrompt(false)
+    if (action !== 'enabled') {
+      trackEvent('push_prompt_dismissed', { action })
+    }
+  }, [])
+
+  const handleEnablePush = useCallback(async () => {
+    setIsEnablingPush(true)
+    try {
+      const result = await subscribeToPush()
+      if (result.ok) {
+        trackEvent('push_enabled', { source: 'installed_home' })
+        toast.success('알림이 켜졌어요. 새 메시지를 푸시로 받아볼 수 있어요.')
+        dismissPushPrompt('enabled')
+      } else if (result.reason === 'denied') {
+        trackEvent('push_enable_failed', { reason: 'denied' })
+        toast.error('알림이 차단되어 있어요. 기기 설정에서 알림을 허용해주세요.')
+        dismissPushPrompt('close')
+      } else {
+        trackEvent('push_enable_failed', { reason: result.reason })
+        toast.error('알림을 켜지 못했어요. 잠시 후 다시 시도해주세요.')
+      }
+    } finally {
+      setIsEnablingPush(false)
+    }
+  }, [dismissPushPrompt])
+
   const acknowledgeWarning = async () => {
     if (!moderationStatus?.warning) {
       setModerationModal(null)
@@ -1649,9 +1706,9 @@ export default function HomeClient() {
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-black tracking-[0.02em] text-primary-600">홈 화면 추가</p>
+                <p className="text-xs font-black tracking-[0.02em] text-primary-600">알림 받기</p>
                 <h2 id="pwa-onboarding-title" className="mt-1 text-lg font-black text-gray-950">
-                  지금 홈 화면에 추가해서 앱처럼 쓰세요
+                  채팅 알림을 받으려면 홈 화면에 추가하세요
                 </h2>
               </div>
               <button
@@ -1665,6 +1722,12 @@ export default function HomeClient() {
             </div>
 
             <div className="mt-4 space-y-2">
+              <div className="flex gap-2 rounded-lg border border-primary-100 bg-primary-50 px-3 py-2">
+                <Bell className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
+                <p className="text-xs font-bold leading-5 text-gray-700">
+                  동승자가 채팅을 보내면 <span className="font-black text-gray-950">홈 화면 앱에서만 푸시 알림</span>을 받을 수 있어요.
+                </p>
+              </div>
               <div className="flex gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
                 <Share2 className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
                 <p className="text-xs font-bold leading-5 text-gray-700">
@@ -1688,6 +1751,65 @@ export default function HomeClient() {
                 className="h-11 w-full rounded-lg bg-gray-950 text-sm font-black text-white transition hover:bg-gray-800"
               >
                 확인했어요
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPushPrompt && (
+        <div
+          className="fixed inset-x-0 top-0 z-[60] flex items-end bg-gray-950/30 px-3 pb-3 pt-20"
+          style={{ height: 'var(--app-viewport-height)' }}
+          onClick={() => dismissPushPrompt('outside')}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="push-prompt-title"
+            className="mx-auto w-full max-w-sm rounded-lg border border-white/80 bg-white p-4 shadow-[0_18px_48px_rgba(17,24,39,0.24)]"
+            style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-black tracking-[0.02em] text-primary-600">채팅 알림</p>
+                <h2 id="push-prompt-title" className="mt-1 text-lg font-black text-gray-950">
+                  새 메시지 알림을 켤까요?
+                </h2>
+              </div>
+              <button
+                type="button"
+                aria-label="알림 안내 닫기"
+                onClick={() => dismissPushPrompt('close')}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 flex gap-2 rounded-lg border border-primary-100 bg-primary-50 px-3 py-2">
+              <Bell className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
+              <p className="text-xs font-bold leading-5 text-gray-700">
+                동승자가 채팅을 보내면 앱을 열지 않아도 <span className="font-black text-gray-950">푸시 알림</span>으로 바로 받아볼 수 있어요.
+              </p>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => dismissPushPrompt('later')}
+                className="h-11 flex-1 rounded-lg border border-gray-200 text-sm font-black text-gray-700 transition hover:bg-gray-50"
+              >
+                나중에
+              </button>
+              <button
+                type="button"
+                onClick={handleEnablePush}
+                disabled={isEnablingPush}
+                className="h-11 flex-1 rounded-lg bg-gray-950 text-sm font-black text-white transition hover:bg-gray-800 disabled:bg-gray-300"
+              >
+                {isEnablingPush ? '켜는 중...' : '알림 켜기'}
               </button>
             </div>
           </div>

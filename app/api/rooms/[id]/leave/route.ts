@@ -5,6 +5,13 @@ import { createClient } from '@/lib/supabase/server'
 
 type LeaveRoomPayload = {
   nextHostId?: string | null
+  boarded?: boolean | null
+}
+
+// 출발시각(KST) 이 지났는지 판정. lib/supabase getRoomDepartureDateTime 과 동일 규칙.
+function isAfterDeparture(departureDate: string, departureTime: string) {
+  const departedAt = new Date(`${departureDate}T${departureTime.slice(0, 5)}:00+09:00`).getTime()
+  return Number.isFinite(departedAt) && departedAt <= Date.now()
 }
 
 async function leaveRoom(
@@ -22,6 +29,7 @@ async function leaveRoom(
   }
 
   const nextHostId = payload.nextHostId ?? ''
+  const boarded = typeof payload.boarded === 'boolean' ? payload.boarded : null
   const supabase = createClient()
   const { data, error: authError } = await supabase.auth.getUser()
   const user = data.user
@@ -34,7 +42,7 @@ async function leaveRoom(
 
   const { data: room, error: roomError } = await admin
     .from('chat_rooms')
-    .select('id, created_by, status')
+    .select('id, created_by, status, departure_date, departure_time')
     .eq('id', roomId)
     .eq('status', 'active')
     .maybeSingle()
@@ -85,6 +93,21 @@ async function leaveRoom(
     }
   } else if (nextHostId) {
     return NextResponse.json({ error: '방장만 다음 방장을 지정할 수 있습니다' }, { status: 403 })
+  }
+
+  // 출발시각 이후 나가기라면 "택시 탑승을 완료하셨나요?" 응답(예/아니오)을 기록.
+  // 기록 실패가 나가기 자체를 막지는 않는다.
+  if (boarded !== null && isAfterDeparture(room.departure_date, room.departure_time)) {
+    const { error: rideError } = await admin
+      .from('ride_completions')
+      .upsert(
+        { room_id: roomId, user_id: user.id, boarded, answered_at: new Date().toISOString() },
+        { onConflict: 'room_id,user_id' },
+      )
+
+    if (rideError) {
+      console.error('ride completion record error:', rideError)
+    }
   }
 
   const { error: leaveError } = await admin

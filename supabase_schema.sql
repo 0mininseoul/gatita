@@ -128,6 +128,29 @@ create table public.favorites (
   unique(user_id, from_location, to_location)
 );
 
+-- Web Push 구독 (기기별 endpoint 유일). 저장/발송은 서버(service_role).
+-- 발송 파이프라인: messages insert 트리거(notify_new_message) → pg_net → /api/push/dispatch → web-push.
+create table public.push_subscriptions (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references public.users(id) on delete cascade not null,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  user_agent text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 출발시각 이후 나가기 시 "택시 탑승을 완료하셨나요?" 응답(예/아니오) 기록.
+create table public.ride_completions (
+  id uuid default uuid_generate_v4() primary key,
+  room_id uuid references public.chat_rooms(id) on delete set null,
+  user_id uuid references public.users(id) on delete cascade not null,
+  boarded boolean not null,
+  answered_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  unique (room_id, user_id)
+);
+
 -- Enable RLS (Row Level Security)
 alter table public.users enable row level security;
 alter table public.user_private_profiles enable row level security;
@@ -137,6 +160,8 @@ alter table public.messages enable row level security;
 alter table public.reports enable row level security;
 alter table public.user_moderation_actions enable row level security;
 alter table public.favorites enable row level security;
+alter table public.push_subscriptions enable row level security;
+alter table public.ride_completions enable row level security;
 
 -- Explicit Data API grants
 grant usage on schema public to authenticated;
@@ -542,6 +567,51 @@ create index user_moderation_actions_unacknowledged_warning_idx
   on public.user_moderation_actions (user_id, created_at desc)
   where action = 'warning' and acknowledged_at is null;
 create index favorites_user_id_idx on public.favorites (user_id);
+
+-- Push subscriptions / ride completions: 접근은 서버(service_role)에서, 본인 소유만 클라이언트 허용
+create policy "push_subscriptions_select_own" on public.push_subscriptions
+  for select using (auth.uid() = user_id);
+create policy "push_subscriptions_insert_own" on public.push_subscriptions
+  for insert with check (auth.uid() = user_id);
+create policy "push_subscriptions_delete_own" on public.push_subscriptions
+  for delete using (auth.uid() = user_id);
+create policy "ride_completions_select_own" on public.ride_completions
+  for select using (auth.uid() = user_id);
+
+-- 새 메시지 → Web Push 발송 트리거 (실패해도 메시지 전송은 절대 막지 않음).
+-- Vault 시크릿 'push_dispatch_secret' 필요. 자세한 내용은 migrations/20260717002000_message_push_notification.sql
+create or replace function public.notify_new_message()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_secret text;
+begin
+  begin
+    select decrypted_secret into v_secret
+    from vault.decrypted_secrets
+    where name = 'push_dispatch_secret';
+
+    if v_secret is not null then
+      perform net.http_post(
+        url := 'https://gatita.kro.kr/api/push/dispatch',
+        headers := jsonb_build_object('Content-Type', 'application/json', 'x-push-secret', v_secret),
+        body := jsonb_build_object('message_id', new.id)
+      );
+    end if;
+  exception when others then
+    raise warning 'push dispatch notify failed: %', sqlerrm;
+  end;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_message_created_push on public.messages;
+create trigger on_message_created_push
+  after insert on public.messages
+  for each row execute function public.notify_new_message();
 
 -- Supabase Realtime publication for live chat and participant membership updates
 alter table public.messages replica identity full;

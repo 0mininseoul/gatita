@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gatita-v1.0.2'
+const CACHE_NAME = 'gatita-v1.0.3'
 const urlsToCache = [
   '/',
   '/map',
@@ -94,5 +94,72 @@ self.addEventListener('fetch', (event) => {
         return caches.match('/')
       })
     })
+  )
+})
+
+// 푸시 수신: 채팅 새 메시지 알림
+self.addEventListener('push', (event) => {
+  let data = {}
+  try {
+    data = event.data ? event.data.json() : {}
+  } catch (error) {
+    data = { body: event.data ? event.data.text() : '새 메시지가 도착했어요' }
+  }
+
+  const title = data.title || '같이타'
+  const roomId = data.roomId || null
+  const options = {
+    body: data.body || '새 메시지가 도착했어요',
+    icon: '/icons/icon-192x192.png',
+    badge: '/icons/icon-72x72.png',
+    tag: data.tag || 'gatita-message',
+    renotify: true,
+    data: {
+      url: data.url || '/map',
+      roomId: roomId,
+    },
+  }
+
+  event.waitUntil(
+    (async () => {
+      // 이미 해당 채팅방을 열어 보고 있으면 알림을 띄우지 않음
+      if (roomId) {
+        const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+        const isViewingRoom = windows.some(
+          (client) => client.focused && client.url.includes('/rooms/' + roomId)
+        )
+        if (isViewingRoom) return
+      }
+      await self.registration.showNotification(title, options)
+    })()
+  )
+})
+
+// 알림 클릭: 해당 채팅방으로 이동/포커스
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const targetUrl = (event.notification.data && event.notification.data.url) || '/map'
+  const targetHref = new URL(targetUrl, self.location.origin).href
+
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      for (const client of windows) {
+        if ('focus' in client) {
+          await client.focus()
+          if (client.url !== targetHref && 'navigate' in client) {
+            try {
+              await client.navigate(targetHref)
+            } catch (error) {
+              // navigate 실패 시 무시하고 포커스만 유지
+            }
+          }
+          return
+        }
+      }
+      if (self.clients.openWindow) {
+        await self.clients.openWindow(targetUrl)
+      }
+    })()
   )
 })

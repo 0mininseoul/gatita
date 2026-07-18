@@ -7,8 +7,15 @@ type PresenceUser = {
   nickname?: string
 }
 
+// 낮 시간대에만 붙이는 랜덤 패딩(0~5). 0이면 실제 인원 그대로 노출.
 function getRandomPresenceOffset() {
-  return Math.floor(Math.random() * 5) + 1
+  return Math.floor(Math.random() * 6)
+}
+
+// KST(UTC+9) 기준 00:00~08:30 심야 구간에는 패딩 없이 실제 인원만 보여준다.
+function isRealCountWindow(now: Date = new Date()) {
+  const kstMinutes = (now.getUTCHours() * 60 + now.getUTCMinutes() + 9 * 60) % (24 * 60)
+  return kstMinutes < 8 * 60 + 30
 }
 
 export function usePresenceDisplayCount(
@@ -17,12 +24,16 @@ export function usePresenceDisplayCount(
   user: PresenceUser | null
 ) {
   const [peerCount, setPeerCount] = useState(0)
-  const [displayOffset, setDisplayOffset] = useState(() => getRandomPresenceOffset())
+  const [displayOffset, setDisplayOffset] = useState(() =>
+    isRealCountWindow() ? 0 : getRandomPresenceOffset()
+  )
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      setDisplayOffset(getRandomPresenceOffset())
-    }, 20000)
+    const applyOffset = () => {
+      setDisplayOffset(isRealCountWindow() ? 0 : getRandomPresenceOffset())
+    }
+    applyOffset()
+    const intervalId = window.setInterval(applyOffset, 20000)
 
     return () => window.clearInterval(intervalId)
   }, [])
@@ -84,5 +95,7 @@ export function usePresenceDisplayCount(
     }
   }, [channelName, supabase, user?.id, user?.nickname])
 
-  return peerCount + displayOffset
+  // 본인은 항상 포함(+1). 심야 구간이면 displayOffset이 0이라 실제 인원만,
+  // 혼자여도 최소 1명으로 보인다.
+  return peerCount + 1 + displayOffset
 }

@@ -4,7 +4,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, Fra
 import Image from 'next/image'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { ChatRoom, User, Message, RoomParticipant, PayoutAccount, LOCATIONS, isRoomJoinable } from '@/lib/supabase'
+import { ChatRoom, User, Message, RoomParticipant, PayoutAccount, LOCATIONS, isRoomJoinable, getRoomDepartureDateTime } from '@/lib/supabase'
 import {
   extractHostAppearanceFromMessage,
   splitMessages,
@@ -72,6 +72,10 @@ export default function ChatRoomPage() {
   const [showHostLeaveModal, setShowHostLeaveModal] = useState(false)
   const [hostLeaveAgreed, setHostLeaveAgreed] = useState(false)
   const [nextHostId, setNextHostId] = useState('')
+  const [showRideCompletionModal, setShowRideCompletionModal] = useState(false)
+  // 출발 이후 나가기 시 "택시 탑승을 완료하셨나요?" 응답. null = 미선택
+  const [rideBoarded, setRideBoarded] = useState<boolean | null>(null)
+  const [isLeavingRoom, setIsLeavingRoom] = useState(false)
   const [reportReason, setReportReason] = useState('')
   const [reportTarget, setReportTarget] = useState<string>('')
   const [timestampReveal, setTimestampReveal] = useState(0)
@@ -374,6 +378,12 @@ export default function ChatRoomPage() {
     () => participants.filter((participant) => participant.user_id !== user?.id),
     [participants, user?.id]
   )
+
+  // 출발시각이 지났는지. 지났다면 나가기 시 택시 탑승 완료 여부를 물어본다.
+  const isAfterDeparture = useCallback(() => {
+    if (!room) return false
+    return getRoomDepartureDateTime(room.departure_date, room.departure_time).getTime() <= Date.now()
+  }, [room])
 
   const loadRoom = useCallback(async () => {
     try {
@@ -1118,11 +1128,15 @@ export default function ChatRoomPage() {
     }
   }
 
-  const completeLeaveRoom = async (transferHostId?: string) => {
+  const completeLeaveRoom = async (transferHostId?: string, boarded?: boolean) => {
     if (!user) return
 
+    setIsLeavingRoom(true)
     try {
-      const leaveRequestBody = JSON.stringify({ nextHostId: transferHostId ?? null })
+      const leaveRequestBody = JSON.stringify({
+        nextHostId: transferHostId ?? null,
+        boarded: typeof boarded === 'boolean' ? boarded : null,
+      })
       let response = await fetch(`/api/rooms/${roomId}/leave`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1159,10 +1173,18 @@ export default function ChatRoomPage() {
         was_creator: isRoomCreator,
         transferred_host: Boolean(transferHostId),
       })
+      if (typeof boarded === 'boolean') {
+        trackEvent('ride_completion_answered', {
+          room_id: roomId,
+          boarded,
+        })
+      }
       router.push('/map')
     } catch (error) {
       console.error('Leave room error:', error)
       toast.error(error instanceof Error ? error.message : '채팅방 나가기 중 오류가 발생했습니다')
+    } finally {
+      setIsLeavingRoom(false)
     }
   }
 
@@ -1171,14 +1193,29 @@ export default function ChatRoomPage() {
 
     if (isRoomCreator && participants.length >= 2) {
       setHostLeaveAgreed(false)
+      setRideBoarded(null)
       setNextHostId(hostTransferCandidates[0]?.user_id ?? '')
       setShowHostLeaveModal(true)
+      return
+    }
+
+    // 출발시각 이후 나가기라면 택시 탑승 완료 여부를 물어본다.
+    if (isAfterDeparture()) {
+      setRideBoarded(null)
+      setShowRideCompletionModal(true)
       return
     }
 
     if (!window.confirm('정말로 채팅방을 나가시겠습니까?')) return
 
     await completeLeaveRoom()
+  }
+
+  // 출발 이후 나가기: 예/아니오 선택 → 응답 기록 후 나가기
+  const handleRideCompletionLeave = async (boarded: boolean) => {
+    setRideBoarded(boarded)
+    setShowRideCompletionModal(false)
+    await completeLeaveRoom(undefined, boarded)
   }
 
   const handleConfirmHostLeave = async () => {
@@ -1192,8 +1229,14 @@ export default function ChatRoomPage() {
       return
     }
 
+    const afterDeparture = isAfterDeparture()
+    if (afterDeparture && rideBoarded === null) {
+      toast.error('택시 탑승 완료 여부를 선택해주세요')
+      return
+    }
+
     setShowHostLeaveModal(false)
-    await completeLeaveRoom(nextHostId)
+    await completeLeaveRoom(nextHostId, afterDeparture ? rideBoarded ?? undefined : undefined)
   }
 
   const handleReport = async () => {
@@ -2069,6 +2112,36 @@ export default function ChatRoomPage() {
               <span>멤버들과 협의가 완료됐나요?</span>
             </label>
 
+            {isAfterDeparture() && (
+              <div className="mt-3">
+                <p className="mb-1.5 text-xs font-black text-gray-700">택시 탑승을 완료하셨나요?</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRideBoarded(true)}
+                    className={`h-11 rounded-xl border text-sm font-black transition ${
+                      rideBoarded === true
+                        ? 'border-primary-600 bg-primary-600 text-white'
+                        : 'border-gray-200 bg-white text-gray-700 hover:border-primary-300'
+                    }`}
+                  >
+                    예, 탑승했어요
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRideBoarded(false)}
+                    className={`h-11 rounded-xl border text-sm font-black transition ${
+                      rideBoarded === false
+                        ? 'border-gray-900 bg-gray-900 text-white'
+                        : 'border-gray-200 bg-white text-gray-700 hover:border-gray-400'
+                    }`}
+                  >
+                    아니오, 안 탔어요
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="mt-3">
               <label className="mb-1.5 block text-xs font-black text-gray-700">다음 방장</label>
               <select
@@ -2088,7 +2161,7 @@ export default function ChatRoomPage() {
             <button
               type="button"
               onClick={handleConfirmHostLeave}
-              disabled={!hostLeaveAgreed || !nextHostId}
+              disabled={!hostLeaveAgreed || !nextHostId || isLeavingRoom || (isAfterDeparture() && rideBoarded === null)}
               className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl bg-red-600 text-sm font-black text-white transition hover:bg-red-700 disabled:bg-gray-300"
             >
               나가기
@@ -2096,6 +2169,66 @@ export default function ChatRoomPage() {
             <p className="mt-2 text-center text-[11px] font-semibold leading-4 text-gray-400">
               협의 없이 여러 번 탈주하면 서비스 이용이 정지될 수 있습니다
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* 출발 이후 나가기: 택시 탑승 완료 확인 */}
+      {showRideCompletionModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-gray-950/35 px-3 pb-3 pt-16"
+          onClick={() => {
+            if (!isLeavingRoom) setShowRideCompletionModal(false)
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ride-completion-title"
+            className="w-full rounded-2xl bg-white p-4 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">채팅방 나가기</p>
+                <h2 id="ride-completion-title" className="mt-1 text-lg font-extrabold text-gray-950">
+                  택시 탑승을 완료하셨나요?
+                </h2>
+              </div>
+              <button
+                type="button"
+                aria-label="닫기"
+                onClick={() => {
+                  if (!isLeavingRoom) setShowRideCompletionModal(false)
+                }}
+                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <p className="text-sm font-bold leading-5 text-gray-600">
+              선택하면 채팅방에서 나가게 됩니다.
+            </p>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleRideCompletionLeave(true)}
+                disabled={isLeavingRoom}
+                className="inline-flex h-12 items-center justify-center rounded-xl bg-primary-600 text-sm font-black text-white transition hover:bg-primary-700 disabled:bg-gray-300"
+              >
+                예, 탑승했어요
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRideCompletionLeave(false)}
+                disabled={isLeavingRoom}
+                className="inline-flex h-12 items-center justify-center rounded-xl border border-gray-300 bg-white text-sm font-black text-gray-800 transition hover:border-gray-400 disabled:opacity-50"
+              >
+                아니오, 안 탔어요
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -23,6 +23,7 @@ import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, detectInAppBrowser, es
 import { isInstalled } from '@/lib/pwa'
 import { getNotificationPermission, isPushSupported, isSubscribedToPush, subscribeToPush } from '@/lib/push'
 import { PREVIEW_TEST_ACCOUNTS, isPreviewTestLoginEnabled } from '@/lib/previewTestAccounts'
+import { hasServiceShareIntent, removeServiceShareIntent, shareService } from '@/lib/serviceShare'
 import { identifyAnalyticsUser, shouldSuppressAnalyticsForUser, suppressAnalyticsForCurrentDevice, trackEvent } from '@/lib/analytics/client'
 import { AlertTriangle, ArrowRight, Ban, Bell, Clock, MessageSquareText, Share2, Star, Settings, Users, X } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -116,6 +117,63 @@ function GoogleIcon({ className = 'w-5 h-5' }: { className?: string }) {
   )
 }
 
+function ServiceSharePrompt({
+  isSharing,
+  onDismiss,
+  onShare,
+}: {
+  isSharing: boolean
+  onDismiss: () => void
+  onShare: () => void
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-[90] flex items-end bg-gray-950/35 px-3 pb-3 pt-20"
+      onClick={onDismiss}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="service-share-title"
+        className="mx-auto w-full max-w-sm rounded-2xl border border-white/80 bg-white p-5 shadow-[0_18px_48px_rgba(17,24,39,0.28)]"
+        style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-black tracking-[0.02em] text-primary-600">같이타 공유하기</p>
+            <h2 id="service-share-title" className="mt-1 text-lg font-black leading-tight tracking-tight text-gray-950">
+              친구에게 같이타를 알려주세요
+            </h2>
+          </div>
+          <button
+            type="button"
+            aria-label="공유 안내 닫기"
+            onClick={onDismiss}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <p className="mt-3 text-sm font-semibold leading-6 text-gray-600">
+          아래 버튼을 누르면 카카오톡, 메시지 등 원하는 앱으로 같이타 링크를 보낼 수 있어요.
+        </p>
+
+        <button
+          type="button"
+          onClick={onShare}
+          disabled={isSharing}
+          className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 text-sm font-black text-white transition hover:bg-primary-700 disabled:cursor-wait disabled:opacity-65"
+        >
+          <Share2 className="h-4 w-4" />
+          {isSharing ? '공유 시트 여는 중...' : '친구에게 공유하기'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function getGoogleAccountName(email?: string | null, metadata?: Record<string, unknown> | null) {
   const googleProfile = extractGachonProfileFromMetadata(metadata)
 
@@ -166,6 +224,8 @@ export default function HomeClient() {
   const [hasEnteredApp, setHasEnteredApp] = useState(false)
   const [showPwaOnboarding, setShowPwaOnboarding] = useState(false)
   const [showPushPrompt, setShowPushPrompt] = useState(false)
+  const [showServiceSharePrompt, setShowServiceSharePrompt] = useState(false)
+  const [isSharingService, setIsSharingService] = useState(false)
   const [isEnablingPush, setIsEnablingPush] = useState(false)
   const [routeCoachStep, setRouteCoachStep] = useState<'hidden' | 'select' | 'action'>('hidden')
   const [authNotice, setAuthNotice] = useState<string | null>(null)
@@ -213,6 +273,49 @@ export default function HomeClient() {
       lastAuthErrorAtRef.current = now
     }
   }, [])
+
+  const clearServiceShareIntent = useCallback(() => {
+    window.history.replaceState({}, '', removeServiceShareIntent(window.location.href))
+  }, [])
+
+  const dismissServiceSharePrompt = useCallback(() => {
+    trackEvent('service_share_prompt_dismissed', {
+      source: 'welcome_email',
+    })
+    setShowServiceSharePrompt(false)
+    clearServiceShareIntent()
+  }, [clearServiceShareIntent])
+
+  const handleShareService = useCallback(async () => {
+    setIsSharingService(true)
+
+    try {
+      const result = await shareService(window.location.href, navigator)
+      if (result === 'cancelled') return
+
+      if (result === 'shared') {
+        toast.success('공유할 앱을 선택했어요')
+        trackEvent('service_share_completed', {
+          method: 'native',
+          source: 'welcome_email',
+        })
+      } else {
+        toast.success('같이타 링크를 복사했어요')
+        trackEvent('service_share_completed', {
+          method: 'clipboard',
+          source: 'welcome_email',
+        })
+      }
+
+      setShowServiceSharePrompt(false)
+      clearServiceShareIntent()
+    } catch (error) {
+      console.error('Share service error:', error)
+      toast.error('공유 기능을 열지 못했어요. 잠시 후 다시 시도해주세요.')
+    } finally {
+      setIsSharingService(false)
+    }
+  }, [clearServiceShareIntent])
 
   const rejectNonGachonAccount = useCallback(async () => {
     showAuthError(NON_GACHON_ACCOUNT_MESSAGE)
@@ -558,6 +661,15 @@ export default function HomeClient() {
       setLoading(false)
     }
   }, [loadModerationStatus, rejectNonGachonAccount, router, supabase])
+
+  useEffect(() => {
+    if (!hasServiceShareIntent(window.location.search)) return
+
+    setShowServiceSharePrompt(true)
+    trackEvent('service_share_prompt_viewed', {
+      source: new URLSearchParams(window.location.search).get('utm_source') || 'direct',
+    })
+  }, [])
 
   useEffect(() => {
     if (!supabase) {
@@ -1440,6 +1552,14 @@ export default function HomeClient() {
     toast.error('먼저 로그인하셔야 합니다.');
   };
 
+  const serviceSharePrompt = showServiceSharePrompt ? (
+    <ServiceSharePrompt
+      isSharing={isSharingService}
+      onDismiss={dismissServiceSharePrompt}
+      onShare={handleShareService}
+    />
+  ) : null
+
   if (loading && !isMapRoute) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
@@ -1597,6 +1717,7 @@ export default function HomeClient() {
             </Link>
           </div>
         </div>
+        {serviceSharePrompt}
       </main>
     )
   }
@@ -1619,6 +1740,8 @@ export default function HomeClient() {
         routeHintStep={routeCoachStep}
         onCloseRouteHint={endRouteCoachmark}
       />
+
+      {serviceSharePrompt}
 
       {showMyRooms && (
         <div

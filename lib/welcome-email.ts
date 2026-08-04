@@ -15,7 +15,7 @@ export function createWelcomeEmail(name: string) {
 
   return {
     subject: WELCOME_SUBJECT,
-    text: `안녕하세요, ${name || '회원'}님.\n\n같이타를 만든 가천대 경영학과 박영민입니다.\n\n같이타에 가입해주셔서 정말 고맙습니다.\n같이타는 가천대 학생들이 같은 방향으로 가는 학우를 찾아 택시비 부담을 나눌 수 있도록 만든 서비스예요.\n\n감사하게도 지금까지 100명 이상의 가천대 학우 분들이 같이타에 가입해 주셨어요.\n지금은 방학이기도 하고 아직 모든 시간대에 방이 가득하진 않지만, 2학기부터는 많은 방들이 활성화될 것으로 기대하고 있어요!\n\n홈 화면에 같이타를 추가해두고, 필요할 때 앱처럼 바로 열어보세요. 채팅 알림도 놓치지 않고 받을 수 있어요.\n\n[같이타] 로그인 후 홈 화면 추가하기\n${installUrl}\n\n친구 한 명과 함께 시작해 보세요\n친구에게 같이타 알려주기\n${shareUrl}\n\n궁금한 점이나 불편한 점이 있다면 이 메일에 편하게 답장해주세요. 빠르게 확인하고 답장 드릴게요.\n\n감사합니다.\n박영민 드림.`,
+    text: `안녕하세요, ${name || '회원'}님.\n\n같이타를 만든 가천대 경영학과 박영민입니다.\n\n같이타에 가입해주셔서 정말 고맙습니다.\n같이타는 가천대 학생들이 같은 방향으로 가는 학우를 찾아 택시비 부담을 나눌 수 있도록 만든 서비스예요.\n\n감사하게도 지금까지 100명 이상의 가천대 학우 분들이 같이타에 가입해 주셨어요.\n지금은 방학이기도 하고 아직 모든 시간대에 방이 가득하진 않지만, 2학기부터는 많은 방들이 활성화될 것으로 기대하고 있어요!\n\n홈 화면에 같이타를 추가해두고, 필요할 때 앱처럼 바로 열어보세요. 채팅 알림도 놓치지 않고 받을 수 있어요.\n\n[같이타] 로그인 후 홈 화면 추가하기\n${installUrl}\n\n친구 한 명과 함께 시작해 보세요\n같은 방향으로 자주 이동하는 친구 한 명에게 같이타를 알려주시면, 필요한 순간 함께 탈 사람을 찾기가 더 쉬워져요.\n\n친구에게 같이타 알려주기 →\n${shareUrl}\n\n궁금한 점이나 불편한 점이 있다면 이 메일에 편하게 답장해주세요. 빠르게 확인하고 답장 드릴게요.\n\n감사합니다.\n박영민 드림.`,
     html: `<!doctype html>
 <html lang="ko">
   <head>
@@ -47,8 +47,9 @@ export function createWelcomeEmail(name: string) {
               <a href="${installUrl}" style="display:inline-block;padding:14px 20px;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;letter-spacing:-0.2px;">[같이타] 로그인 후 홈 화면 추가하기</a>
             </td></tr></table>
             <div style="padding-top:28px;border-top:1px solid #e9eef3;">
-              <p style="margin:0 0 8px;color:#344054;font-weight:700;">친구 한 명과 함께 시작해 보세요</p>
-              <a href="${shareUrl}" style="color:#1677b9;text-decoration:underline;font-weight:700;">친구에게 같이타 알려주기</a>
+              <p style="margin:0 0 14px;color:#344054;font-weight:700;">친구 한 명과 함께 시작해 보세요</p>
+              <p style="margin:0 0 24px;">같은 방향으로 자주 이동하는 친구 한 명에게 같이타를 알려주시면, 필요한 순간 함께 탈 사람을 찾기가 더 쉬워져요.</p>
+              <a href="${shareUrl}" style="color:#1677b9;text-decoration:underline;font-weight:700;">친구에게 같이타 알려주기 →</a>
             </div>
             <p style="margin:32px 0 0;">궁금한 점이나 불편한 점이 있다면 이 메일에 편하게 답장해주세요. 빠르게 확인하고 답장 드릴게요.</p>
             <p style="margin:28px 0 0;">감사합니다.<br />박영민 드림.</p>

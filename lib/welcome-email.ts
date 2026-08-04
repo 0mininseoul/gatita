@@ -24,15 +24,15 @@ export function createWelcomeEmail(name: string) {
   </head>
   <body style="margin:0;padding:0;background:#f4f8fb;color:#344054;font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sans KR',Arial,sans-serif;word-break:keep-all;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f4f8fb;">
-      <tr><td align="center" style="padding:32px 16px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:640px;background:#ffffff;border:1px solid #e5edf4;border-radius:24px;overflow:hidden;">
-          <tr><td style="padding:40px 28px 12px;">
+      <tr><td align="center" style="padding:24px 0;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:680px;background:#ffffff;">
+          <tr><td style="padding:32px 20px 12px;">
             <h1 style="margin:0;color:#111827;font-size:30px;line-height:1.32;letter-spacing:-1.3px;font-weight:800;">같이타에 오신 걸 환영합니다!</h1>
           </td></tr>
-          <tr><td style="padding:20px 28px 28px;">
+          <tr><td style="padding:20px 20px 28px;">
             <img src="${SITE_URL}/og-image.png" alt="같이타 - 가천대학생들을 위한 택시 동승 플랫폼" width="552" style="display:block;width:100%;max-width:552px;height:auto;border:1px solid #edf1f5;border-radius:16px;" />
           </td></tr>
-          <tr><td style="padding:0 28px 40px;font-size:16px;line-height:1.82;letter-spacing:-0.28px;color:#475467;">
+          <tr><td style="padding:0 20px 40px;font-size:16px;line-height:1.82;letter-spacing:-0.28px;color:#475467;">
             <p style="margin:0 0 28px;">안녕하세요, ${recipientName}님.<br />같이타를 만든 가천대 경영학과 박영민입니다.</p>
             <p style="margin:0 0 28px;">같이타에 가입해주셔서 정말 고맙습니다.<br />같이타는 가천대 학생들이 같은 방향으로 가는 학우를 찾아 택시비 부담을 나눌 수 있도록 만든 서비스예요.</p>
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 28px;background:#eef8ff;border-left:5px solid #3592d0;border-radius:14px;">

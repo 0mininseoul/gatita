@@ -1098,6 +1098,18 @@
     right: max(0.75rem, env(safe-area-inset-right));
   }
 
+  .gatita-routes-fab {
+    bottom: max(1rem, env(safe-area-inset-bottom));
+    right: max(0.75rem, env(safe-area-inset-right));
+    transition: opacity 150ms ease, transform 150ms ease;
+  }
+
+  .gatita-routes-fab--hidden {
+    opacity: 0;
+    transform: translateY(0.5rem);
+    pointer-events: none;
+  }
+
   .gatita-bottom-sheet {
     bottom: max(1rem, env(safe-area-inset-bottom));
     display: flex;

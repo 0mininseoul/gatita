@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { Clock, Compass, MapPin, Minus, Plus, Sparkles, Users, X } from 'lucide-react'
+import { BellRing, Clock, Compass, MapPin, Minus, Plus, Sparkles, Users, X } from 'lucide-react'
 import {
   getDepartureTimeOptions,
   getDestinationOptions,
@@ -22,6 +22,8 @@ export type CampusMapRoom = {
   departure_date: string
   departure_time: string
   max_participants: number
+  // 알림 경로 FAB의 미확인 배지 판정(HomeClient)에만 쓰인다 — 지도 렌더링에는 필요 없어 옵셔널.
+  created_at?: string
   participants?: Array<{
     id: string
     user_id?: string
@@ -51,6 +53,8 @@ type CampusRouteMapProps = {
   onJoinRoom: (roomId: string) => void
   routeHintStep?: 'hidden' | 'select' | 'action'
   onCloseRouteHint?: (action: 'select-close' | 'action-close') => void
+  onOpenRoutes: () => void
+  hasUnseenRouteRooms?: boolean
 }
 
 declare global {
@@ -183,6 +187,8 @@ export default function CampusRouteMap({
   onJoinRoom,
   routeHintStep = 'hidden',
   onCloseRouteHint,
+  onOpenRoutes,
+  hasUnseenRouteRooms = false,
 }: CampusRouteMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<any>(null)
@@ -493,6 +499,20 @@ export default function CampusRouteMap({
             <Minus className="h-5 w-5" />
           </button>
         </div>
+      )}
+
+      {mapStatus === 'ready' && (
+        <button
+          type="button"
+          aria-label={hasUnseenRouteRooms ? '알림 경로, 새로 열린 방 있음' : '알림 경로'}
+          onClick={onOpenRoutes}
+          className={`gatita-routes-fab absolute z-20 inline-flex h-14 w-14 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-800 shadow-[0_10px_28px_rgba(17,24,39,0.2)] transition hover:bg-gray-50${isSheetOpen ? ' gatita-routes-fab--hidden' : ''}`}
+        >
+          <BellRing className="h-6 w-6" />
+          {hasUnseenRouteRooms && (
+            <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-500" />
+          )}
+        </button>
       )}
 
       {(mapStatus === 'missing-key' || mapStatus === 'error') && (

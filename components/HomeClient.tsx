@@ -47,6 +47,12 @@ type UnreadRoomCount = {
   unread_count: number
 }
 
+// GET /api/routes 응답 중 FAB 미확인 배지 판정에 필요한 최소 필드만 취한다.
+type RouteSubscriptionSummary = {
+  from_location: LocationType
+  to_location: LocationType
+}
+
 type ModerationWarning = {
   id: string
   reason: string
@@ -72,6 +78,8 @@ type MyProfilePayload = {
 // intra-session navigation back to the map (it was already shown today).
 const PWA_PROMPT_LAST_SHOWN_KEY = 'gatita:pwa-prompt-last-shown'
 const ROUTE_COACHMARK_STORAGE_KEY = 'gatita:route-coachmark-seen'
+// Task 10(app/routes/page.tsx)이 /routes 진입 시 기록하는 마지막 확인 시각. FAB 미확인 배지가 같은 키를 읽는다.
+const ROUTES_SEEN_STORAGE_KEY = 'gatita:routes:seen_at'
 
 // Local calendar day as YYYY-MM-DD (en-CA yields ISO-like format in local tz).
 const getLocalDateKey = () => new Date().toLocaleDateString('en-CA')
@@ -214,6 +222,8 @@ export default function HomeClient() {
   const [fromLocation, setFromLocation] = useState<LocationType | ''>('')
   const [mapRooms, setMapRooms] = useState<CampusMapRoom[]>([])
   const [myRooms, setMyRooms] = useState<MyRoomSummary[]>([])
+  const [subscribedRoutes, setSubscribedRoutes] = useState<RouteSubscriptionSummary[]>([])
+  const [hasUnseenRouteRooms, setHasUnseenRouteRooms] = useState(false)
   const [isLoadingMapRooms, setIsLoadingMapRooms] = useState(false)
   const [isLoadingMyRooms, setIsLoadingMyRooms] = useState(false)
   const [showMyRooms, setShowMyRooms] = useState(false)
@@ -422,6 +432,7 @@ export default function HomeClient() {
           departure_date,
           departure_time,
           max_participants,
+          created_at,
           participants:room_participants(id, user_id)
         `)
         .in('departure_date', visibleDates)
@@ -438,6 +449,8 @@ export default function HomeClient() {
           departure_date: room.departure_date,
           departure_time: room.departure_time,
           max_participants: room.max_participants,
+          // 알림 경로 FAB의 미확인 배지 판정(구독 경로에 새로 열린 방)에 쓴다.
+          created_at: room.created_at,
           participants: room.participants?.map((participant) => ({
             id: participant.id,
             user_id: participant.user_id,
@@ -451,6 +464,25 @@ export default function HomeClient() {
       setIsLoadingMapRooms(false)
     }
   }, [supabase])
+
+  // 알림 경로 FAB 배지용 구독 목록. favorites의 notify_* 컬럼이 아직 프로덕션에
+  // 반영되지 않아 이 조회가 실패할 수 있다 — 실패해도 지도가 깨지면 안 되므로
+  // 조용히 빈 목록으로 남기고(= 배지 없음) 지도 기능에는 영향을 주지 않는다.
+  const loadRouteSubscriptions = useCallback(async () => {
+    try {
+      const res = await fetch('/api/routes')
+      if (!res.ok) {
+        setSubscribedRoutes([])
+        return
+      }
+
+      const json = (await res.json().catch(() => null)) as { routes?: RouteSubscriptionSummary[] } | null
+      setSubscribedRoutes(json?.routes ?? [])
+    } catch (error) {
+      console.error('Load route subscriptions error:', error)
+      setSubscribedRoutes([])
+    }
+  }, [])
 
   const loadUnreadCount = useCallback(async () => {
     if (!supabase) return
@@ -759,6 +791,7 @@ export default function HomeClient() {
 
     loadMapRooms()
     loadUnreadCount()
+    loadRouteSubscriptions()
 
     // 30초 전체 폴링 대신 실시간 구독 + 디바운스 재조회 (chat_rooms는 마이그레이션 적용 후 발화)
     let debounceId: ReturnType<typeof setTimeout> | null = null
@@ -792,6 +825,7 @@ export default function HomeClient() {
     const refreshAll = () => {
       loadMapRooms()
       loadUnreadCount()
+      loadRouteSubscriptions()
       if (showMyRooms) loadMyRooms()
     }
     const safetyId = window.setInterval(refreshAll, 120000)
@@ -807,7 +841,33 @@ export default function HomeClient() {
       document.removeEventListener('visibilitychange', handleVisibility)
       supabase.removeChannel(channel)
     }
-  }, [authMode, hasAuthenticatedSession, hasEnteredApp, loadMapRooms, loadMyRooms, loadUnreadCount, showMyRooms, supabase])
+  }, [authMode, hasAuthenticatedSession, hasEnteredApp, loadMapRooms, loadMyRooms, loadRouteSubscriptions, loadUnreadCount, showMyRooms, supabase])
+
+  // 알림 경로 FAB 미확인 배지: 구독 경로 중 지금 입장 가능한 방이 있고, 그 방이
+  // /routes 화면을 마지막으로 연 시각(Task 10이 남긴 localStorage 값) 이후에 생겼을 때만 켠다.
+  // 푸시가 실제로 닿는 이용자가 설치자의 30%뿐이라, 이 배지가 대부분의 이용자에게
+  // "내 경로에 방이 생겼다"를 알리는 유일한 신호다.
+  useEffect(() => {
+    if (subscribedRoutes.length === 0) {
+      setHasUnseenRouteRooms(false)
+      return
+    }
+
+    const seenAtRaw = window.localStorage.getItem(ROUTES_SEEN_STORAGE_KEY)
+    const seenAtMs = seenAtRaw ? new Date(seenAtRaw).getTime() : 0
+    const routeKeys = new Set(
+      subscribedRoutes.map((route) => `${route.from_location}>${route.to_location}`)
+    )
+
+    const hasUnseen = mapRooms.some((room) => {
+      if (!routeKeys.has(`${room.from_location}>${room.to_location}`)) return false
+      if (!room.created_at) return false
+      if (!isRoomJoinable(room.departure_date, room.departure_time)) return false
+      return new Date(room.created_at).getTime() > seenAtMs
+    })
+
+    setHasUnseenRouteRooms(hasUnseen)
+  }, [mapRooms, subscribedRoutes])
 
   const onlineDisplayCount = usePresenceDisplayCount(
     supabase,
@@ -1743,6 +1803,14 @@ export default function HomeClient() {
         onJoinRoom={handleJoinMapRoom}
         routeHintStep={routeCoachStep}
         onCloseRouteHint={endRouteCoachmark}
+        onOpenRoutes={() => {
+          if (requiresProfile) {
+            openProfileRequiredModal('routes')
+            return
+          }
+          router.push('/routes')
+        }}
+        hasUnseenRouteRooms={hasUnseenRouteRooms}
       />
 
       {serviceSharePrompt}

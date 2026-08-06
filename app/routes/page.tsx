@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import {
   LOCATIONS,
@@ -80,8 +80,25 @@ function routeKey(from: LocationType, to: LocationType) {
   return `${from}>${to}`
 }
 
+// useSearchParams()(?from= 프리필용)를 쓰려면 Next.js가 이 컴포넌트를 Suspense 경계
+// 안에서 렌더링해야 한다 — 없으면 정적 프리렌더가 실패한다(next build에서 실측 확인).
 export default function RoutesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="loading-spinner" />
+        </div>
+      }
+    >
+      <RoutesPageContent />
+    </Suspense>
+  )
+}
+
+function RoutesPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = useMemo(() => createClient(), [])
 
   const [user, setUser] = useState<User | null>(null)
@@ -97,8 +114,13 @@ export default function RoutesPage() {
   const [installed, setInstalled] = useState(false)
   const [showInstallSheet, setShowInstallSheet] = useState(false)
 
-  // 경로 추가 폼 상태
-  const [formFrom, setFormFrom] = useState<LocationType | ''>('')
+  // 경로 추가 폼 상태. 지도 하단 시트의 "이 경로 알림 받기"(CampusRouteMap)는 도착지가
+  // 아직 정해지지 않은 상태로 넘어오므로, ?from= 쿼리로 출발지만 미리 채워 도착지 선택만
+  // 남겨둔다.
+  const [formFrom, setFormFrom] = useState<LocationType | ''>(() => {
+    const from = searchParams.get('from')
+    return from && from in LOCATIONS ? (from as LocationType) : ''
+  })
   const [formTo, setFormTo] = useState<LocationType | ''>('')
   const [formAllDay, setFormAllDay] = useState(true)
   const [formWindow, setFormWindow] = useState(DEFAULT_WINDOW)
@@ -138,6 +160,11 @@ export default function RoutesPage() {
             isRoomJoinable(room.departure_date, room.departure_time),
         )
         setOpenRooms(filtered)
+
+        // design doc(...design.md:573)의 route_alert_fallback_seen { room_count } — 앱 내
+        // 폴백(이 섹션)이 실제로 얼마나 노출되고, 그때 몇 개 방이 보였는지를 잰다. 푸시가
+        // 닿는 이용자가 10명뿐이라 이 폴백이 사실상 주 경로다.
+        trackEvent('route_alert_fallback_seen', { room_count: filtered.length })
 
         // 미확인 표시용 시각 저장. 서버 상태는 두지 않는다 — 이 화면을 열어봤다는
         // 사실만 로컬에 남겨, 추후 FAB 등에서 "새로 열린 방" 배지 판정에 쓸 수 있게 한다.
@@ -377,6 +404,14 @@ export default function RoutesPage() {
       toast.success('알림 경로를 추가했어요')
       resetForm()
       await loadOpenRooms(nextRoutes)
+
+      // 구독은 만들어졌지만 미설치 상태면 푸시가 이 기기에 닿지 않는다(iOS는 홈 화면 추가
+      // 없이 웹 푸시 자체가 불가능). 권한을 새로 묻지 않고 기존 설치 안내 시트만 띄운다 —
+      // 병목은 프롬프트가 아니라 설치율이라는 진단(design doc 3장)에 따른 것.
+      if (!installed) {
+        setShowInstallSheet(true)
+        trackEvent('pwa_install_instruction_shown', { source: 'route_subscribe' })
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '경로를 추가하지 못했습니다')
     } finally {

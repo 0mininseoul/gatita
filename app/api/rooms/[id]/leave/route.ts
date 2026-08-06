@@ -42,7 +42,7 @@ async function leaveRoom(
 
   const { data: room, error: roomError } = await admin
     .from('chat_rooms')
-    .select('id, created_by, status, departure_date, departure_time')
+    .select('id, created_by, status, departure_date, departure_time, from_location, to_location')
     .eq('id', roomId)
     .eq('status', 'active')
     .maybeSingle()
@@ -131,14 +131,24 @@ async function leaveRoom(
     console.error('participation history leave error:', historyError)
   }
 
+  // 혼자 남아 방이 닫히는 순간이 구독 유도의 핵심 지점이다(46일 실측 기준 37개 방 중
+  // 35개가 이 상태로 닫혔다). 클라이언트가 closedAlone을 받아 "다음엔 알림을 받을까요?"
+  // 프롬프트를 띄운다(app/rooms/[id]/page.tsx).
+  let closedAlone = false
   if (currentParticipants.length <= 1) {
     await admin
       .from('chat_rooms')
       .update({ status: 'closed' })
       .eq('id', roomId)
+    closedAlone = true
   }
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({
+    ok: true,
+    closedAlone,
+    from_location: room.from_location,
+    to_location: room.to_location,
+  })
 }
 
 export const POST = withAxiomRoute(leaveRoom)

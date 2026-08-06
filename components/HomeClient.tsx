@@ -1811,6 +1811,14 @@ export default function HomeClient() {
           router.push('/routes')
         }}
         hasUnseenRouteRooms={hasUnseenRouteRooms}
+        onOpenRouteSubscribe={(from) => {
+          if (requiresProfile) {
+            openProfileRequiredModal('route_subscribe')
+            return
+          }
+          // 도착지는 아직 정해지지 않았으므로 /routes에서 고르게 한다.
+          router.push(`/routes?from=${encodeURIComponent(from)}`)
+        }}
       />
 
       {serviceSharePrompt}

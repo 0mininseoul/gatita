@@ -55,6 +55,9 @@ type CampusRouteMapProps = {
   onCloseRouteHint?: (action: 'select-close' | 'action-close') => void
   onOpenRoutes: () => void
   hasUnseenRouteRooms?: boolean
+  // 하단 시트에서 "이 경로 알림 받기"를 눌렀을 때. 도착지가 아직 정해지지 않은 단계이므로
+  // /routes?from={location}으로 보내 도착지를 고르게 한다(Task 12).
+  onOpenRouteSubscribe?: (from: LocationType) => void
 }
 
 declare global {
@@ -189,6 +192,7 @@ export default function CampusRouteMap({
   onCloseRouteHint,
   onOpenRoutes,
   hasUnseenRouteRooms = false,
+  onOpenRouteSubscribe,
 }: CampusRouteMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<any>(null)
@@ -657,6 +661,9 @@ export default function CampusRouteMap({
                     return (
                       <div
                         key={room.id}
+                        // 지난 방은 입장 버튼이 disabled라 탭이 버튼까지 전달되지 않는다.
+                        // 카드 자체에 붙여 "지난 방 카드 탭"을 관측한다(past_room_viewed).
+                        onClick={isPastDeparture ? () => trackEvent('past_room_viewed', { room_id: room.id }) : undefined}
                         className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 ${
                           isMyRoom
                             ? 'border-primary-200 bg-primary-50/80 shadow-[inset_3px_0_0_#2782ff]'
@@ -708,6 +715,17 @@ export default function CampusRouteMap({
                   아직 방이 없습니다
                 </div>
               ) : null}
+
+              {onOpenRouteSubscribe && (
+                <button
+                  type="button"
+                  onClick={() => onOpenRouteSubscribe(selectedFrom)}
+                  className="mt-2 inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-primary-200 bg-primary-50/60 px-3 text-xs font-black text-primary-700 transition hover:bg-primary-50"
+                >
+                  <BellRing className="h-3.5 w-3.5" aria-hidden="true" />
+                  이 경로 알림 받기
+                </button>
+              )}
 
               <button
                 type="button"

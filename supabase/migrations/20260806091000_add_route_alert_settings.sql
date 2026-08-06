@@ -8,6 +8,8 @@ alter table public.favorites
   add column if not exists notify_weekdays smallint[] not null default '{0,1,2,3,4,5,6}';
 
 -- 0=일요일 … 6=토요일. 빈 배열은 "알림 없음"과 같으므로 금지한다.
+-- array_length(빈배열, 1)은 0이 아니라 NULL을 반환하므로 coalesce로 감싼다
+-- (감싸지 않으면 NULL between ... => NULL이 되어 CHECK가 통과시켜버린다).
 do $$
 begin
   if not exists (
@@ -18,7 +20,7 @@ begin
   ) then
     alter table public.favorites
       add constraint favorites_notify_weekdays_valid check (
-        array_length(notify_weekdays, 1) between 1 and 7
+        coalesce(array_length(notify_weekdays, 1), 0) between 1 and 7
         and notify_weekdays <@ '{0,1,2,3,4,5,6}'::smallint[]
       );
   end if;

@@ -19,11 +19,12 @@ create index if not exists room_participation_events_user_idx
 alter table public.room_participation_events enable row level security;
 
 -- 관리자만 조회. 쓰기는 service_role 전용(정책 없음 = 일반 클라이언트 차단).
+drop policy if exists "Admins can read participation events" on public.room_participation_events;
 create policy "Admins can read participation events"
   on public.room_participation_events for select using (
     exists (
       select 1 from public.user_private_profiles p
-      where p.user_id = auth.uid() and p.is_admin = true
+      where p.user_id = auth.uid() and p.is_admin = true and p.status = 'active'
     )
   );
 

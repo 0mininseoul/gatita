@@ -147,17 +147,6 @@ create index room_participation_events_room_idx
 create index room_participation_events_user_idx
   on public.room_participation_events(user_id);
 
-alter table public.room_participation_events enable row level security;
-
--- 관리자만 조회. 쓰기는 service_role 전용(정책 없음 = 일반 클라이언트 차단).
-create policy "Admins can read participation events"
-  on public.room_participation_events for select using (
-    exists (
-      select 1 from public.user_private_profiles p
-      where p.user_id = auth.uid() and p.is_admin = true
-    )
-  );
-
 -- Web Push 구독 (기기별 endpoint 유일). 저장/발송은 서버(service_role).
 -- 발송 파이프라인: messages insert 트리거(notify_new_message) → pg_net → /api/push/dispatch → web-push.
 create table public.push_subscriptions (
@@ -190,6 +179,7 @@ alter table public.messages enable row level security;
 alter table public.reports enable row level security;
 alter table public.user_moderation_actions enable row level security;
 alter table public.favorites enable row level security;
+alter table public.room_participation_events enable row level security;
 alter table public.push_subscriptions enable row level security;
 alter table public.ride_completions enable row level security;
 
@@ -597,6 +587,15 @@ create index user_moderation_actions_unacknowledged_warning_idx
   on public.user_moderation_actions (user_id, created_at desc)
   where action = 'warning' and acknowledged_at is null;
 create index favorites_user_id_idx on public.favorites (user_id);
+
+-- 참여 이력: 관리자만 조회. 쓰기는 service_role 전용(정책 없음 = 일반 클라이언트 차단).
+create policy "Admins can read participation events"
+  on public.room_participation_events for select using (
+    exists (
+      select 1 from public.user_private_profiles p
+      where p.user_id = auth.uid() and p.is_admin = true and p.status = 'active'
+    )
+  );
 
 -- Push subscriptions / ride completions: 접근은 서버(service_role)에서, 본인 소유만 클라이언트 허용
 create policy "push_subscriptions_select_own" on public.push_subscriptions

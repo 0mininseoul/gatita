@@ -216,6 +216,10 @@ grant select, insert on table public.messages to authenticated;
 grant select, insert, update on table public.reports to authenticated;
 grant select, insert on table public.user_moderation_actions to authenticated;
 grant select, insert, delete on table public.favorites to authenticated;
+-- 경로 구독 API(PATCH /api/routes/[id])가 notify_* 값을 수정한다. from_location 등
+-- 나머지 컬럼은 이 API의 수정 대상이 아니므로 notify_* 컬럼에만 update를 부여한다.
+grant update (notify_enabled, notify_from, notify_to, notify_weekdays)
+  on table public.favorites to authenticated;
 
 -- RLS Policies
 -- Users: public profile fields only. Private fields live in user_private_profiles.

@@ -291,8 +291,6 @@ export function getMapRoomDateRange(now = new Date()) {
   return [formatLocalDate(today), formatLocalDate(tomorrow)]
 }
 
-export const ROOM_MAP_VISIBILITY_WINDOW_MINUTES = 30
-
 export function getRoomDepartureDateTime(departureDate: string, departureTime: string) {
   return new Date(`${departureDate}T${departureTime.slice(0, 5)}:00+09:00`)
 }
@@ -302,10 +300,12 @@ export function isRoomJoinable(departureDate: string, departureTime: string, now
 }
 
 export function isRoomVisibleOnMap(departureDate: string, departureTime: string, now = new Date()) {
-  const visibleUntil = getRoomDepartureDateTime(departureDate, departureTime).getTime()
-    + ROOM_MAP_VISIBILITY_WINDOW_MINUTES * 60 * 1000
+  // 출발일이 오늘이면 출발 시각이 지났어도 계속 노출한다. 지난 방도 "오늘 이 지점에서
+  // 사람들이 움직였다"는 신호이고, 방이 없는 시간대에 지도가 완전히 비어 보이는 것을 막는다.
+  // 입장 가능 여부는 isRoomJoinable 이 따로 판정한다.
+  if (departureDate === formatLocalDate(now)) return true
 
-  return visibleUntil >= now.getTime()
+  return getRoomDepartureDateTime(departureDate, departureTime).getTime() >= now.getTime()
 }
 
 export const LOCATION_POINTS: Record<LocationType, LocationPoint> = {

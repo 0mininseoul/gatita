@@ -268,7 +268,7 @@ test('map room loading keeps only rooms within the visible map window', () => {
   assert.match(loadBlock, /getMapRoomDateRange\(new Date\(\)\)/)
   assert.match(loadBlock, /\.in\('departure_date', visibleDates\)/)
   assert.match(loadBlock, /\.eq\('status', 'active'\)/)
-  assert.match(loadBlock, /isRoomVisibleOnMap/, 'map should hide rooms more than 30 minutes after departure')
+  assert.match(loadBlock, /isRoomVisibleOnMap/, 'map should keep same-day rooms visible past departure and hide only past-date rooms')
   assert.doesNotMatch(loadBlock, /departure_time\s*>=/, 'same-day room loading should not use fragile string comparisons')
 })
 
@@ -340,8 +340,9 @@ test('room visibility and joinability follow departure time rules', () => {
   assert.equal(isRoomJoinable('2026-06-19', '12:00', new Date('2026-06-19T11:59:00+09:00')), true)
   assert.equal(isRoomJoinable('2026-06-19', '12:00', new Date('2026-06-19T12:00:00+09:00')), true)
   assert.equal(isRoomJoinable('2026-06-19', '12:00', new Date('2026-06-19T12:01:00+09:00')), false)
+  // 당일 방은 출발 시각을 지나도 지도에서 계속 노출된다 (입장 가능 여부와는 별개 규칙).
   assert.equal(isRoomVisibleOnMap('2026-06-19', '12:00', new Date('2026-06-19T12:29:00+09:00')), true)
-  assert.equal(isRoomVisibleOnMap('2026-06-19', '12:00', new Date('2026-06-19T12:31:00+09:00')), false)
+  assert.equal(isRoomVisibleOnMap('2026-06-19', '12:00', new Date('2026-06-19T12:31:00+09:00')), true)
 })
 
 test('map header exposes my rooms list from the user membership query', () => {

@@ -1,6 +1,7 @@
-# 경로 구독 알림 · 참여 이력 보존 — 설계
+# 경로 구독 알림 · 참여 이력 보존 · 당일 방 유지 — 설계
 
-작성일: 2026-08-06
+작성일: 2026-08-06 (2026-08-06 개정: 구독 시간대 설정 추가, 푸시 진단 정정, 당일 방 유지와
+안내 이메일 편입)
 
 ## 배경 / 문제
 
@@ -16,8 +17,23 @@
 | 참여자 2명 이상인 방 | 2개 |
 | 서로 다른 사람이 메시지를 주고받은 방 | 2개 |
 | `favorites` | 0건 |
-| `push_subscriptions` | 5건 (84명 중 6%) |
 | `ride_completions` | 0건 |
+
+도달 채널 퍼널은 별도로 봐야 한다. "푸시 6%"는 두 단계를 뭉뚱그린 오해를 낳는 숫자다.
+
+```
+실유저 84 → 온보딩 완료 59 → PWA 설치 10 (온보딩의 17%) → 푸시 허용 3 (설치자의 30%)
+                                                          + 미설치 상태 푸시 허용 1
+```
+
+**병목은 푸시 프롬프트가 아니라 PWA 설치율 17%다.** 설치자 대비 푸시 수락률 30%는 웹
+푸시 업계 평균(20~40%) 범위 안이고, 프롬프트에는 이미 설명 문구가 있다
+(`components/HomeClient.tsx:1914`). 즉 **권한을 물어볼 기회 자체가 10명에게만 생긴다.**
+
+이는 이 스펙 전체의 제약 조건이다. iOS Safari는 홈 화면 추가 없이 웹 푸시를 지원하지
+않으므로, 현 상태에서 **경로 구독 알림이 푸시로 닿을 수 있는 상한은 약 10명이다.**
+따라서 (a) 앱 내 폴백이 부가 기능이 아니라 주 경로이며, (b) 84명 전체에 닿는 유일한
+채널인 이메일의 비중이 커지고, (c) 설치율 개선이 이 기능의 선결 조건이다.
 
 핵심 진단: **생성은 되는데 매칭이 안 된다.** 활성화율(37%)과 재시도율(방을 만든 22명
 중 9명이 재생성, 그중 7명은 동일 경로 반복)은 오히려 건강하다. 실패하는 단계는
@@ -44,22 +60,28 @@
 
 ## 목표
 
-1. **경로 구독 알림.** 이용자가 평소에 관심 경로를 등록해 두면, 그 경로에 방이 열릴 때
-   푸시를 받는다. 앱을 열고 있지 않아도 매칭이 성립하게 하여 **동시 접속 요구를 제거**한다.
-2. **푸시 권한 수락률 개선.** 현재 6%. 권한 요청 시점을 "왜 필요한지가 자명한 순간"
-   (경로 구독)으로 옮긴다.
+1. **경로 구독 알림.** 이용자가 평소에 관심 경로와 **알림 받을 시간대**를 등록해 두면,
+   그 조건에 맞는 방이 열릴 때 알림을 받는다. 앱을 열고 있지 않아도 매칭이 성립하게 하여
+   **동시 접속 요구를 제거**한다.
+2. **PWA 설치율 개선.** 현재 온보딩 완료자의 17%(10명). 푸시가 닿는 범위를 결정하는
+   상위 제약이므로 함께 다룬다. 푸시 프롬프트 자체는 이미 설명이 있고 수락률도 정상
+   범위라 손대지 않는다.
 3. **참여 이력 보존.** 방을 나가거나 닫아도 "누가 언제 참여했다 언제 나갔다"가 남는다.
    1번의 효과를 측정할 근거를 확보한다.
 4. **지도 우하단 진입점(FAB).** 내 알림 경로 관리 화면으로 연결한다.
+5. **오늘 방 목록 유지.** 출발 30분 후 사라지던 방을 당일에 한해 계속 노출한다.
+6. **기능 안내 이메일.** 기존 Resend 인프라로 전체 이용자에게 업데이트를 알려 구독을
+   유도한다. 푸시가 10명에게만 닿는 현 상황에서 84명 전체에 도달하는 유일한 채널이다.
 
 ### 비목표
 
 - 커뮤니티/게시판 기능. 별도 검토에서 현 규모(84명)에는 시기상조로 판단됐다. 하루 1~3건
   나오는 피드는 습관을 만들지 못하고, 유저 수를 늘리려 커뮤니티를 넣는 것은 순환 논리다.
   DAU 100~150 이후 재검토한다.
-- 구독 경로의 시간대 필터. 전체 방 생성량이 하루 0.8개라 필터링할 물량이 아니다
-  (최다 경로를 구독해도 이틀에 한 번꼴). 알림 피로가 관측되면 그때 추가한다.
-- 정기 통학 시간표 자동 매칭. 구독 알림으로 얻는 데이터를 본 뒤 판단한다.
+- 정기 통학 시간표 자동 매칭(등록해 둔 패턴으로 시스템이 방을 자동 생성). 구독 알림으로
+  얻는 데이터를 본 뒤 판단한다.
+- PWA 설치 유도의 전면 재설계(온보딩 흐름 변경 등). 이번에는 기존 설치 시트의 노출
+  지점을 넓히는 선에서 다루고, 효과를 측정한 뒤 판단한다.
 - 고아 페이지 `app/rooms/page.tsx` 정리. 이번 범위 밖이며 별도로 다룬다.
 
 ---
@@ -130,8 +152,35 @@ to_location))`로 필요한 모양을 갖췄다. **0건이므로 마이그레이
 
 ```sql
 alter table public.favorites
-  add column notify_enabled boolean not null default true;
+  add column notify_enabled boolean not null default true,
+  add column notify_from time,                       -- null = 종일
+  add column notify_to time,                         -- null = 종일
+  add column notify_weekdays smallint[] not null default '{0,1,2,3,4,5,6}';  -- 0=일 … 6=토
 ```
+
+**시간대 설정은 필수 설계 요소다.** 초안에서는 "하루 0.8개라 필터링할 물량이 아니다"라는
+이유로 제외했으나 이는 잘못된 판단이었다. 두 가지 이유로 뒤집는다.
+
+1. 이 기능이 성공하면 방 생성량이 늘고, **알림이 성가셔지는 시점은 정확히 기능이 작동하기
+   시작하는 시점이다.** 성공을 전제로 설계해야 한다.
+2. 빈도와 무관하게 **관련성 문제다.** 오전 9시에 통학하는 이용자는 23시 방 알림을 물량이
+   적든 많든 원하지 않는다.
+
+`notify_from`/`notify_to`는 방의 `departure_time` 기준으로 판정한다(알림 발송 시각이
+아니라 출발 시각 기준 — 이용자가 원하는 것은 "내가 탈 만한 시간대의 방"이다).
+
+**자정 넘김 처리.** `notify_from > notify_to`이면 자정을 넘는 구간으로 해석한다
+(예: `22:00 ~ 02:00`). 심야 택시가 핵심 시나리오이므로 반드시 지원해야 한다.
+
+```
+종일:        notify_from is null → 항상 통과
+일반 구간:   from <= to  →  from <= departure_time <= to
+자정 넘김:   from >  to  →  departure_time >= from OR departure_time <= to
+```
+
+`notify_weekdays`는 방의 `departure_date` 요일(Asia/Seoul)로 판정한다. 방을 2개 이상 만든
+9명 중 7명이 단일 경로를 반복한 것으로 보아 통학은 요일 패턴을 가지므로, "평일만" 같은
+설정이 실제로 쓰일 것으로 본다.
 
 테이블명은 `favorites`를 유지한다. 이름이 의미와 어긋나지만, 개명은 RLS 정책
 (`"Users can manage own favorites"`)과 기존 참조를 함께 손대야 하는 데 비해 얻는 게
@@ -201,15 +250,22 @@ body: { room_id }     → 신규 경로 알림
 
 `room_id` 분기 처리 순서:
 
-1. `chat_rooms`에서 `from_location`, `to_location`, `created_by`, `departure_time` 조회.
-   없으면 `{ ok: true, skipped: 'room-not-found' }`.
-2. **심야 보류**: 현재 시각(Asia/Seoul)이 02:00~06:00이면 발송하지 않고
-   `{ ok: true, skipped: 'quiet-hours' }`. 심야 택시가 핵심 시나리오이므로 23~01시는
-   발송한다. 보류된 알림은 큐잉하지 않고 버린다(방은 당일용이라 지연 발송이 무의미).
-3. `favorites`에서 `from_location`/`to_location`이 일치하고 `notify_enabled = true`인
-   `user_id` 조회. **방 생성자 본인은 제외**한다.
-4. 대상자의 `push_subscriptions` 조회. 없으면 `{ ok: true, sent: 0 }`.
-5. 발송.
+1. `chat_rooms`에서 `from_location`, `to_location`, `created_by`, `departure_date`,
+   `departure_time` 조회. 없으면 `{ ok: true, skipped: 'room-not-found' }`.
+2. `favorites`에서 다음을 **모두** 만족하는 `user_id` 조회.
+   - `from_location`/`to_location` 일치
+   - `notify_enabled = true`
+   - `departure_time`이 `notify_from`~`notify_to` 구간 안 (자정 넘김 규칙 적용, null이면 통과)
+   - `departure_date`의 요일이 `notify_weekdays`에 포함
+   - **방 생성자 본인은 제외**
+3. 대상자의 `push_subscriptions` 조회. 없으면 `{ ok: true, sent: 0 }`.
+4. 발송.
+
+전역 심야 보류는 두지 않는다. 이용자가 `notify_from`/`notify_to`로 직접 제어하므로
+전역 규칙은 명시적 설정을 덮어쓰는 부작용만 낳는다. 다만 **`종일`(null)로 둔 구독에
+한해서만** 02:00~06:00 발송을 보류한다 — 아무 설정도 하지 않은 이용자를 새벽에 깨우지
+않기 위한 기본값이다. 보류된 알림은 큐잉하지 않고 버린다(방은 당일용이라 지연 발송이
+무의미).
 
 ```js
 payload = {
@@ -236,21 +292,39 @@ payload = {
 
 ---
 
-## 3. 푸시 권한 요청 재설계
+## 3. 도달 채널 — PWA 설치율
 
-### 문제
+### 문제 재정의
 
-권한 요청이 `installed_home` 한 곳에서만 뜬다(`components/HomeClient.tsx:928`,
-`trackEvent('push_prompt_shown', { source: 'installed_home' })`). PWA를 설치한 이용자에게,
-왜 필요한지 설명 없이 묻는다. 수락률 6%(84명 중 5명)는 이 설계의 결과다.
+초안은 "푸시 수락률 6%"를 문제로 잡고 요청 시점을 경로 구독으로 옮기려 했다. 퍼널을
+분해하면 진단이 달라진다.
+
+```
+온보딩 완료 59 → PWA 설치 10 (17%) → 푸시 허용 3 (설치자의 30%)
+```
+
+- 푸시 프롬프트에는 **이미 설명이 있다** (`components/HomeClient.tsx:1914`, "동승자가
+  채팅을 보내면 앱을 열지 않아도 푸시 알림으로 바로 받아볼 수 있어요").
+- 설치자 대비 수락률 30%는 웹 푸시 업계 평균(20~40%) 범위 안이다.
+- 따라서 프롬프트는 문제가 아니다. **권한을 물어볼 기회가 10명에게만 생기는 것**이 문제다.
+
+또한 요청 시점을 경로 구독으로 옮기는 것은 오히려 퍼널을 좁힌다. 푸시는 채팅 알림이라는
+더 큰 용도를 겸하므로, 경로 구독까지 도달한 이용자에게만 묻는 것은 손해다.
 
 ### 변경
 
-요청 시점을 **경로 구독 완료 직후**로 옮긴다. "가천대역 1번출구 → 제2기숙사 방이 열리면
-알려드릴까요?"에 대한 권한 요청은 맥락이 자명하다. 기존 `installed_home` 프롬프트는
-유지하되(이미 설치한 이용자 대상), 구독 시점 요청을 주 경로로 삼는다.
+**기존 `installed_home` 프롬프트를 주 경로로 유지한다.** 문구·시점 모두 그대로 둔다.
 
-거부해도 구독 자체는 유지된다. 알림만 앱 내 폴백으로 대체된다.
+대신 **설치 유도 노출을 넓힌다.** iOS Safari는 홈 화면 추가 없이 웹 푸시를 지원하지
+않으므로 설치가 곧 도달 범위다.
+
+- 경로 구독 완료 시, 미설치 이용자에게 설치 안내 시트를 띄운다("알림을 받으려면 홈 화면에
+  추가해야 해요"). 푸시 권한을 새로 묻는 것이 아니라 **설치를 유도**하는 것이다.
+- 이미 설치했으나 푸시를 거부한 이용자에게는 기존 프롬프트를 재노출하지 않는다. 거부는
+  존중한다.
+
+푸시가 없어도 구독 자체는 유지되며 앱 내 폴백으로 대체된다. 현 설치율에서는 **폴백이
+사실상 주 경로**임을 전제로 UI를 설계한다.
 
 ### 구독 유도 지점
 
@@ -299,14 +373,118 @@ return NextResponse.json({ ok: true, closedAlone: true, from_location, to_locati
 
 ---
 
+## 5. 오늘 방 목록 유지
+
+### 현재 동작
+
+지도 하단 시트의 방 목록은 **출발 시각 + 30분**이 지나면 사라진다.
+
+- `lib/supabase.ts:294` — `ROOM_MAP_VISIBILITY_WINDOW_MINUTES = 30`
+- `lib/supabase.ts:304` — `isRoomVisibleOnMap()` = `departure + 30분 >= now`
+- `components/HomeClient.tsx:433` — 조회 결과에 이 필터를 적용
+
+### 변경
+
+**출발일이 오늘(Asia/Seoul)인 방은 시각과 무관하게 계속 노출한다.** 내일 방은 기존대로
+노출한다(`getMapRoomDateRange`가 오늘·내일을 반환하는 동작은 유지).
+
+```ts
+export function isRoomVisibleOnMap(departureDate: string, departureTime: string, now = new Date()) {
+  // 출발일이 오늘이면 지난 방이라도 계속 노출한다.
+  if (departureDate === formatLocalDate(now)) return true
+  return getRoomDepartureDateTime(departureDate, departureTime).getTime() >= now.getTime()
+}
+```
+
+`ROOM_MAP_VISIBILITY_WINDOW_MINUTES`는 사용처가 사라지므로 제거한다.
+
+**주의.** `formatLocalDate`(`lib/supabase.ts:200`)는 브라우저 로컬 타임존을 쓴다.
+`isRoomVisibleOnMap`은 클라이언트에서만 호출되므로(국내 이용자 = KST) 문제없지만,
+**서버(Vercel, UTC)에서는 재사용하면 안 된다.** 2번 항목의 요일 판정은 서버에서 돌므로
+KST를 명시적으로 계산해야 한다.
+
+### 입장 차단과의 정합성
+
+`isRoomJoinable()`(`lib/supabase.ts:300`)은 그대로 둔다. 출발 시각이 지난 방은 **보이지만
+입장할 수 없다.** 지금은 목록에서 사라지므로 문제가 없었지만, 변경 후에는 이용자가 지난
+방을 눌렀다가 `past_departure` 에러(`components/HomeClient.tsx:1300`)를 만나게 된다.
+
+따라서 시트 UI에서 지난 방을 **시각적으로 구분**해야 한다.
+
+- 흐리게 처리하고 "출발함" 배지를 붙인다.
+- 입장 버튼을 비활성화한다(누를 수 있게 두고 에러를 띄우지 않는다).
+- 정렬은 출발 시각 오름차순을 유지하되, 지난 방은 목록 하단으로 내린다.
+
+`PRODUCT.md`의 "색상만으로 상태를 구분하지 않고 텍스트, 아이콘, 비활성 상태를 함께
+사용한다"에 따라 배지 텍스트를 반드시 포함한다.
+
+### 근거
+
+당일 방을 남기면 "오늘 이 지점에서 사람들이 실제로 움직였다"는 것이 보인다. 현재는 방이
+없는 시간대에 지도가 완전히 비어 보여 서비스가 죽은 것처럼 읽힌다. 하루 0.8개 생성
+규모에서는 지난 방이라도 남아 있는 편이 활동의 증거가 된다.
+
+---
+
+## 6. 기능 안내 이메일
+
+### 기존 인프라
+
+Resend가 이미 구성돼 있다(`lib/welcome-email.ts`). 신규 의존성이 필요 없다.
+
+- 환경변수: `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_REPLY_TO`
+- `fetch('https://api.resend.com/emails')` 직접 호출, SDK 미사용
+- `Idempotency-Key` 헤더로 중복 발송 방지 (`gatita-welcome/${userId}` 패턴)
+
+**주의: 이 환경변수들은 로컬 `.env.local`에 없다.** Vercel에만 설정돼 있으므로 로컬에서
+발송을 테스트하려면 추가해야 한다.
+
+### 발송 대상
+
+`user_private_profiles`에서 다음 조건.
+
+- `status = 'active'`
+- `is_admin = false`
+- `email` 존재
+
+온보딩 미완료자(`onboarded_at is null`)도 포함한다. 84명 중 25명이 여기 해당하며, 이들에게
+기능 안내는 온보딩 복귀 유인이 된다.
+
+### 구현
+
+`scripts/`에 일회성 발송 스크립트를 둔다(`scripts/preview-test-accounts.mjs` 패턴).
+관리자 API 라우트로 만들지 않는다 — 일회성 캠페인이고, 실수로 재발송될 여지를 줄이는 편이
+낫다.
+
+- `Idempotency-Key`: `gatita-route-alerts/${userId}` — 재실행해도 중복 발송되지 않는다.
+- `--dry-run` 플래그로 대상자 수와 샘플만 출력하는 모드를 지원한다.
+- 순차 발송(동시성 제한). 84명 규모라 Resend rate limit은 문제되지 않는다.
+- 실패한 수신자는 stderr에 남기고 계속 진행한다. 전체를 중단하지 않는다.
+
+### 내용
+
+`createWelcomeEmail()`과 동일한 테이블 기반 HTML 구조를 따른다(이메일 클라이언트 호환성).
+
+- 핵심 메시지: "경로를 등록해두면 그 경로에 방이 열릴 때 알려드려요"
+- CTA: `/routes`로 연결 (`utm_source=feature_email&utm_campaign=route_alerts`)
+- 홈 화면 추가 안내를 함께 넣는다 — 푸시 도달 상한이 설치율에 걸려 있으므로 이 메일이
+  설치율을 올릴 기회이기도 하다.
+- **수신거부 링크를 반드시 포함한다.** 기능 안내는 거래관계상 정보성 메일에 가깝지만,
+  수신거부 수단을 두는 것이 안전하고 관행에도 맞다.
+
+---
+
 ## 데이터 흐름 요약
 
 ```
-[구독]  이용자 → /routes → favorites insert → 푸시 권한 요청
+[구독]  이용자 → /routes → favorites insert (경로 + 시간대 + 요일)
+                        → 미설치면 홈 화면 추가 안내
 [발송]  방 생성 → chat_rooms insert 트리거 → pg_net → /api/push/dispatch
-        → favorites 조회(경로 일치, notify_enabled, 생성자 제외)
+        → favorites 조회(경로 일치 · notify_enabled · 시간대 · 요일 · 생성자 제외)
         → push_subscriptions 조회 → web-push 발송
+[폴백]  구독 경로에 열린 방 → FAB 빨간 점 → /routes "내 경로에 열린 방"
 [측정]  join/leave → room_participation_events 기록
+[안내]  scripts 일회성 발송 → Resend → 전체 이용자
 ```
 
 ---
@@ -320,7 +498,9 @@ return NextResponse.json({ ok: true, closedAlone: true, from_location, to_locati
 | 만료된 push 구독 (404/410) | 해당 endpoint 삭제 (기존 로직 재사용, `dispatch/route.ts:116`) |
 | 참여 이력 기록 실패 | `console.error`만. 참여/나가기는 진행 |
 | 푸시 권한 거부 | 구독은 유지, 앱 내 폴백으로 대체 |
-| 심야(02~06시) | 발송 보류, 큐잉하지 않음 |
+| 심야(02~06시) | `종일` 구독에 한해 발송 보류, 큐잉하지 않음. 명시적 시간대 설정은 그대로 발송 |
+| 안내 메일 개별 실패 | stderr 기록 후 다음 수신자로 계속. 전체 중단하지 않음 |
+| 안내 메일 재실행 | `Idempotency-Key`로 중복 발송 차단 |
 
 ---
 
@@ -329,15 +509,30 @@ return NextResponse.json({ ok: true, closedAlone: true, from_location, to_locati
 `npm test`(`node --test test/*.test.mjs`) 규약을 따른다.
 
 **순수 함수 단위 테스트**
-- 심야 보류 판정: 01:59 발송 / 02:00 보류 / 05:59 보류 / 06:00 발송 (Asia/Seoul 기준)
+
+시간대 판정이 이 기능에서 가장 틀리기 쉬운 부분이므로 집중해서 검증한다.
+
+- 일반 구간 (`09:00~12:00`): 08:59 제외 / 09:00 포함 / 12:00 포함 / 12:01 제외
+- **자정 넘김 (`22:00~02:00`)**: 22:00 포함 / 23:30 포함 / 00:30 포함 / 02:00 포함 /
+  03:00 제외 / 12:00 제외
+- 종일 (`null`): 모든 시각 통과
+- 요일 판정: `departure_date`의 Asia/Seoul 요일이 `notify_weekdays`에 있을 때만 통과.
+  UTC 기준으로 계산하면 자정 근처 날짜가 밀리므로 반드시 KST로 판정
+- 심야 보류: 종일 구독은 02:00~06:00 보류 / 명시적 시간대 구독은 같은 시각에도 발송
 - 수신자 산출: 경로 일치 + `notify_enabled` + 생성자 제외
+- `isRoomVisibleOnMap`: 오늘 지난 방 노출 / 오늘 미래 방 노출 / 내일 방 노출 /
+  어제 방 미노출
 - FAB 표시 여부: `isSheetOpen` 참일 때 숨김
 
 **통합 확인 (수동)**
 - 경로 구독 → 다른 계정으로 그 경로에 방 생성 → 푸시 수신
+- 구독 시간대 **밖의** 방을 만들었을 때 미수신
 - 생성자 본인에게는 미발송
 - 권한 거부 상태에서 앱 내 폴백에 방이 뜨는지
 - 방 나가기 → `room_participation_events.left_at` 기록 확인
+- `favorites` insert/update/delete가 RLS를 통과하는지 (0건이라 미검증 상태)
+- 지난 방이 시트에 흐리게 표시되고 입장 버튼이 비활성인지
+- 안내 메일 `--dry-run` 대상자 수가 예상과 일치하는지
 
 ---
 
@@ -348,42 +543,72 @@ return NextResponse.json({ ok: true, closedAlone: true, from_location, to_locati
 | 지표 | 기준선 | 측정 방법 |
 | --- | --- | --- |
 | 참여자 2명 이상 방 비율 | 2/37 (5.4%) | `room_participation_events` |
-| 푸시 권한 수락률 | 6% (5/84) | `push_subscriptions` / 실유저 |
+| **PWA 설치율** | 10/59 (17%) | `user_private_profiles.pwa_installed` / 온보딩 완료 |
+| 설치자 중 푸시 수락률 | 3/10 (30%) | `push_enabled` / `pwa_installed` |
 | 경로 구독자 수 | 0 | `favorites` |
 | 알림 → 방 입장 전환율 | 기준선 없음 (신규) | 신규 이벤트 `route_alert_opened` → `room_joined` |
+| 안내 메일 → 구독 전환율 | 기준선 없음 (신규) | `utm_campaign=route_alerts` → `route_subscribed` |
 
 근접 미스 2건(10분 차, 48분 차)이 알림으로 전환됐다면 매칭은 2건 → 4건이 됐을 것이다.
-**다만 이 기능의 상한은 낮다.** 46일 중 같은 경로에 두 사람이 겹친 날이 4일뿐이므로,
-알림은 이미 존재하는 낭비를 회수할 뿐 새 수요를 만들지 못한다. 근본 해법은 이용자 수이며,
-이 작업은 그 전까지 전환 효율을 최대로 끌어올리는 것이 목적이다.
+
+**이 기능의 상한은 두 겹으로 낮다.**
+
+1. 46일 중 같은 경로에 두 사람이 겹친 날이 4일뿐이다. 알림은 이미 존재하는 낭비를 회수할
+   뿐 새 수요를 만들지 못한다.
+2. 푸시가 닿는 이용자가 현재 10명이다. 설치율이 오르지 않으면 알림 경로 자체가 대부분의
+   이용자에게 작동하지 않는다.
+
+근본 해법은 이용자 수이며, 이 작업은 그 전까지 전환 효율을 최대로 끌어올리는 것이 목적이다.
+**설치율(17%)이 개선되지 않으면 1번보다 2번이 먼저 병목이 된다**는 점을 실행 중에 계속
+확인해야 한다.
 
 ### 신규 분석 이벤트
 
 기존 `trackEvent` 규약을 따른다.
 
 ```
-route_subscribed          { from_location, to_location, source }
+route_subscribed          { from_location, to_location, source, has_time_window, weekday_count }
 route_unsubscribed        { from_location, to_location }
 route_alert_opened        { room_id, from_location, to_location }
-push_prompt_shown         { source: 'route_subscribe' }   // 기존 이벤트에 source 추가
+route_alert_fallback_seen  { room_count }                  // 앱 내 폴백 노출
 closed_alone_prompt_shown { from_location, to_location }
+pwa_install_instruction_shown { source: 'route_subscribe' }  // 기존 이벤트에 source 추가
+past_room_viewed          { room_id }                      // 지난 방 노출 후 탭
 ```
+
+`has_time_window`로 실제로 시간대를 설정하는 비율을 본다. 대부분이 종일로 두면 이 설계가
+과잉이었다는 신호이고, 다수가 설정하면 초안에서 제외했던 판단이 틀렸음이 확인된다.
 
 ---
 
 ## 작업 순서
 
+**A. 측정 기반 (선행)**
 1. `room_participation_events` 테이블 + RLS + 백필 마이그레이션
 2. join/leave/생성 경로에 이력 기록 추가
-3. `favorites.notify_enabled` 컬럼 추가
-4. `/api/push/dispatch`에 `room_id` 분기 + 심야 보류
-5. `notify_new_room` 트리거
-6. `/routes` 화면
-7. 지도 FAB + 시트 충돌 처리
-8. 구독 유도 지점 3곳 + 푸시 권한 요청 이동
-9. 분석 이벤트
 
-1~2가 먼저다. 이력이 쌓이기 시작해야 이후 변경의 효과를 측정할 수 있다.
+**B. 오늘 방 목록 유지 (독립)**
+3. `isRoomVisibleOnMap` 변경 + `ROOM_MAP_VISIBILITY_WINDOW_MINUTES` 제거
+4. 시트 UI에 지난 방 구분 표시(흐림 + "출발함" 배지 + 입장 비활성)
+
+**C. 경로 구독 알림**
+5. `favorites` 컬럼 추가 (`notify_enabled`, `notify_from`, `notify_to`, `notify_weekdays`)
+   + RLS 실동작 확인
+6. 시간대·요일 판정 순수 함수 + 단위 테스트 (자정 넘김 포함)
+7. `/api/push/dispatch`에 `room_id` 분기
+8. `notify_new_room` 트리거
+9. `/routes` 화면 (구독 관리 + 시간대 설정 + 앱 내 폴백)
+10. 지도 FAB + 시트 충돌 처리 + 미확인 표시
+11. 구독 유도 지점 3곳 + 미설치자 홈 화면 추가 안내
+12. 분석 이벤트
+
+**D. 안내 (최후행)**
+13. Resend 일회성 발송 스크립트 + `--dry-run`
+
+**A가 가장 먼저다.** 이력이 쌓이기 시작해야 이후 변경의 효과를 측정할 수 있다.
+**B는 A~C와 독립적이며 변경 범위가 작으므로 먼저 배포해도 된다.**
+**D는 기능이 배포·검증된 뒤에 실행한다.** 안내 메일을 받고 들어온 이용자가 동작하지 않는
+화면을 만나면 안 된다.
 
 모든 스키마 변경은 Supabase 마이그레이션으로 적용하고 `supabase_schema.sql`에 동기화한다
 (프로젝트 `hggpwrtasyngpjcbwjzg`).

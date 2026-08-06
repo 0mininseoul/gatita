@@ -233,12 +233,13 @@ test('campus map room times are displayed without seconds', () => {
   assert.doesNotMatch(source, /<span>\{room\.departure_time\}<\/span>/)
 })
 
-test('map presence display count rotates a random one to five person offset', () => {
+test('map presence display count pads by zero to five outside the late night window', () => {
   const source = readProjectFile('lib/usePresenceDisplayCount.ts')
 
   assert.match(source, /function getRandomPresenceOffset/)
-  assert.match(source, /Math\.floor\(Math\.random\(\) \* 5\) \+ 1/)
-  assert.match(source, /setDisplayOffset\(getRandomPresenceOffset\(\)\)/)
+  assert.match(source, /Math\.floor\(Math\.random\(\) \* 6\)/)
+  assert.match(source, /function isRealCountWindow/, 'late night should report the real count')
+  assert.match(source, /isRealCountWindow\(\) \? 0 : getRandomPresenceOffset\(\)/)
   assert.doesNotMatch(source, /current === 1 \? 2 : 1/, 'presence offset should no longer alternate only between +1 and +2')
 })
 
@@ -445,7 +446,7 @@ test('map shows a once-per-day PWA home screen onboarding modal', () => {
 test('service worker refreshes navigations before falling back to cached app shell', () => {
   const source = readProjectFile('public/sw.js')
 
-  assert.match(source, /gatita-v1\.0\.2/)
+  assert.match(source, /gatita-v1\.0\.3/)
   assert.match(source, /'\/map'/, 'PWA start URL should be cached as an app shell')
   assert.match(source, /event\.request\.mode !== 'navigate'/)
   assert.match(source, /fetch\(event\.request\)/)

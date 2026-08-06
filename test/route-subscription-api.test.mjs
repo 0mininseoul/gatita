@@ -129,63 +129,71 @@ test('PATCH/DELETE는 대상이 없거나 남의 것이면 성공한 척하지 �
   assert.ok(deleteCallIdx < selectCallIdx, 'delete()가 select()보다 먼저 체이닝되어야 한다')
 })
 
-test('POST 생성 경로는 isRestrictedRoutePair로 근거리 경로를 막는다', () => {
+test('POST 생성 경로는 공유 검증 함수(buildRouteCreateInput)에 위치·제한 경로 판정을 위임한다', () => {
   const source = readListRouteSource()
 
   assert.match(source, /import \{ isRestrictedRoutePair, LOCATIONS, type LocationType \} from '@\/lib\/supabase'/)
+  assert.match(source, /import \{ buildRouteCreateInput \} from '@\/lib\/routeSubscriptionValidation'/)
 
   const createFnMatch = source.match(/async function createRoute\(request: Request\)[\s\S]*?\n\}\n\nexport/)
   assert.ok(createFnMatch)
-  assert.match(
-    createFnMatch[0],
-    /if \(from === to \|\| isRestrictedRoutePair\(from, to\)\) \{\s*\n\s*return NextResponse\.json\(\{ error: '선택할 수 없는 경로입니다' \}, \{ status: 400 \}\)/,
-  )
+  assert.match(createFnMatch[0], /buildRouteCreateInput\(/)
+  assert.match(createFnMatch[0], /Object\.keys\(LOCATIONS\)/)
+  assert.match(createFnMatch[0], /isRestrictedRoutePair\(from as LocationType, to as LocationType\)/)
+
+  // 실제 위치 유효성 판정/제한 경로 거부/from===to 거부 동작은 lib/routeSubscriptionValidation.ts를
+  // 직접 호출하는 test/route-subscription-validation.test.mjs에서 검증한다.
 })
 
-test('POST는 notify_from === notify_to 를 400으로 거부하되, 둘 다 null인 종일 구독은 허용한다', () => {
-  const source = readListRouteSource()
+// 예전에는 POST/PATCH가 각자 notify_from === notify_to 페어링·동등성 검사를 인라인으로
+// 들고 있었다. PATCH 쪽 인라인 가드(`patch.notify_from !== null && patch.notify_from ===
+// patch.notify_to`)는 부분 업데이트에서 키 자체가 없을 때 patch.notify_from이 undefined가
+// 되는 걸 놓쳐, undefined === undefined가 true로 평가되면서 { notify_enabled: false }만
+// 보내는 흔한 토글 요청까지 400으로 잘못 거부하는 Critical 버그가 있었다. 지금은 두 라우트
+// 모두 lib/routeSubscriptionValidation.ts의 공유 함수에 이 검사를 위임해 로직이 한 곳에만
+// 존재한다 — 실제 판정 동작(presence 기반 undefined/null 구분, 자정 넘김 허용 등)은
+// test/route-subscription-validation.test.mjs가 함수를 직접 호출해 검증한다.
+test('POST/PATCH는 notify_from/notify_to 페어링·동등성 검사를 공유 함수에 위임하고, 더 이상 각자 인라인으로 비교하지 않는다', () => {
+  const listSource = readListRouteSource()
+  const itemSource = readItemRouteSource()
 
-  const createFnMatch = source.match(/async function createRoute\(request: Request\)[\s\S]*?\n\}\n\nexport/)
-  assert.ok(createFnMatch)
-  const body = createFnMatch[0]
+  assert.match(listSource, /import \{ buildRouteCreateInput \} from '@\/lib\/routeSubscriptionValidation'/)
+  assert.match(itemSource, /import \{ buildRouteUpdatePatch \} from '@\/lib\/routeSubscriptionValidation'/)
+
+  const createFnMatch = listSource.match(/async function createRoute\(request: Request\)[\s\S]*?\n\}\n\nexport/)
+  const updateFnMatch = itemSource.match(/async function updateRoute\([\s\S]*?\n\}\n\nasync function deleteRoute/)
+  assert.ok(createFnMatch && updateFnMatch)
+
+  assert.match(createFnMatch[0], /buildRouteCreateInput\(/)
+  assert.match(updateFnMatch[0], /buildRouteUpdatePatch\(body\)/)
+
+  // 어느 라우트도 더 이상 notify_from/notify_to를 직접 비교하지 않는다 — 이 비교가
+  // 라우트 안에도 남아있으면 두 곳의 로직이 다시 어긋날 여지가 생긴다.
+  assert.doesNotMatch(createFnMatch[0], /notifyFrom === notifyTo/)
+  assert.doesNotMatch(updateFnMatch[0], /notify_from === .*notify_to/)
+})
+
+test('lib/routeSubscriptionValidation.ts가 notify_from === notify_to 동등성 검사를 유일하게 소유한다', () => {
+  const validationSource = readFileSync(
+    join(process.cwd(), 'lib/routeSubscriptionValidation.ts'),
+    'utf8',
+  )
 
   // isWithinNotifyWindow는 notify_from > notify_to 일 때만 자정 넘김으로 해석하므로
   // notify_from === notify_to (예: 09:00~09:00)는 그 1분만 통과하는 죽은 구독이 된다.
   assert.match(
-    body,
-    /if \(notifyFrom !== null && notifyFrom === notifyTo\) \{\s*\n\s*return NextResponse\.json\(\{ error: '[^']+' \}, \{ status: 400 \}\)/,
-    'notify_from === notify_to (둘 다 non-null) 는 400 이어야 한다',
+    validationSource,
+    /if \(notifyFrom !== null && notifyFrom === notifyTo\) \{\s*\n\s*return \{ ok: false, error: '[^']+' \}/,
+    'notify_from === notify_to (둘 다 non-null) 는 거부해야 한다',
   )
 
-  // null 가드가 없으면 종일 구독(둘 다 null)도 "같다"는 이유로 잘못 거부된다.
-  // 가드 존재를 텍스트로만 확인하지 않고, 정지 조건이 null 값을 포함하지 않는지
-  // 구조적으로 확인한다: 페어링 검사(둘 다 null 이거나 둘 다 non-null)가 동등성
-  // 검사보다 먼저 나오고, 동등성 검사 자체가 notifyFrom !== null 가드를 갖는다.
-  const pairingIdx = body.indexOf('(notifyFrom === null) !== (notifyTo === null)')
-  const equalityIdx = body.indexOf('notifyFrom !== null && notifyFrom === notifyTo')
+  // presence(키 존재 여부) 검사가 동등성 검사보다 먼저 나와야, 부분 업데이트에서
+  // 키 자체가 없는 경우(undefined)와 명시적으로 null인 경우가 뒤섞이지 않는다.
+  const pairingIdx = validationSource.indexOf('hasFrom !== hasTo')
+  const equalityIdx = validationSource.indexOf('notifyFrom !== null && notifyFrom === notifyTo')
   assert.notEqual(pairingIdx, -1)
   assert.notEqual(equalityIdx, -1)
-  assert.ok(pairingIdx < equalityIdx, '페어링 검사가 동등성 검사보다 먼저 나와야 한다')
-})
-
-test('PATCH는 notify_from === notify_to 를 400으로 거부하되, 둘 다 null로 되돌리는 것은 허용한다', () => {
-  const source = readItemRouteSource()
-
-  const updateFnMatch = source.match(/async function updateRoute\([\s\S]*?\n\}\n\nasync function deleteRoute/)
-  assert.ok(updateFnMatch)
-  const body = updateFnMatch[0]
-
-  assert.match(
-    body,
-    /if \(patch\.notify_from !== null && patch\.notify_from === patch\.notify_to\) \{\s*\n\s*return NextResponse\.json\(\{ error: '[^']+' \}, \{ status: 400 \}\)/,
-    'patch.notify_from === patch.notify_to (둘 다 non-null) 는 400 이어야 한다',
-  )
-
-  const pairingIdx = body.indexOf("('notify_from' in patch) !== ('notify_to' in patch)")
-  const equalityIdx = body.indexOf('patch.notify_from !== null && patch.notify_from === patch.notify_to')
-  assert.notEqual(pairingIdx, -1)
-  assert.notEqual(equalityIdx, -1)
-  assert.ok(pairingIdx < equalityIdx, '페어링 검사가 동등성 검사보다 먼저 나와야 한다')
+  assert.ok(pairingIdx < equalityIdx, 'presence 페어링 검사가 동등성 검사보다 먼저 나와야 한다')
 })
 
 test('네 핸들러 모두 withAxiomRoute로 감싸져 export된다', () => {

@@ -14,7 +14,14 @@ function loadRouteAlerts() {
   })
 
   const module = { exports: {} }
-  new Function('require', 'module', 'exports', outputText)(() => ({}), module, module.exports)
+  // lib/routeAlerts.ts는 순수 함수만 두는 파일이라 원래 import가 없어야 한다.
+  // 알 수 없는 import가 들어오면 즉시 throw해, 나중에 누군가 DB·네트워크
+  // 의존성을 몰래 추가해도 이 테스트가 감지하도록 한다 (location-points.test.mjs:11-31 관례).
+  const require = (specifier) => {
+    throw new Error(`Unexpected import in test: ${specifier}`)
+  }
+
+  new Function('require', 'module', 'exports', outputText)(require, module, module.exports)
   return module.exports
 }
 

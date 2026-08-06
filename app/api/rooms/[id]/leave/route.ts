@@ -120,6 +120,17 @@ async function leaveRoom(
     return NextResponse.json({ error: '채팅방을 나가지 못했습니다' }, { status: 500 })
   }
 
+  // 나갔다는 사실을 이력에 남긴다. room_participants 행은 위에서 삭제되었다.
+  const { error: historyError } = await admin
+    .from('room_participation_events')
+    .update({ left_at: new Date().toISOString() })
+    .eq('room_id', roomId)
+    .eq('user_id', user.id)
+
+  if (historyError) {
+    console.error('participation history leave error:', historyError)
+  }
+
   if (currentParticipants.length <= 1) {
     await admin
       .from('chat_rooms')

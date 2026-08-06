@@ -3,6 +3,7 @@ import webpush from 'web-push'
 import { withAxiomRoute } from '@/lib/axiom/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { LOCATIONS, type LocationType } from '@/lib/supabase'
+import { shouldNotify } from '@/lib/routeAlerts'
 
 // web-push 는 Node crypto 를 쓰므로 Edge 가 아닌 Node 런타임에서 실행.
 export const runtime = 'nodejs'
@@ -38,18 +39,24 @@ async function dispatchPush(request: Request) {
   }
 
   let messageId: string | undefined
+  let roomId: string | undefined
   try {
     const body = await request.json()
     messageId = body?.message_id
+    roomId = body?.room_id
   } catch {
     return NextResponse.json({ error: 'bad request' }, { status: 400 })
   }
 
-  if (!messageId) {
-    return NextResponse.json({ error: 'message_id required' }, { status: 400 })
+  if (!messageId && !roomId) {
+    return NextResponse.json({ error: 'message_id or room_id required' }, { status: 400 })
   }
 
   const admin = createAdminSupabase()
+
+  if (roomId) {
+    return dispatchRoomAlert(admin, roomId)
+  }
 
   const { data: message } = await admin
     .from('messages')
@@ -80,15 +87,6 @@ async function dispatchPush(request: Request) {
     return NextResponse.json({ ok: true, recipients: 0 })
   }
 
-  const { data: subscriptions } = await admin
-    .from('push_subscriptions')
-    .select('endpoint, p256dh, auth')
-    .in('user_id', recipientIds)
-
-  if (!subscriptions || subscriptions.length === 0) {
-    return NextResponse.json({ ok: true, sent: 0 })
-  }
-
   const senderName = sender?.nickname?.trim() || '익명'
   const label = routeLabel(room?.from_location, room?.to_location)
   const preview = (message.content ?? '').replace(/\s+/g, ' ').trim().slice(0, 80)
@@ -101,6 +99,24 @@ async function dispatchPush(request: Request) {
     tag: `room-${message.room_id}`,
   })
 
+  const result = await sendToSubscriptions(admin, recipientIds, payload)
+  return NextResponse.json(result)
+}
+
+async function sendToSubscriptions(
+  admin: ReturnType<typeof createAdminSupabase>,
+  recipientIds: string[],
+  payload: string,
+) {
+  if (recipientIds.length === 0) return { ok: true, sent: 0 }
+
+  const { data: subscriptions } = await admin
+    .from('push_subscriptions')
+    .select('endpoint, p256dh, auth')
+    .in('user_id', recipientIds)
+
+  if (!subscriptions || subscriptions.length === 0) return { ok: true, sent: 0 }
+
   const staleEndpoints: string[] = []
 
   await Promise.all(
@@ -112,7 +128,6 @@ async function dispatchPush(request: Request) {
         )
       } catch (error) {
         const statusCode = (error as { statusCode?: number })?.statusCode
-        // 만료/삭제된 구독은 정리
         if (statusCode === 404 || statusCode === 410) {
           staleEndpoints.push(sub.endpoint)
         } else {
@@ -126,7 +141,54 @@ async function dispatchPush(request: Request) {
     await admin.from('push_subscriptions').delete().in('endpoint', staleEndpoints)
   }
 
-  return NextResponse.json({ ok: true, sent: subscriptions.length - staleEndpoints.length })
+  return { ok: true, sent: subscriptions.length - staleEndpoints.length }
+}
+
+async function dispatchRoomAlert(
+  admin: ReturnType<typeof createAdminSupabase>,
+  roomId: string,
+) {
+  const { data: room } = await admin
+    .from('chat_rooms')
+    .select('id, from_location, to_location, created_by, departure_date, departure_time')
+    .eq('id', roomId)
+    .maybeSingle()
+
+  if (!room) {
+    return NextResponse.json({ ok: true, skipped: 'room-not-found' })
+  }
+
+  const { data: subscriptions } = await admin
+    .from('favorites')
+    .select('user_id, notify_enabled, notify_from, notify_to, notify_weekdays')
+    .eq('from_location', room.from_location)
+    .eq('to_location', room.to_location)
+    .eq('notify_enabled', true)
+
+  const now = new Date()
+  const recipientIds = (subscriptions ?? [])
+    .filter((sub) => sub.user_id !== room.created_by)   // 방을 만든 본인은 제외
+    .filter((sub) => shouldNotify(
+      { departure_date: room.departure_date, departure_time: room.departure_time },
+      sub,
+      now,
+    ))
+    .map((sub) => sub.user_id)
+
+  if (recipientIds.length === 0) {
+    return NextResponse.json({ ok: true, recipients: 0 })
+  }
+
+  const payload = JSON.stringify({
+    title: routeLabel(room.from_location, room.to_location),
+    body: `${room.departure_time.slice(0, 5)} 출발 방이 열렸어요`,
+    url: `/rooms/${room.id}`,
+    roomId: room.id,
+    tag: `route-${room.id}`,
+  })
+
+  const result = await sendToSubscriptions(admin, recipientIds, payload)
+  return NextResponse.json(result)
 }
 
 export const POST = withAxiomRoute(dispatchPush)

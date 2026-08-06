@@ -307,6 +307,35 @@ test('room joins go through a server route that verifies the session and uses th
   assert.doesNotMatch(schema, /create policy "Users can update their participation" on public\.room_participants/)
 })
 
+test('room history route only records participation for verified room_participants rows', () => {
+  const homeSource = readProjectFile('components/HomeClient.tsx')
+  const routeSource = readProjectFile('app/api/rooms/[id]/history/route.ts')
+
+  assert.match(homeSource, /fetch\(`\/api\/rooms\/\$\{room\.id\}\/history`,\s*\{\s*method:\s*'POST'/, 'room creation should record history via the server route')
+  assert.match(routeSource, /createAdminSupabase/)
+  assert.match(routeSource, /auth\.getUser\(\)/)
+
+  // roomId 는 참여자라면 누구나 관찰 가능하므로, 세션 인증만으로는 실제 참여를
+  // 증명하지 못한다. room_participants 에 실제 행이 있는지 먼저 확인해야 한다.
+  assert.match(
+    routeSource,
+    /\.from\('room_participants'\)[\s\S]*\.eq\('room_id', roomId\)[\s\S]*\.eq\('user_id', authUser\.id\)/,
+    'history route must verify the caller is an actual room participant before recording',
+  )
+  assert.match(routeSource, /if \(!participant\)/, 'history route must reject callers with no room_participants row')
+  assert.match(routeSource, /status: 403/, 'non-participants must be rejected, not silently recorded')
+
+  const participantCheckIndex = routeSource.indexOf(".from('room_participants')")
+  const historyUpsertIndex = routeSource.indexOf(".from('room_participation_events')")
+
+  assert.ok(participantCheckIndex >= 0, 'room_participants guard query must exist')
+  assert.ok(historyUpsertIndex >= 0, 'room_participation_events upsert must exist')
+  assert.ok(
+    participantCheckIndex < historyUpsertIndex,
+    'the participant guard must run before the participation_events upsert, not after',
+  )
+})
+
 test('room visibility and joinability follow departure time rules', () => {
   assert.equal(isRoomJoinable('2026-06-19', '12:00', new Date('2026-06-19T11:59:00+09:00')), true)
   assert.equal(isRoomJoinable('2026-06-19', '12:00', new Date('2026-06-19T12:00:00+09:00')), true)

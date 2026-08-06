@@ -24,6 +24,26 @@ async function recordRoomHistory(
   }
 
   const admin = createAdminSupabase()
+
+  // roomId 는 방 참여자라면 누구나 관찰 가능하므로, 세션 인증만으로는
+  // "실제로 그 방에 참여했는지"를 보장하지 못한다. room_participants 에
+  // 실제 행이 있는 경우에만 이력을 기록해, 참여한 적 없는 방에 대한 이력
+  // 위조나 나간 방의 left_at 을 되돌리는 것을 막는다.
+  const { data: participant, error: participantError } = await admin
+    .from('room_participants')
+    .select('id')
+    .eq('room_id', roomId)
+    .eq('user_id', authUser.id)
+    .maybeSingle()
+
+  if (participantError) {
+    return NextResponse.json({ error: '참여자 정보를 확인하지 못했습니다' }, { status: 500 })
+  }
+
+  if (!participant) {
+    return NextResponse.json({ error: '채팅방 참여자만 이력을 기록할 수 있습니다' }, { status: 403 })
+  }
+
   const { error: historyError } = await admin
     .from('room_participation_events')
     .upsert(

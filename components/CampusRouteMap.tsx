@@ -227,7 +227,13 @@ export default function CampusRouteMap({
       ? rooms
           .filter((room) => room.from_location === selectedFrom)
           .slice()
-          .sort((a, b) => getRoomSortKey(a).localeCompare(getRoomSortKey(b)))
+          // 지난 방은 목록에서 계속 보이되(Task 3), 항상 뒤로 밀어 눈에 덜 띄게 한다.
+          .sort((a, b) => {
+            const aPast = !isRoomJoinable(a.departure_date, a.departure_time)
+            const bPast = !isRoomJoinable(b.departure_date, b.departure_time)
+            if (aPast !== bPast) return aPast ? 1 : -1
+            return getRoomSortKey(a).localeCompare(getRoomSortKey(b))
+          })
       : [],
     [rooms, selectedFrom]
   )
@@ -635,12 +641,17 @@ export default function CampusRouteMap({
                           isMyRoom
                             ? 'border-primary-200 bg-primary-50/80 shadow-[inset_3px_0_0_#2782ff]'
                             : 'border-gray-100 bg-gray-50'
-                        }`}
+                        } ${isPastDeparture ? 'opacity-55' : ''}`}
                       >
                         <div className="min-w-0">
                           <div className="flex min-w-0 items-center gap-2 text-sm font-black text-gray-950">
                             <Clock className="h-4 w-4 shrink-0 text-primary-600" />
                             <span className="shrink-0">{formatRoomTime(room.departure_time)}</span>
+                            {isPastDeparture && (
+                              <span className="inline-flex items-center rounded-md bg-gray-100 px-1.5 py-0.5 text-[11px] font-black text-gray-500">
+                                출발함
+                              </span>
+                            )}
                             <span className="truncate text-xs font-extrabold text-gray-600">
                               ({LOCATIONS[room.to_location]})
                             </span>
@@ -665,7 +676,7 @@ export default function CampusRouteMap({
                               isMyRoom ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-950 hover:bg-gray-800'
                             }`}
                           >
-                            {isPastDeparture ? '지난 방' : isMyRoom ? '열기' : isFull ? '마감' : '입장'}
+                            {isPastDeparture ? '출발한 방' : isMyRoom ? '열기' : isFull ? '마감' : '입장하기'}
                           </button>
                         </div>
                       </div>

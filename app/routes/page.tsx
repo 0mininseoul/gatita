@@ -18,7 +18,7 @@ import { trackEvent } from '@/lib/analytics/client'
 import {
   WEEKDAY_LABELS,
   WEEKDAY_PRESETS,
-  resolveNotifyWindowChange,
+  isValidNotifyWindow,
   summarizeWeekdays,
   summarizeWindow,
   toNotifyTimeSeconds,
@@ -71,6 +71,10 @@ const WEEKDAY_PRESET_OPTIONS: { label: string; days: number[] }[] = [
 ]
 
 const ROUTES_SEEN_STORAGE_KEY = 'gatita:routes:seen_at'
+
+// route_subscribed의 source 값. Task 12의 "혼자 남아 방을 닫을 때" 유도 경로는
+// 'closed_alone'을 쓰므로, 이 화면(경로 추가 폼)에서 만든 구독임을 구분할 수 있게 한다.
+const ROUTE_SUBSCRIBE_SOURCE = 'routes_page'
 
 function routeKey(from: LocationType, to: LocationType) {
   return `${from}>${to}`
@@ -227,11 +231,11 @@ export default function RoutesPage() {
 
       if (!res.ok) throw new Error(json?.error ?? '알림 설정을 변경하지 못했습니다')
 
-      trackEvent('route_subscription_toggled', {
+      // push_enabled/push_disabled(설정 화면)와 같은 컨벤션: 방향마다 별도 이벤트 이름.
+      trackEvent(nextEnabled ? 'route_notify_enabled' : 'route_notify_disabled', {
         route_id: route.id,
         from_location: route.from_location,
         to_location: route.to_location,
-        enabled: nextEnabled,
       })
     } catch (error) {
       // 실패 시 낙관적 업데이트를 되돌린다
@@ -253,13 +257,21 @@ export default function RoutesPage() {
 
       if (!res.ok) throw new Error(json?.error ?? '경로를 삭제하지 못했습니다')
 
-      setRoutes((prev) => prev.filter((r) => r.id !== route.id))
-      trackEvent('route_subscription_deleted', {
-        route_id: route.id,
+      let nextRoutes: RouteSubscriptionRow[] = []
+      setRoutes((prev) => {
+        nextRoutes = prev.filter((r) => r.id !== route.id)
+        return nextRoutes
+      })
+      // design doc(docs/superpowers/specs/2026-08-06-route-subscription-alerts-design.md:571)의
+      // canonical 이벤트 계약: route_unsubscribed { from_location, to_location }.
+      trackEvent('route_unsubscribed', {
         from_location: route.from_location,
         to_location: route.to_location,
       })
       toast.success('경로를 삭제했어요')
+      // 추가 경로(handleSubmitForm)와 대칭: 삭제로 구독 집합이 바뀌었으니 폴백 목록도 다시 계산한다.
+      // 그렇지 않으면 방금 알림을 끈 경로의 방 카드가 stale 상태로 계속 보인다.
+      await loadOpenRooms(nextRoutes)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '경로를 삭제하지 못했습니다')
     } finally {
@@ -271,11 +283,15 @@ export default function RoutesPage() {
 
   const isRestrictedSelection = formFrom !== '' && formTo !== '' && isRestrictedRoutePair(formFrom, formTo)
   const isSameLocationSelection = formFrom !== '' && formFrom === formTo
+  // "직접 설정"일 때만 의미 있는 검증. 출발지/도착지 충돌과 같은 패턴으로, 값을 몰래
+  // 보정하지 않고 인라인 에러를 띄운 뒤 저장 버튼을 막는다.
+  const isSameTimeSelection = !formAllDay && !isValidNotifyWindow(formWindow.from, formWindow.to)
   const canSubmitForm =
     formFrom !== '' &&
     formTo !== '' &&
     !isSameLocationSelection &&
     !isRestrictedSelection &&
+    !isSameTimeSelection &&
     formWeekdays.length > 0 &&
     !formSubmitting
 
@@ -303,7 +319,9 @@ export default function RoutesPage() {
   }
 
   const handleWindowChange = (field: 'from' | 'to', value: string) => {
-    setFormWindow((prev) => resolveNotifyWindowChange(field, prev, value))
+    // 값을 몰래 보정하지 않는다 — 사용자가 고른 값을 그대로 반영하고, 시작=종료가 되면
+    // isSameTimeSelection이 인라인 에러를 띄우고 저장을 막는다(출발지/도착지 충돌과 동일 패턴).
+    setFormWindow((prev) => ({ ...prev, [field]: value }))
   }
 
   const resetForm = () => {
@@ -344,11 +362,17 @@ export default function RoutesPage() {
         return nextRoutes
       })
 
-      trackEvent('route_subscription_created', {
-        route_id: savedRoute.id,
+      // design doc(docs/superpowers/specs/2026-08-06-route-subscription-alerts-design.md:570)의
+      // canonical 이벤트 계약: route_subscribed { from_location, to_location, source,
+      // has_time_window, weekday_count }. has_time_window/weekday_count는 이 기능의 성패
+      // 지표(대부분 종일이면 시간대 설계가 과잉, 다수가 설정하면 초안 판단이 틀렸음을 확인)라
+      // 반드시 채운다. source는 Task 12의 'closed_alone' 유도 경로와 구분하기 위한 값이다.
+      trackEvent('route_subscribed', {
         from_location: savedRoute.from_location,
         to_location: savedRoute.to_location,
-        all_day: formAllDay,
+        source: ROUTE_SUBSCRIBE_SOURCE,
+        has_time_window: !formAllDay,
+        weekday_count: formWeekdays.length,
       })
       toast.success('알림 경로를 추가했어요')
       resetForm()
@@ -613,6 +637,13 @@ export default function RoutesPage() {
                       className="input-field settings-input"
                     />
                   </div>
+                </div>
+              )}
+
+              {isSameTimeSelection && (
+                <div className="settings-error mt-1.5">
+                  <AlertCircle className="h-4 w-4" aria-hidden="true" />
+                  시작 시각과 종료 시각을 다르게 설정해주세요
                 </div>
               )}
             </div>

@@ -80,58 +80,22 @@ test('weekdaysEqual: 순서 무관하게 집합만 비교한다', () => {
   assert.equal(weekdaysEqual([1, 2, 3, 4, 5], [1, 2, 3, 4]), false)
 })
 
-// ---- resolveNotifyWindowChange ----
-// UI에서 notify_from === notify_to 조합을 애초에 고를 수 없게 막는 핵심 로직.
-// Task 6 리뷰 발견 사항의 회귀 가드: 동일 시각은 자정 넘김 분기를 안 타고
-// "그 1분만 통과"하는 죽은 구독이 된다.
+// ---- isValidNotifyWindow ----
+// UI가 notify_from === notify_to 조합에서 저장을 막을 때 쓰는 판정. 리뷰에서
+// 지적된 "값을 몰래 밀어내는" 초안(resolveNotifyWindowChange)을 걷어내고, 출발지/도착지
+// 충돌과 같은 패턴(인라인 에러 + 저장 버튼 비활성화)으로 통일하면서 그 판정만 순수 함수로 남긴다.
 
-test('resolveNotifyWindowChange: from을 바꿔도 to와 겹치지 않으면 그대로 반영', () => {
-  const { resolveNotifyWindowChange } = loadRouteSummary()
-  const next = resolveNotifyWindowChange('from', { from: '17:00', to: '20:00' }, '18:00')
-  assert.deepEqual(next, { from: '18:00', to: '20:00' })
+test('isValidNotifyWindow: 시작과 종료가 다르면 유효하다', () => {
+  const { isValidNotifyWindow } = loadRouteSummary()
+  assert.equal(isValidNotifyWindow('17:00', '20:00'), true)
+  // 자정을 넘는 구간(22:00~02:00)도 값 자체가 다르므로 유효하다
+  assert.equal(isValidNotifyWindow('22:00', '02:00'), true)
 })
 
-test('resolveNotifyWindowChange: to를 바꿔도 from과 겹치지 않으면 그대로 반영', () => {
-  const { resolveNotifyWindowChange } = loadRouteSummary()
-  const next = resolveNotifyWindowChange('to', { from: '17:00', to: '20:00' }, '21:00')
-  assert.deepEqual(next, { from: '17:00', to: '21:00' })
-})
-
-test('resolveNotifyWindowChange: from을 to와 같은 값으로 바꾸면 to를 1분 밀어낸다', () => {
-  const { resolveNotifyWindowChange } = loadRouteSummary()
-  const next = resolveNotifyWindowChange('from', { from: '17:00', to: '20:00' }, '20:00')
-  assert.deepEqual(next, { from: '20:00', to: '20:01' })
-  assert.notEqual(next.from, next.to)
-})
-
-test('resolveNotifyWindowChange: to를 from과 같은 값으로 바꾸면 to를 1분 밀어낸다', () => {
-  const { resolveNotifyWindowChange } = loadRouteSummary()
-  const next = resolveNotifyWindowChange('to', { from: '17:00', to: '20:00' }, '17:00')
-  assert.deepEqual(next, { from: '17:00', to: '17:01' })
-  assert.notEqual(next.from, next.to)
-})
-
-test('resolveNotifyWindowChange: 자정 경계에서도 from !== to를 유지한다', () => {
-  const { resolveNotifyWindowChange } = loadRouteSummary()
-  // 23:59로 맞추면 00:00으로 감아 넘어간다
-  const next = resolveNotifyWindowChange('from', { from: '22:00', to: '23:59' }, '23:59')
-  assert.deepEqual(next, { from: '23:59', to: '00:00' })
-  assert.notEqual(next.from, next.to)
-})
-
-test('resolveNotifyWindowChange: 연속으로 여러 번 바꿔도 항상 from !== to', () => {
-  const { resolveNotifyWindowChange } = loadRouteSummary()
-  let state = { from: '17:00', to: '20:00' }
-  const moves = [
-    ['from', '20:00'],
-    ['to', '20:01'],
-    ['from', '20:01'],
-    ['to', '00:00'],
-  ]
-  for (const [field, value] of moves) {
-    state = resolveNotifyWindowChange(field, state, value)
-    assert.notEqual(state.from, state.to)
-  }
+test('isValidNotifyWindow: 시작과 종료가 같으면 무효하다', () => {
+  const { isValidNotifyWindow } = loadRouteSummary()
+  assert.equal(isValidNotifyWindow('17:00', '17:00'), false)
+  assert.equal(isValidNotifyWindow('00:00', '00:00'), false)
 })
 
 // ---- toNotifyTimeSeconds ----

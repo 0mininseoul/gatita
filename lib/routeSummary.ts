@@ -40,41 +40,14 @@ export function weekdaysEqual(a: number[], b: number[]): boolean {
   return sortedKey(a) === sortedKey(b)
 }
 
-function toMinutesOfDay(time: string): number {
-  const [hour, minute] = time.split(':').map(Number)
-  return hour * 60 + minute
-}
-
-function minutesToTime(totalMinutes: number): string {
-  // 24시간(1440분) 기준으로 감아, 자정을 넘겨도 항상 유효한 'HH:MM'을 돌려준다.
-  const normalized = ((totalMinutes % 1440) + 1440) % 1440
-  const hour = Math.floor(normalized / 60)
-  const minute = normalized % 60
-  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
-}
-
-// 알림 시작/종료 시각 중 하나를 사용자가 바꿨을 때, 두 값이 같아지는 조합을
-// 선택 단계에서 원천 차단한다. `notify_from === notify_to`는 서버(400)도 막지만,
-// 자정 넘김이 아닌 한 "그 1분만 통과"하는 사실상 죽은 구독이 되므로(Task 6 리뷰에서
-// 발견) UI에서 애초에 고를 수 없게 한다. 같아지면 방금 바꾼 값의 반대편을 1분
-// 밀어내 항상 from !== to를 유지한다 — 이전 상태가 유효(from !== to)했다면
-// 이 함수가 반환하는 다음 상태도 항상 유효하다.
-export function resolveNotifyWindowChange(
-  field: 'from' | 'to',
-  current: { from: string; to: string },
-  nextValue: string,
-): { from: string; to: string } {
-  if (field === 'from') {
-    if (nextValue === current.to) {
-      return { from: nextValue, to: minutesToTime(toMinutesOfDay(nextValue) + 1) }
-    }
-    return { from: nextValue, to: current.to }
-  }
-
-  if (nextValue === current.from) {
-    return { from: current.from, to: minutesToTime(toMinutesOfDay(nextValue) + 1) }
-  }
-  return { from: current.from, to: nextValue }
+// 알림 시작·종료 시각이 서로 달라 유효한 구간인지 판정한다. `notify_from === notify_to`는
+// 서버(lib/routeSubscriptionValidation.ts)도 400으로 막지만, 자정 넘김이 아닌 한 "그 1분만
+// 통과"하는 사실상 죽은 구독이 되므로(Task 6 리뷰에서 발견) 클라이언트에서도 저장 전에
+// 막는다. 값을 몰래 밀어내는 대신(초안이었으나 field==='to' 분기에서 사용자가 방금 고른
+// 값 자체를 대체해버려 리뷰에서 지적됨), 출발지/도착지 충돌과 같은 패턴 — 인라인 에러를
+// 띄우고 저장을 막는다 — 으로 통일한다.
+export function isValidNotifyWindow(from: string, to: string): boolean {
+  return from !== to
 }
 
 // <input type="time">이 주는 'HH:MM'을 API/DB가 쓰는 'HH:MM:SS'로 바꾼다.

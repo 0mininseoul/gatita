@@ -119,14 +119,30 @@ create table public.user_moderation_actions (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
--- Favorites table
+-- Favorites table. 즐겨찾기 겸 "경로 구독" — notify_* 컬럼으로 알림 조건을 정의한다.
+-- notify_from > notify_to 이면 자정을 넘는 구간으로 해석한다 (예: 22:00~02:00).
+-- 둘 다 null 이면 종일. 이 대소 관계를 의미로 쓰므로 from/to 순서에 제약을 걸지 않는다.
 create table public.favorites (
   id uuid default uuid_generate_v4() primary key,
   user_id uuid references public.users(id) on delete cascade not null,
   from_location location_type not null,
   to_location location_type not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  unique(user_id, from_location, to_location)
+  notify_enabled boolean not null default true,
+  notify_from time,
+  notify_to time,
+  -- 0=일요일 … 6=토요일. 빈 배열은 "알림 없음"과 같으므로 금지한다.
+  notify_weekdays smallint[] not null default '{0,1,2,3,4,5,6}',
+  unique(user_id, from_location, to_location),
+  constraint favorites_notify_weekdays_valid check (
+    array_length(notify_weekdays, 1) between 1 and 7
+    and notify_weekdays <@ '{0,1,2,3,4,5,6}'::smallint[]
+  ),
+  -- 한쪽만 설정된 반쪽 구간을 막는다.
+  constraint favorites_notify_window_paired check (
+    (notify_from is null and notify_to is null)
+    or (notify_from is not null and notify_to is not null)
+  )
 );
 
 -- 매칭 이력 보존용 append-only 테이블.
@@ -587,6 +603,8 @@ create index user_moderation_actions_unacknowledged_warning_idx
   on public.user_moderation_actions (user_id, created_at desc)
   where action = 'warning' and acknowledged_at is null;
 create index favorites_user_id_idx on public.favorites (user_id);
+create index favorites_route_idx
+  on public.favorites (from_location, to_location) where notify_enabled;
 
 -- 참여 이력: 관리자만 조회. 쓰기는 service_role 전용(정책 없음 = 일반 클라이언트 차단).
 create policy "Admins can read participation events"

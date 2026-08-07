@@ -1361,6 +1361,18 @@ export default function HomeClient() {
       const room = mapRooms.find((mapRoom) => mapRoom.id === roomId)
       if (!room) return
 
+      // I-2: 내 방이면 지난 방이어도(정산 채팅이 출발 후에 가장 필요) 그대로 열어야 하므로,
+      // isMyRoom 조기 반환을 isRoomJoinable 가드보다 먼저 둔다. join API를 타지 않고
+      // router.push만 하므로 서버 가드(app/api/rooms/[id]/join/route.ts)와는 무관하다.
+      if (room.participants?.some((participant) => participant.user_id === user.id)) {
+        trackEvent('room_reopened', {
+          room_id: roomId,
+          source: 'map_bottom_sheet',
+        })
+        router.push(`/rooms/${roomId}`)
+        return
+      }
+
       if (!isRoomJoinable(room.departure_date, room.departure_time)) {
         toast.error('이미 지난 출발 시간입니다')
         trackEvent('room_join_blocked', {
@@ -1369,15 +1381,6 @@ export default function HomeClient() {
           from_location: room.from_location,
           to_location: room.to_location,
         })
-        return
-      }
-
-      if (room.participants?.some((participant) => participant.user_id === user.id)) {
-        trackEvent('room_reopened', {
-          room_id: roomId,
-          source: 'map_bottom_sheet',
-        })
-        router.push(`/rooms/${roomId}`)
         return
       }
 

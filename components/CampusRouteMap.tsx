@@ -704,12 +704,15 @@ export default function CampusRouteMap({
                           <button
                             type="button"
                             onClick={() => onJoinRoom(room.id)}
-                            disabled={isJoinDisabled || isPastDeparture}
+                            // 탑승 후 정산(계좌 공유·송금)이 채팅방에서 이뤄지므로, 출발 이후야말로
+                            // 채팅이 가장 필요한 시점이다(I-2). 내 방이면 지난 방이어도 입장(열기)을
+                            // 막지 않는다 — 흐림/배지는 유지해 "출발한 건 사실"임은 계속 드러낸다.
+                            disabled={isJoinDisabled || (isPastDeparture && !isMyRoom)}
                             className={`rounded-md px-3 py-1.5 text-xs font-black text-white transition disabled:bg-gray-300 ${
                               isMyRoom ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-950 hover:bg-gray-800'
                             }`}
                           >
-                            {isPastDeparture ? '출발한 방' : isMyRoom ? '열기' : isFull ? '마감' : '입장하기'}
+                            {isPastDeparture && !isMyRoom ? '출발한 방' : isMyRoom ? '열기' : isFull ? '마감' : '입장하기'}
                           </button>
                         </div>
                       </div>

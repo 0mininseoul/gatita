@@ -159,14 +159,20 @@ function buildStats(rooms: CampusMapRoom[], currentUserId?: string) {
     if (isMyRoom) {
       currentOriginStat.myRoomCount += 1
     }
-    currentOriginStat.nextTime =
-      !currentOriginStat.nextSortKey || roomSortKey < currentOriginStat.nextSortKey
-        ? room.departure_time
-        : currentOriginStat.nextTime
-    currentOriginStat.nextSortKey =
-      !currentOriginStat.nextSortKey || roomSortKey < currentOriginStat.nextSortKey
-        ? roomSortKey
-        : currentOriginStat.nextSortKey
+    // "다음 출발"의 후보는 아직 탑승 가능한(출발 전) 방으로만 한정한다(I-1). 당일 방은
+    // 출발 시각이 지나도 지도에 계속 남아있으므로(Task 3), 지난 방까지 후보에 넣으면
+    // 밤에 "다음 출발 08:30"처럼 이미 지나간 시각이 뜬다. roomCount는 지난 방을 그대로
+    // 포함한다 — "오늘 이 지점에서 사람들이 움직였다"는 설계 의도라 건드리지 않는다.
+    if (isRoomJoinable(room.departure_date, room.departure_time)) {
+      currentOriginStat.nextTime =
+        !currentOriginStat.nextSortKey || roomSortKey < currentOriginStat.nextSortKey
+          ? room.departure_time
+          : currentOriginStat.nextTime
+      currentOriginStat.nextSortKey =
+        !currentOriginStat.nextSortKey || roomSortKey < currentOriginStat.nextSortKey
+          ? roomSortKey
+          : currentOriginStat.nextSortKey
+    }
     originStats.set(room.from_location, currentOriginStat)
   })
 

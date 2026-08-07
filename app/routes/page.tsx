@@ -16,6 +16,7 @@ import { getNotificationPermission } from '@/lib/push'
 import { isInstalled } from '@/lib/pwa'
 import { trackEvent } from '@/lib/analytics/client'
 import {
+  ROUTES_SEEN_STORAGE_KEY,
   WEEKDAY_LABELS,
   WEEKDAY_PRESETS,
   isValidNotifyWindow,
@@ -69,8 +70,6 @@ const WEEKDAY_PRESET_OPTIONS: { label: string; days: number[] }[] = [
   { label: '평일', days: [...WEEKDAY_PRESETS.weekday] },
   { label: '주말', days: [...WEEKDAY_PRESETS.weekend] },
 ]
-
-const ROUTES_SEEN_STORAGE_KEY = 'gatita:routes:seen_at'
 
 // route_subscribed의 source 값. Task 12의 "혼자 남아 방을 닫을 때" 유도 경로는
 // 'closed_alone'을 쓰므로, 이 화면(경로 추가 폼)에서 만든 구독임을 구분할 수 있게 한다.

@@ -3,6 +3,12 @@
 // 의존 없이 순수 함수만 두어, 소스 패턴이 아니라 실제로 함수를 호출하는 테스트로
 // 커버한다(test/route-summary-helpers.test.mjs).
 
+// /routes 화면(app/routes/page.tsx)이 진입 시 기록하는 마지막 확인 시각 키.
+// FAB 미확인 배지(components/HomeClient.tsx)가 같은 키를 읽어 "새로 열린 방" 표시를
+// 판정한다 — 두 파일이 각자 리터럴로 선언하면 오타 하나로 배지가 영원히 켜진 채
+// 남는 조용한 실패가 생긴다(I-4). 이 상수를 유일한 소스로 두고 양쪽에서 import한다.
+export const ROUTES_SEEN_STORAGE_KEY = 'gatita:routes:seen_at'
+
 export const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'] as const
 
 export const WEEKDAY_PRESETS = {

@@ -105,3 +105,25 @@ test('toNotifyTimeSeconds: HH:MM에 :00을 붙인다', () => {
   assert.equal(toNotifyTimeSeconds('17:00'), '17:00:00')
   assert.equal(toNotifyTimeSeconds('00:00'), '00:00:00')
 })
+
+// ---- ROUTES_SEEN_STORAGE_KEY ----
+// I-4: app/routes/page.tsx(쓰기)와 components/HomeClient.tsx(읽기)가 이 키를 각자
+// 리터럴로 선언했었다 — 한쪽 오타가 "새로 열린 방" 배지 계약을 조용히 깨뜨릴 수 있으므로,
+// 값 자체와 양쪽 모두 공유 상수를 import하는지(로컬 재선언이 없는지)를 단언한다.
+
+test('ROUTES_SEEN_STORAGE_KEY: 값은 gatita:routes:seen_at', () => {
+  const { ROUTES_SEEN_STORAGE_KEY } = loadRouteSummary()
+  assert.equal(ROUTES_SEEN_STORAGE_KEY, 'gatita:routes:seen_at')
+})
+
+test('ROUTES_SEEN_STORAGE_KEY: HomeClient와 /routes 페이지 둘 다 lib/routeSummary에서 import하고, 로컬 리터럴을 다시 선언하지 않는다', () => {
+  const homeClientSource = readFileSync(join(process.cwd(), 'components/HomeClient.tsx'), 'utf8')
+  const routesPageSource = readFileSync(join(process.cwd(), 'app/routes/page.tsx'), 'utf8')
+
+  assert.match(homeClientSource, /import \{ ROUTES_SEEN_STORAGE_KEY \} from '@\/lib\/routeSummary'/)
+  assert.match(routesPageSource, /import \{[\s\S]*?ROUTES_SEEN_STORAGE_KEY[\s\S]*?\} from '@\/lib\/routeSummary'/)
+
+  // 로컬 재선언이 남아있으면 계약이 다시 갈라질 수 있다.
+  assert.doesNotMatch(homeClientSource, /const ROUTES_SEEN_STORAGE_KEY = /)
+  assert.doesNotMatch(routesPageSource, /const ROUTES_SEEN_STORAGE_KEY = /)
+})

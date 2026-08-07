@@ -25,6 +25,7 @@ import { getNotificationPermission, isPushSupported, isSubscribedToPush, subscri
 import { PREVIEW_TEST_ACCOUNTS, isPreviewTestLoginEnabled } from '@/lib/previewTestAccounts'
 import { hasServiceShareIntent, removeServiceShareIntent, shareService } from '@/lib/serviceShare'
 import { identifyAnalyticsUser, shouldSuppressAnalyticsForUser, suppressAnalyticsForCurrentDevice, trackEvent } from '@/lib/analytics/client'
+import { ROUTES_SEEN_STORAGE_KEY } from '@/lib/routeSummary'
 import { AlertTriangle, ArrowRight, Ban, Bell, Clock, MessageSquareText, Share2, Star, Settings, Users, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -78,8 +79,9 @@ type MyProfilePayload = {
 // intra-session navigation back to the map (it was already shown today).
 const PWA_PROMPT_LAST_SHOWN_KEY = 'gatita:pwa-prompt-last-shown'
 const ROUTE_COACHMARK_STORAGE_KEY = 'gatita:route-coachmark-seen'
-// Task 10(app/routes/page.tsx)이 /routes 진입 시 기록하는 마지막 확인 시각. FAB 미확인 배지가 같은 키를 읽는다.
-const ROUTES_SEEN_STORAGE_KEY = 'gatita:routes:seen_at'
+// ROUTES_SEEN_STORAGE_KEY(app/routes/page.tsx가 /routes 진입 시 기록하는 마지막 확인 시각)는
+// lib/routeSummary.ts에서 import한다 — I-4: 두 파일이 각자 리터럴을 선언하면 오타로
+// 계약이 조용히 깨진다.
 
 // Local calendar day as YYYY-MM-DD (en-CA yields ISO-like format in local tz).
 const getLocalDateKey = () => new Date().toLocaleDateString('en-CA')

@@ -514,7 +514,10 @@ function RoutesPageContent() {
         <section className="settings-section" aria-labelledby="routes-subscribed-heading">
           <div className="settings-section-heading">
             <h3 id="routes-subscribed-heading">구독한 경로</h3>
-            <p>알림을 받을 경로예요</p>
+            {/* I-5: 토글은 푸시만 끄고 이 목록/앱 내 폴백은 계속 보인다(사용자 결정).
+                라벨이 그냥 "알림"이면 "이 경로 안 볼래"로 읽히므로, 무엇이 꺼지는지와
+                앱 안에서는 계속 보인다는 점을 여기서 한 번 명시한다. */}
+            <p>토글은 푸시 알림만 켜고 꺼요 · 꺼도 이 목록과 열린 방은 계속 보여요</p>
           </div>
 
           {routes.length === 0 ? (
@@ -536,7 +539,10 @@ function RoutesPageContent() {
                       </p>
                       <p className="mt-0.5 truncate text-[0.72rem] font-semibold text-gray-500">
                         {summarizeWindow(route.notify_from, route.notify_to)} · {summarizeWeekdays(route.notify_weekdays)}
-                        {!route.notify_enabled && ' · 알림 꺼짐'}
+                        {/* "알림 꺼짐"이라고만 하면 이 경로 전체를 안 본다는 뜻으로 읽힌다.
+                            실제로는 푸시만 꺼지고 이 목록/앱 내 폴백은 계속 보이므로(I-5,
+                            사용자 결정) 범위를 "푸시"로 명시한다. */}
+                        {!route.notify_enabled && ' · 푸시 꺼짐'}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
@@ -544,7 +550,7 @@ function RoutesPageContent() {
                         type="button"
                         role="switch"
                         aria-checked={route.notify_enabled}
-                        aria-label={`${label} 알림 ${route.notify_enabled ? '끄기' : '켜기'}`}
+                        aria-label={`${label} 푸시 알림 ${route.notify_enabled ? '끄기' : '켜기'}`}
                         onClick={() => handleToggleNotify(route)}
                         disabled={busy}
                         className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg disabled:opacity-50"

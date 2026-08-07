@@ -128,6 +128,7 @@ async function sendToSubscriptions(
         )
       } catch (error) {
         const statusCode = (error as { statusCode?: number })?.statusCode
+        // 만료/삭제된 구독은 정리
         if (statusCode === 404 || statusCode === 410) {
           staleEndpoints.push(sub.endpoint)
         } else {

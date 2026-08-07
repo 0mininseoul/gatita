@@ -159,12 +159,19 @@ async function dispatchRoomAlert(
     return NextResponse.json({ ok: true, skipped: 'room-not-found' })
   }
 
-  const { data: subscriptions } = await admin
+  const { data: subscriptions, error: favoritesError } = await admin
     .from('favorites')
     .select('user_id, notify_enabled, notify_from, notify_to, notify_weekdays')
     .eq('from_location', room.from_location)
     .eq('to_location', room.to_location)
     .eq('notify_enabled', true)
+
+  if (favoritesError) {
+    // 조회 실패를 로그로 남긴다 — 안 그러면 "수신자 0명"이 구독자가 없어서인지
+    // 쿼리가 실패해서인지 구분할 수 없다. 응답은 막지 않고 빈 배열로 계속
+    // 진행한다 — 알림 조회 실패가 방 생성 트리거 자체를 막아서는 안 된다.
+    console.error('Fetch route subscription favorites error:', favoritesError)
+  }
 
   const now = new Date()
   const recipientIds = (subscriptions ?? [])

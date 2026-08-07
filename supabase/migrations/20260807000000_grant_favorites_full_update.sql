@@ -1,0 +1,20 @@
+-- 최종 리뷰 C-1: 20260806093000이 PATCH 전용으로 notify_* 4개 컬럼만 update grant를
+-- 좁혔더니 POST /api/routes 의 upsert가 죽었다.
+--
+-- .upsert({ user_id, from_location, to_location, notify_enabled, notify_from, notify_to,
+-- notify_weekdays }, { onConflict: 'user_id,from_location,to_location' }) 를 PostgREST가
+-- resolution=merge-duplicates 로 처리하면 INSERT ... ON CONFLICT DO UPDATE SET
+-- <payload의 모든 컬럼> = EXCLUDED.<컬럼> 으로 전개된다. PostgreSQL은 ON CONFLICT DO UPDATE
+-- 문에서 실제 충돌 발생 여부와 무관하게 SET 대상 컬럼 전체(user_id/from_location/
+-- to_location 포함)에 ACL_UPDATE 를 검사하므로, notify_* 컬럼만 update grant가 있으면
+-- 모든 구독 생성 요청이 permission denied 로 500 이 된다. 세 유도 지점(지도 하단 시트,
+-- /routes 폼, Task 12의 '혼자 남아 방을 닫을 때' 유도)이 전부 이 라우트를 쓰므로 기능
+-- 전체가 죽는다.
+--
+-- RLS 정책("Users can manage own favorites" for all using (auth.uid() = user_id))이 행을
+-- 스코프하고, with check 를 생략했으므로 using 식이 삽입/갱신 검증에도 그대로 쓰인다 —
+-- 그래서 테이블 전체 update grant로 넓혀도 소유자 이전(다른 user_id로 갱신)은 여전히
+-- 불가능하다. 컬럼을 좁힐 이유가 없었다.
+--
+-- grant 는 원래 idempotent라 재실행 가드가 필요 없다.
+grant update on table public.favorites to authenticated;

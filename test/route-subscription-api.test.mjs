@@ -215,22 +215,28 @@ test('응답 select 목록은 RouteSubscriptionRow 필드와 일치한다', () =
   assert.match(itemSource, new RegExp(`const SELECT = '${expectedSelect}'`))
 })
 
-test('favorites 테이블에 notify_* 컬럼 update grant가 있다 (PATCH가 동작하려면 필요)', () => {
+test('favorites 테이블에 upsert가 요구하는 테이블 전체 update grant가 있다 (POST/PATCH 둘 다 동작하려면 필요)', () => {
   // favorites는 원래 select, insert, delete만 부여되어 update grant가 없었다.
-  // RLS 정책이 update를 허용해도 명시적 grant가 없으면 PostgREST가 permission denied로
-  // 막으므로, PATCH 라우트가 실제로 동작하려면 이 grant가 스키마/마이그레이션에 있어야 한다.
+  // 이후 PATCH 전용으로 notify_* 4개 컬럼만 좁힌 grant를 추가했지만(20260806093000),
+  // POST /api/routes의 upsert(.upsert(..., { onConflict: 'user_id,from_location,to_location' }))는
+  // PostgREST가 ON CONFLICT DO UPDATE SET <payload의 모든 컬럼> = EXCLUDED.<컬럼>으로
+  // 전개하고, PostgreSQL은 충돌 발생 여부와 무관하게 SET 대상 전체 컬럼(user_id/
+  // from_location/to_location 포함)에 ACL_UPDATE를 검사한다. notify_* 컬럼만 좁힌 grant는
+  // 이 upsert 경로를 permission denied로 깼다(C-1 최종 리뷰 발견). 20260807000000이
+  // 테이블 전체 update grant로 넓혔다 — RLS(auth.uid() = user_id, using만 지정)가 행을
+  // 스코프하므로 소유자 이전은 여전히 불가능하다.
   const schema = readFileSync(join(process.cwd(), 'supabase_schema.sql'), 'utf8')
   assert.match(
     schema,
-    /grant update \(notify_enabled, notify_from, notify_to, notify_weekdays\)\s*\n\s*on table public\.favorites to authenticated;/,
+    /grant select, insert, update, delete on table public\.favorites to authenticated;/,
   )
 
   const migration = readFileSync(
-    join(process.cwd(), 'supabase/migrations/20260806093000_grant_favorites_notify_update.sql'),
+    join(process.cwd(), 'supabase/migrations/20260807000000_grant_favorites_full_update.sql'),
     'utf8',
   )
   assert.match(
     migration,
-    /grant update \(notify_enabled, notify_from, notify_to, notify_weekdays\)\s*\n\s*on table public\.favorites to authenticated;/,
+    /grant update on table public\.favorites to authenticated;/,
   )
 })

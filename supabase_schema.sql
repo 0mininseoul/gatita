@@ -215,11 +215,14 @@ grant all on table public.room_participants to service_role;
 grant select, insert on table public.messages to authenticated;
 grant select, insert, update on table public.reports to authenticated;
 grant select, insert on table public.user_moderation_actions to authenticated;
-grant select, insert, delete on table public.favorites to authenticated;
--- 경로 구독 API(PATCH /api/routes/[id])가 notify_* 값을 수정한다. from_location 등
--- 나머지 컬럼은 이 API의 수정 대상이 아니므로 notify_* 컬럼에만 update를 부여한다.
-grant update (notify_enabled, notify_from, notify_to, notify_weekdays)
-  on table public.favorites to authenticated;
+-- 경로 구독 API가 notify_* 값을 수정/생성한다. 처음에는 PATCH 전용으로 notify_* 4개
+-- 컬럼만 update grant를 좁혔었지만(20260806093000), POST /api/routes 의
+-- upsert(ON CONFLICT DO UPDATE)는 충돌 발생 여부와 무관하게 SET 대상 전체 컬럼
+-- (user_id/from_location/to_location 포함)에 ACL_UPDATE를 요구해 모든 구독 생성 요청이
+-- permission denied로 실패했다(C-1 최종 리뷰 발견). 20260807000000이 테이블 전체
+-- update grant로 넓혔다 — RLS(auth.uid() = user_id, using만 지정)가 행을 스코프하므로
+-- 소유자 이전은 여전히 불가능하다.
+grant select, insert, update, delete on table public.favorites to authenticated;
 
 -- RLS Policies
 -- Users: public profile fields only. Private fields live in user_private_profiles.

@@ -101,6 +101,12 @@ function RoutesPageContent() {
   const searchParams = useSearchParams()
   const supabase = useMemo(() => createClient(), [])
 
+  // 안내 메일 CTA(lib/route-alert-email.ts)가 ?utm_campaign=route_alerts로 이 화면에
+  // 들어온다. "안내 메일 → 구독 전환율" 지표(design doc 550행)를 재려면 route_subscribed에
+  // 이 값을 실어야 하므로, 진입 시점 쿼리를 한 번 읽어 상태로 고정해둔다(폼 제출 시점에는
+  // 쿼리가 없을 수도 있으므로 useSearchParams()를 그때 다시 읽지 않는다).
+  const [utmCampaign] = useState(() => searchParams.get('utm_campaign'))
+
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -394,10 +400,15 @@ function RoutesPageContent() {
       // has_time_window, weekday_count }. has_time_window/weekday_count는 이 기능의 성패
       // 지표(대부분 종일이면 시간대 설계가 과잉, 다수가 설정하면 초안 판단이 틀렸음을 확인)라
       // 반드시 채운다. source는 Task 12의 'closed_alone' 유도 경로와 구분하기 위한 값이다.
+      // utm_campaign이 안내 메일 것(route_alerts)이면 source를 'feature_email'로 덮어써
+      // "안내 메일 → 구독 전환율"을 amplitude에서 곧바로 집계할 수 있게 한다. utm_campaign
+      // 자체도 함께 실어 다른 캠페인 유입도 나중에 구분할 수 있게 한다 — null이면
+      // sanitizeProperties(lib/analytics/client.ts)가 걸러내 프로퍼티에서 아예 빠진다.
       trackEvent('route_subscribed', {
         from_location: savedRoute.from_location,
         to_location: savedRoute.to_location,
-        source: ROUTE_SUBSCRIBE_SOURCE,
+        source: utmCampaign === 'route_alerts' ? 'feature_email' : ROUTE_SUBSCRIBE_SOURCE,
+        utm_campaign: utmCampaign,
         has_time_window: !formAllDay,
         weekday_count: formWeekdays.length,
       })

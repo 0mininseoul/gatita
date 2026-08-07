@@ -96,7 +96,11 @@ export async function sendRouteAlertEmail({ userId, email, name }: { userId: str
   })
 
   if (!response.ok) {
-    throw new Error(`Resend route alert email 발송 실패: ${response.status}`)
+    // 상태 코드만으로는 원인(잘못된 from 주소, 형식 오류 등)을 알기 어려워
+    // 실패 응답 바디도 함께 남긴다 — scripts/send-route-alert-email.mjs가
+    // 이 함수를 그대로 호출하므로 발송 스크립트의 에러 로그에도 그대로 반영된다.
+    const body = await response.text().catch(() => '')
+    throw new Error(`Resend route alert email 발송 실패: ${response.status} ${body}`)
   }
 
   return response.json() as Promise<{ id: string }>

@@ -27,8 +27,8 @@ async function recordRoomHistory(
 
   // roomId 는 방 참여자라면 누구나 관찰 가능하므로, 세션 인증만으로는
   // "실제로 그 방에 참여했는지"를 보장하지 못한다. room_participants 에
-  // 실제 행이 있는 경우에만 이력을 기록해, 참여한 적 없는 방에 대한 이력
-  // 위조나 나간 방의 left_at 을 되돌리는 것을 막는다.
+  // 실제 행이 있는 경우에만 이력을 기록해, 참여한 적 없는 방에 joined
+  // 이벤트를 위조로 끼워넣는 것을 막는다.
   const { data: participant, error: participantError } = await admin
     .from('room_participants')
     .select('id')

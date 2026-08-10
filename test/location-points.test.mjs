@@ -325,14 +325,19 @@ test('room history route only records participation for verified room_participan
   assert.match(routeSource, /if \(!participant\)/, 'history route must reject callers with no room_participants row')
   assert.match(routeSource, /status: 403/, 'non-participants must be rejected, not silently recorded')
 
+  // room_participant_events 는 멤버십 상태 1행이 아니라 append-only 이벤트 로그이므로
+  // upsert 가 아니라 insert 로 'joined' 이벤트를 추가해야 한다.
+  assert.match(routeSource, /event_type:\s*'joined'/, 'history route must insert a joined event')
+  assert.doesNotMatch(routeSource, /\.upsert\(/, 'room_participant_events is an event log, not an upsert target')
+
   const participantCheckIndex = routeSource.indexOf(".from('room_participants')")
-  const historyUpsertIndex = routeSource.indexOf(".from('room_participation_events')")
+  const historyInsertIndex = routeSource.indexOf(".from('room_participant_events')")
 
   assert.ok(participantCheckIndex >= 0, 'room_participants guard query must exist')
-  assert.ok(historyUpsertIndex >= 0, 'room_participation_events upsert must exist')
+  assert.ok(historyInsertIndex >= 0, 'room_participant_events insert must exist')
   assert.ok(
-    participantCheckIndex < historyUpsertIndex,
-    'the participant guard must run before the participation_events upsert, not after',
+    participantCheckIndex < historyInsertIndex,
+    'the participant guard must run before the room_participant_events insert, not after',
   )
 })
 

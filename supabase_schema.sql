@@ -147,23 +147,27 @@ create table public.favorites (
   )
 );
 
--- 매칭 이력 보존용 append-only 테이블.
+-- 매칭 이력 보존용 append-only 이벤트 로그.
 -- room_participants 는 나가기 시 행이 삭제되므로(app/api/rooms/[id]/leave/route.ts)
 -- "누가 언제 참여했다 나갔는가"가 남지 않는다. 정원 체크와 메시지 RLS 가 모두
--- room_participants 를 참조하므로 그 테이블의 의미는 바꾸지 않고 별도로 기록한다.
-create table public.room_participation_events (
+-- room_participants 를 참조하므로 그 테이블의 의미는 바꾸지 않고 이벤트 로그로
+-- 별도 기록한다.
+--
+-- 멤버십 상태 1행이 아니라 이벤트 로그다: 참여할 때마다 'joined' 행을, 나갈 때마다
+-- 'left' 행을 추가만 한다(기존 행을 갱신하지 않음). 재입장/재이탈도 전부 기록에 남는다.
+-- RLS 정책은 두지 않는다 — service_role(서버) 전용 접근이며 일반 클라이언트는 읽기도
+-- 쓰기도 불가하다.
+create table public.room_participant_events (
   id uuid default uuid_generate_v4() primary key,
   room_id uuid references public.chat_rooms(id) on delete cascade not null,
   user_id uuid references public.users(id) on delete cascade not null,
-  joined_at timestamp with time zone not null default timezone('utc'::text, now()),
-  left_at timestamp with time zone,
-  unique(room_id, user_id)
+  event_type varchar(10) not null check (event_type in ('joined', 'left')),
+  occurred_at timestamp with time zone not null default timezone('utc'::text, now()),
+  unique(room_id, user_id, event_type, occurred_at)
 );
 
-create index room_participation_events_room_idx
-  on public.room_participation_events(room_id);
-create index room_participation_events_user_idx
-  on public.room_participation_events(user_id);
+create index room_participant_events_room_id_occurred_at_idx
+  on public.room_participant_events using btree (room_id, occurred_at);
 
 -- Web Push 구독 (기기별 endpoint 유일). 저장/발송은 서버(service_role).
 -- 발송 파이프라인: messages insert 트리거(notify_new_message) → pg_net → /api/push/dispatch → web-push.
@@ -197,7 +201,7 @@ alter table public.messages enable row level security;
 alter table public.reports enable row level security;
 alter table public.user_moderation_actions enable row level security;
 alter table public.favorites enable row level security;
-alter table public.room_participation_events enable row level security;
+alter table public.room_participant_events enable row level security;
 alter table public.push_subscriptions enable row level security;
 alter table public.ride_completions enable row level security;
 
@@ -615,14 +619,8 @@ create index favorites_user_id_idx on public.favorites (user_id);
 create index favorites_route_idx
   on public.favorites (from_location, to_location) where notify_enabled;
 
--- 참여 이력: 관리자만 조회. 쓰기는 service_role 전용(정책 없음 = 일반 클라이언트 차단).
-create policy "Admins can read participation events"
-  on public.room_participation_events for select using (
-    exists (
-      select 1 from public.user_private_profiles p
-      where p.user_id = auth.uid() and p.is_admin = true and p.status = 'active'
-    )
-  );
+-- 참여 이력: RLS 정책 없음(일반 클라이언트는 읽기/쓰기 모두 차단), service_role 전용 접근.
+grant all on table public.room_participant_events to service_role;
 
 -- Push subscriptions / ride completions: 접근은 서버(service_role)에서, 본인 소유만 클라이언트 허용
 create policy "push_subscriptions_select_own" on public.push_subscriptions

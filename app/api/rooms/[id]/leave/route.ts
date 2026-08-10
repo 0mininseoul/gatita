@@ -121,11 +121,10 @@ async function leaveRoom(
   }
 
   // 나갔다는 사실을 이력에 남긴다. room_participants 행은 위에서 삭제되었다.
+  // 이벤트 로그이므로 갱신이 아니라 새 'left' 행을 추가한다.
   const { error: historyError } = await admin
-    .from('room_participation_events')
-    .update({ left_at: new Date().toISOString() })
-    .eq('room_id', roomId)
-    .eq('user_id', user.id)
+    .from('room_participant_events')
+    .insert({ room_id: roomId, user_id: user.id, event_type: 'left' })
 
   if (historyError) {
     console.error('participation history leave error:', historyError)

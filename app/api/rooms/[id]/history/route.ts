@@ -3,9 +3,9 @@ import { withAxiomRoute } from '@/lib/axiom/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 
-// room_participation_events upsert 전용 최소 라우트.
+// room_participant_events 에 'joined' 이벤트를 기록하는 전용 최소 라우트.
 // /join 라우트는 이미 참여 중인 이용자에게 alreadyJoined 로 조기 반환하므로
-// (room_participants insert 이전에 리턴) 이력 upsert 코드까지 도달하지 않는다.
+// (room_participants insert 이전에 리턴) 이력 insert 코드까지 도달하지 않는다.
 // 방 생성 시 클라이언트가 room_participants 에 직접 insert 하는 경로(HomeClient.tsx)에서는
 // 이 조기 반환 때문에 /join 을 재사용할 수 없어 참여자 정원 로직을 건드리지 않는
 // 별도 라우트로 이력만 기록한다.
@@ -45,11 +45,8 @@ async function recordRoomHistory(
   }
 
   const { error: historyError } = await admin
-    .from('room_participation_events')
-    .upsert(
-      { room_id: roomId, user_id: authUser.id, joined_at: new Date().toISOString(), left_at: null },
-      { onConflict: 'room_id,user_id' },
-    )
+    .from('room_participant_events')
+    .insert({ room_id: roomId, user_id: authUser.id, event_type: 'joined' })
 
   if (historyError) {
     console.error('participation history record error:', historyError)

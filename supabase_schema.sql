@@ -1,5 +1,8 @@
 -- Enable necessary extensions
 create extension if not exists "uuid-ossp";
+create extension if not exists pg_net;
+create extension if not exists pg_cron;
+create schema if not exists private;
 
 -- Location enum
 create type location_type as enum (
@@ -45,6 +48,7 @@ create table public.user_private_profiles (
   is_admin boolean not null default false,
   onboarded_at timestamp with time zone,
   pwa_installed boolean not null default false,
+  pwa_installed_at timestamp with time zone,
   push_enabled boolean not null default false,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
@@ -193,6 +197,22 @@ create table public.ride_completions (
   unique (room_id, user_id)
 );
 
+-- 인증된 페이지 방문 이벤트. 일일 Metrics의 방문자 집계와 보조 분석에 사용한다.
+create table public.user_visit_events (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references public.users(id) on delete cascade not null,
+  path varchar(200),
+  visited_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 출발지 마커를 눌러 하단 시트를 확인한 이력. MAU 집계에 사용한다.
+create table public.location_sheet_view_events (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references public.users(id) on delete cascade not null,
+  from_location varchar(50) not null,
+  viewed_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
 -- Enable RLS (Row Level Security)
 alter table public.users enable row level security;
 alter table public.user_private_profiles enable row level security;
@@ -205,6 +225,8 @@ alter table public.favorites enable row level security;
 alter table public.room_participant_events enable row level security;
 alter table public.push_subscriptions enable row level security;
 alter table public.ride_completions enable row level security;
+alter table public.user_visit_events enable row level security;
+alter table public.location_sheet_view_events enable row level security;
 
 -- Explicit Data API grants
 grant usage on schema public to authenticated;
@@ -228,6 +250,8 @@ grant select, insert on table public.user_moderation_actions to authenticated;
 -- update grant로 넓혔다 — RLS(auth.uid() = user_id, using만 지정)가 행을 스코프하므로
 -- 소유자 이전은 여전히 불가능하다.
 grant select, insert, update, delete on table public.favorites to authenticated;
+grant all on table public.user_visit_events to service_role;
+grant all on table public.location_sheet_view_events to service_role;
 
 -- RLS Policies
 -- Users: public profile fields only. Private fields live in user_private_profiles.
@@ -457,6 +481,61 @@ create trigger handle_updated_at before update on public.users
 create trigger handle_updated_at before update on public.user_private_profiles
   for each row execute procedure public.handle_updated_at();
 
+-- PWA 최초 설치 시각을 보존한다. 설치율의 전일 대비 계산에 사용한다.
+create or replace function private.set_pwa_installed_at()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog
+as $$
+begin
+  if new.pwa_installed = true
+     and old.pwa_installed = false
+     and new.pwa_installed_at is null then
+    new.pwa_installed_at = timezone('utc'::text, now());
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function private.set_pwa_installed_at() from public, anon, authenticated;
+
+create trigger set_pwa_installed_at
+  before update on public.user_private_profiles
+  for each row execute function private.set_pwa_installed_at();
+
+-- room_participants는 나가기 시 삭제되므로 참여 이벤트를 별도 보존한다.
+create or replace function private.log_room_participant_event()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private
+as $$
+begin
+  if tg_op = 'INSERT' then
+    insert into public.room_participant_events (room_id, user_id, event_type, occurred_at)
+    values (new.room_id, new.user_id, 'joined', coalesce(new.joined_at, timezone('utc'::text, now())))
+    on conflict do nothing;
+    return new;
+  end if;
+
+  insert into public.room_participant_events (room_id, user_id, event_type, occurred_at)
+  values (old.room_id, old.user_id, 'left', timezone('utc'::text, now()))
+  on conflict do nothing;
+  return old;
+end;
+$$;
+
+revoke all on function private.log_room_participant_event() from public, anon, authenticated;
+
+create trigger log_room_participant_join
+  after insert on public.room_participants
+  for each row execute function private.log_room_participant_event();
+
+create trigger log_room_participant_leave
+  after delete on public.room_participants
+  for each row execute function private.log_room_participant_event();
+
 -- Auto-create profile rows for Gachon users on signup. Mirrors the app's
 -- extractGachonProfileFromMetadata() parsing ("이름/학과") in SQL. Non-Gachon
 -- signups are left without profile rows (callback rejects + deletes them).
@@ -630,6 +709,14 @@ create index favorites_route_idx
 
 -- 참여 이력: RLS 정책 없음(일반 클라이언트는 읽기/쓰기 모두 차단), service_role 전용 접근.
 grant all on table public.room_participant_events to service_role;
+create index user_visit_events_visited_at_user_id_idx
+  on public.user_visit_events (visited_at, user_id);
+create index user_visit_events_user_id_visited_at_idx
+  on public.user_visit_events (user_id, visited_at);
+create index location_sheet_view_events_viewed_at_user_id_idx
+  on public.location_sheet_view_events (viewed_at, user_id);
+create index location_sheet_view_events_location_viewed_at_idx
+  on public.location_sheet_view_events (from_location, viewed_at);
 
 -- Push subscriptions / ride completions: 접근은 서버(service_role)에서, 본인 소유만 클라이언트 허용
 create policy "push_subscriptions_select_own" on public.push_subscriptions

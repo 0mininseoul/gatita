@@ -426,7 +426,12 @@ export default function AdminPage() {
 
   return (
     <main className="min-h-screen bg-gray-50 text-gray-950">
-      <header className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 px-4 py-3 backdrop-blur">
+      {/* iOS PWA(홈 화면 추가)에서 상태바에 헤더가 가려지지 않도록 safe-area-inset-top 적용.
+          app/settings/page.tsx의 .app-header, components/HomeClient.tsx의 지도 헤더와 동일한 패턴. */}
+      <header
+        className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 px-4 pb-3 backdrop-blur"
+        style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
+      >
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <div>
             <p className="text-xs font-black text-primary-600">같이타 운영</p>

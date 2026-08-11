@@ -25,6 +25,7 @@ import { getNotificationPermission, isPushSupported, isSubscribedToPush, subscri
 import { PREVIEW_TEST_ACCOUNTS, isPreviewTestLoginEnabled } from '@/lib/previewTestAccounts'
 import { hasServiceShareIntent, removeServiceShareIntent, shareService } from '@/lib/serviceShare'
 import { identifyAnalyticsUser, shouldSuppressAnalyticsForUser, suppressAnalyticsForCurrentDevice, trackEvent } from '@/lib/analytics/client'
+import { ROUTES_SEEN_STORAGE_KEY } from '@/lib/routeSummary'
 import { AlertTriangle, ArrowRight, Ban, Bell, Clock, MessageSquareText, Share2, Star, Settings, Users, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -45,6 +46,12 @@ type MyRoomSummary = CampusMapRoom & {
 type UnreadRoomCount = {
   room_id: string
   unread_count: number
+}
+
+// GET /api/routes 응답 중 FAB 미확인 배지 판정에 필요한 최소 필드만 취한다.
+type RouteSubscriptionSummary = {
+  from_location: LocationType
+  to_location: LocationType
 }
 
 type ModerationWarning = {
@@ -72,6 +79,9 @@ type MyProfilePayload = {
 // intra-session navigation back to the map (it was already shown today).
 const PWA_PROMPT_LAST_SHOWN_KEY = 'gatita:pwa-prompt-last-shown'
 const ROUTE_COACHMARK_STORAGE_KEY = 'gatita:route-coachmark-seen'
+// ROUTES_SEEN_STORAGE_KEY(app/routes/page.tsx가 /routes 진입 시 기록하는 마지막 확인 시각)는
+// lib/routeSummary.ts에서 import한다 — I-4: 두 파일이 각자 리터럴을 선언하면 오타로
+// 계약이 조용히 깨진다.
 
 // Local calendar day as YYYY-MM-DD (en-CA yields ISO-like format in local tz).
 const getLocalDateKey = () => new Date().toLocaleDateString('en-CA')
@@ -214,6 +224,8 @@ export default function HomeClient() {
   const [fromLocation, setFromLocation] = useState<LocationType | ''>('')
   const [mapRooms, setMapRooms] = useState<CampusMapRoom[]>([])
   const [myRooms, setMyRooms] = useState<MyRoomSummary[]>([])
+  const [subscribedRoutes, setSubscribedRoutes] = useState<RouteSubscriptionSummary[]>([])
+  const [hasUnseenRouteRooms, setHasUnseenRouteRooms] = useState(false)
   const [isLoadingMapRooms, setIsLoadingMapRooms] = useState(false)
   const [isLoadingMyRooms, setIsLoadingMyRooms] = useState(false)
   const [showMyRooms, setShowMyRooms] = useState(false)
@@ -422,6 +434,7 @@ export default function HomeClient() {
           departure_date,
           departure_time,
           max_participants,
+          created_at,
           participants:room_participants(id, user_id)
         `)
         .in('departure_date', visibleDates)
@@ -438,6 +451,8 @@ export default function HomeClient() {
           departure_date: room.departure_date,
           departure_time: room.departure_time,
           max_participants: room.max_participants,
+          // 알림 경로 FAB의 미확인 배지 판정(구독 경로에 새로 열린 방)에 쓴다.
+          created_at: room.created_at,
           participants: room.participants?.map((participant) => ({
             id: participant.id,
             user_id: participant.user_id,
@@ -451,6 +466,25 @@ export default function HomeClient() {
       setIsLoadingMapRooms(false)
     }
   }, [supabase])
+
+  // 알림 경로 FAB 배지용 구독 목록. favorites의 notify_* 컬럼이 아직 프로덕션에
+  // 반영되지 않아 이 조회가 실패할 수 있다 — 실패해도 지도가 깨지면 안 되므로
+  // 조용히 빈 목록으로 남기고(= 배지 없음) 지도 기능에는 영향을 주지 않는다.
+  const loadRouteSubscriptions = useCallback(async () => {
+    try {
+      const res = await fetch('/api/routes')
+      if (!res.ok) {
+        setSubscribedRoutes([])
+        return
+      }
+
+      const json = (await res.json().catch(() => null)) as { routes?: RouteSubscriptionSummary[] } | null
+      setSubscribedRoutes(json?.routes ?? [])
+    } catch (error) {
+      console.error('Load route subscriptions error:', error)
+      setSubscribedRoutes([])
+    }
+  }, [])
 
   const loadUnreadCount = useCallback(async () => {
     if (!supabase) return
@@ -759,6 +793,7 @@ export default function HomeClient() {
 
     loadMapRooms()
     loadUnreadCount()
+    loadRouteSubscriptions()
 
     // 30초 전체 폴링 대신 실시간 구독 + 디바운스 재조회 (chat_rooms는 마이그레이션 적용 후 발화)
     let debounceId: ReturnType<typeof setTimeout> | null = null
@@ -792,6 +827,7 @@ export default function HomeClient() {
     const refreshAll = () => {
       loadMapRooms()
       loadUnreadCount()
+      loadRouteSubscriptions()
       if (showMyRooms) loadMyRooms()
     }
     const safetyId = window.setInterval(refreshAll, 120000)
@@ -807,7 +843,33 @@ export default function HomeClient() {
       document.removeEventListener('visibilitychange', handleVisibility)
       supabase.removeChannel(channel)
     }
-  }, [authMode, hasAuthenticatedSession, hasEnteredApp, loadMapRooms, loadMyRooms, loadUnreadCount, showMyRooms, supabase])
+  }, [authMode, hasAuthenticatedSession, hasEnteredApp, loadMapRooms, loadMyRooms, loadRouteSubscriptions, loadUnreadCount, showMyRooms, supabase])
+
+  // 알림 경로 FAB 미확인 배지: 구독 경로 중 지금 입장 가능한 방이 있고, 그 방이
+  // /routes 화면을 마지막으로 연 시각(Task 10이 남긴 localStorage 값) 이후에 생겼을 때만 켠다.
+  // 푸시가 실제로 닿는 이용자가 설치자의 30%뿐이라, 이 배지가 대부분의 이용자에게
+  // "내 경로에 방이 생겼다"를 알리는 유일한 신호다.
+  useEffect(() => {
+    if (subscribedRoutes.length === 0) {
+      setHasUnseenRouteRooms(false)
+      return
+    }
+
+    const seenAtRaw = window.localStorage.getItem(ROUTES_SEEN_STORAGE_KEY)
+    const seenAtMs = seenAtRaw ? new Date(seenAtRaw).getTime() : 0
+    const routeKeys = new Set(
+      subscribedRoutes.map((route) => `${route.from_location}>${route.to_location}`)
+    )
+
+    const hasUnseen = mapRooms.some((room) => {
+      if (!routeKeys.has(`${room.from_location}>${room.to_location}`)) return false
+      if (!room.created_at) return false
+      if (!isRoomJoinable(room.departure_date, room.departure_time)) return false
+      return new Date(room.created_at).getTime() > seenAtMs
+    })
+
+    setHasUnseenRouteRooms(hasUnseen)
+  }, [mapRooms, subscribedRoutes])
 
   const onlineDisplayCount = usePresenceDisplayCount(
     supabase,
@@ -1223,6 +1285,10 @@ export default function HomeClient() {
         throw participantError
       }
 
+      // 방장 참여 이력 기록. 클라이언트는 room_participant_events 에 쓸 권한이 없어
+      // (RLS 정책 없음) 서버 라우트를 거쳐야 한다. 이력 기록 전용 호출이므로 실패해도 무시한다.
+      void fetch(`/api/rooms/${room.id}/history`, { method: 'POST' }).catch(() => {})
+
       toast.success('채팅방이 생성되었습니다!')
       trackEvent('room_created', {
         room_id: room.id,
@@ -1297,6 +1363,18 @@ export default function HomeClient() {
       const room = mapRooms.find((mapRoom) => mapRoom.id === roomId)
       if (!room) return
 
+      // I-2: 내 방이면 지난 방이어도(정산 채팅이 출발 후에 가장 필요) 그대로 열어야 하므로,
+      // isMyRoom 조기 반환을 isRoomJoinable 가드보다 먼저 둔다. join API를 타지 않고
+      // router.push만 하므로 서버 가드(app/api/rooms/[id]/join/route.ts)와는 무관하다.
+      if (room.participants?.some((participant) => participant.user_id === user.id)) {
+        trackEvent('room_reopened', {
+          room_id: roomId,
+          source: 'map_bottom_sheet',
+        })
+        router.push(`/rooms/${roomId}`)
+        return
+      }
+
       if (!isRoomJoinable(room.departure_date, room.departure_time)) {
         toast.error('이미 지난 출발 시간입니다')
         trackEvent('room_join_blocked', {
@@ -1305,15 +1383,6 @@ export default function HomeClient() {
           from_location: room.from_location,
           to_location: room.to_location,
         })
-        return
-      }
-
-      if (room.participants?.some((participant) => participant.user_id === user.id)) {
-        trackEvent('room_reopened', {
-          room_id: roomId,
-          source: 'map_bottom_sheet',
-        })
-        router.push(`/rooms/${roomId}`)
         return
       }
 
@@ -1739,6 +1808,22 @@ export default function HomeClient() {
         onJoinRoom={handleJoinMapRoom}
         routeHintStep={routeCoachStep}
         onCloseRouteHint={endRouteCoachmark}
+        onOpenRoutes={() => {
+          if (requiresProfile) {
+            openProfileRequiredModal('routes')
+            return
+          }
+          router.push('/routes')
+        }}
+        hasUnseenRouteRooms={hasUnseenRouteRooms}
+        onOpenRouteSubscribe={(from) => {
+          if (requiresProfile) {
+            openProfileRequiredModal('route_subscribe')
+            return
+          }
+          // 도착지는 아직 정해지지 않았으므로 /routes에서 고르게 한다.
+          router.push(`/routes?from=${encodeURIComponent(from)}`)
+        }}
       />
 
       {serviceSharePrompt}

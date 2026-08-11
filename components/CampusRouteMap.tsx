@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { Clock, Compass, MapPin, Minus, Plus, Sparkles, Users, X } from 'lucide-react'
+import { BellRing, Clock, Compass, MapPin, Minus, Plus, Sparkles, Users, X } from 'lucide-react'
 import {
   getDepartureTimeOptions,
   getDestinationOptions,
@@ -22,6 +22,8 @@ export type CampusMapRoom = {
   departure_date: string
   departure_time: string
   max_participants: number
+  // 알림 경로 FAB의 미확인 배지 판정(HomeClient)에만 쓰인다 — 지도 렌더링에는 필요 없어 옵셔널.
+  created_at?: string
   participants?: Array<{
     id: string
     user_id?: string
@@ -51,6 +53,11 @@ type CampusRouteMapProps = {
   onJoinRoom: (roomId: string) => void
   routeHintStep?: 'hidden' | 'select' | 'action'
   onCloseRouteHint?: (action: 'select-close' | 'action-close') => void
+  onOpenRoutes: () => void
+  hasUnseenRouteRooms?: boolean
+  // 하단 시트에서 "이 경로 알림 받기"를 눌렀을 때. 도착지가 아직 정해지지 않은 단계이므로
+  // /routes?from={location}으로 보내 도착지를 고르게 한다(Task 12).
+  onOpenRouteSubscribe?: (from: LocationType) => void
 }
 
 declare global {
@@ -152,14 +159,20 @@ function buildStats(rooms: CampusMapRoom[], currentUserId?: string) {
     if (isMyRoom) {
       currentOriginStat.myRoomCount += 1
     }
-    currentOriginStat.nextTime =
-      !currentOriginStat.nextSortKey || roomSortKey < currentOriginStat.nextSortKey
-        ? room.departure_time
-        : currentOriginStat.nextTime
-    currentOriginStat.nextSortKey =
-      !currentOriginStat.nextSortKey || roomSortKey < currentOriginStat.nextSortKey
-        ? roomSortKey
-        : currentOriginStat.nextSortKey
+    // "다음 출발"의 후보는 아직 탑승 가능한(출발 전) 방으로만 한정한다(I-1). 당일 방은
+    // 출발 시각이 지나도 지도에 계속 남아있으므로(Task 3), 지난 방까지 후보에 넣으면
+    // 밤에 "다음 출발 08:30"처럼 이미 지나간 시각이 뜬다. roomCount는 지난 방을 그대로
+    // 포함한다 — "오늘 이 지점에서 사람들이 움직였다"는 설계 의도라 건드리지 않는다.
+    if (isRoomJoinable(room.departure_date, room.departure_time)) {
+      currentOriginStat.nextTime =
+        !currentOriginStat.nextSortKey || roomSortKey < currentOriginStat.nextSortKey
+          ? room.departure_time
+          : currentOriginStat.nextTime
+      currentOriginStat.nextSortKey =
+        !currentOriginStat.nextSortKey || roomSortKey < currentOriginStat.nextSortKey
+          ? roomSortKey
+          : currentOriginStat.nextSortKey
+    }
     originStats.set(room.from_location, currentOriginStat)
   })
 
@@ -183,6 +196,9 @@ export default function CampusRouteMap({
   onJoinRoom,
   routeHintStep = 'hidden',
   onCloseRouteHint,
+  onOpenRoutes,
+  hasUnseenRouteRooms = false,
+  onOpenRouteSubscribe,
 }: CampusRouteMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<any>(null)
@@ -227,7 +243,13 @@ export default function CampusRouteMap({
       ? rooms
           .filter((room) => room.from_location === selectedFrom)
           .slice()
-          .sort((a, b) => getRoomSortKey(a).localeCompare(getRoomSortKey(b)))
+          // 지난 방은 목록에서 계속 보이되(Task 3), 항상 뒤로 밀어 눈에 덜 띄게 한다.
+          .sort((a, b) => {
+            const aPast = !isRoomJoinable(a.departure_date, a.departure_time)
+            const bPast = !isRoomJoinable(b.departure_date, b.departure_time)
+            if (aPast !== bPast) return aPast ? 1 : -1
+            return getRoomSortKey(a).localeCompare(getRoomSortKey(b))
+          })
       : [],
     [rooms, selectedFrom]
   )
@@ -489,6 +511,20 @@ export default function CampusRouteMap({
         </div>
       )}
 
+      {mapStatus === 'ready' && (
+        <button
+          type="button"
+          aria-label={hasUnseenRouteRooms ? '알림 경로, 새로 열린 방 있음' : '알림 경로'}
+          onClick={onOpenRoutes}
+          className={`gatita-routes-fab absolute z-20 inline-flex h-14 w-14 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-800 shadow-[0_10px_28px_rgba(17,24,39,0.2)] transition hover:bg-gray-50${isSheetOpen ? ' gatita-routes-fab--hidden' : ''}`}
+        >
+          <BellRing className="h-6 w-6" />
+          {hasUnseenRouteRooms && (
+            <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-500" />
+          )}
+        </button>
+      )}
+
       {(mapStatus === 'missing-key' || mapStatus === 'error') && (
         <div
           onClick={(event) => {
@@ -631,16 +667,24 @@ export default function CampusRouteMap({
                     return (
                       <div
                         key={room.id}
+                        // 지난 방은 입장 버튼이 disabled라 탭이 버튼까지 전달되지 않는다.
+                        // 카드 자체에 붙여 "지난 방 카드 탭"을 관측한다(past_room_viewed).
+                        onClick={isPastDeparture ? () => trackEvent('past_room_viewed', { room_id: room.id }) : undefined}
                         className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 ${
                           isMyRoom
                             ? 'border-primary-200 bg-primary-50/80 shadow-[inset_3px_0_0_#2782ff]'
                             : 'border-gray-100 bg-gray-50'
-                        }`}
+                        } ${isPastDeparture ? 'opacity-55' : ''}`}
                       >
                         <div className="min-w-0">
                           <div className="flex min-w-0 items-center gap-2 text-sm font-black text-gray-950">
                             <Clock className="h-4 w-4 shrink-0 text-primary-600" />
                             <span className="shrink-0">{formatRoomTime(room.departure_time)}</span>
+                            {isPastDeparture && (
+                              <span className="inline-flex items-center rounded-md bg-gray-100 px-1.5 py-0.5 text-[11px] font-black text-gray-500">
+                                출발함
+                              </span>
+                            )}
                             <span className="truncate text-xs font-extrabold text-gray-600">
                               ({LOCATIONS[room.to_location]})
                             </span>
@@ -660,12 +704,15 @@ export default function CampusRouteMap({
                           <button
                             type="button"
                             onClick={() => onJoinRoom(room.id)}
-                            disabled={isJoinDisabled || isPastDeparture}
+                            // 탑승 후 정산(계좌 공유·송금)이 채팅방에서 이뤄지므로, 출발 이후야말로
+                            // 채팅이 가장 필요한 시점이다(I-2). 내 방이면 지난 방이어도 입장(열기)을
+                            // 막지 않는다 — 흐림/배지는 유지해 "출발한 건 사실"임은 계속 드러낸다.
+                            disabled={isJoinDisabled || (isPastDeparture && !isMyRoom)}
                             className={`rounded-md px-3 py-1.5 text-xs font-black text-white transition disabled:bg-gray-300 ${
                               isMyRoom ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-950 hover:bg-gray-800'
                             }`}
                           >
-                            {isPastDeparture ? '지난 방' : isMyRoom ? '열기' : isFull ? '마감' : '입장'}
+                            {isPastDeparture && !isMyRoom ? '출발한 방' : isMyRoom ? '열기' : isFull ? '마감' : '입장하기'}
                           </button>
                         </div>
                       </div>
@@ -677,6 +724,17 @@ export default function CampusRouteMap({
                   아직 방이 없습니다
                 </div>
               ) : null}
+
+              {onOpenRouteSubscribe && (
+                <button
+                  type="button"
+                  onClick={() => onOpenRouteSubscribe(selectedFrom)}
+                  className="mt-2 inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-primary-200 bg-primary-50/60 px-3 text-xs font-black text-primary-700 transition hover:bg-primary-50"
+                >
+                  <BellRing className="h-3.5 w-3.5" aria-hidden="true" />
+                  이 경로 알림 받기
+                </button>
+              )}
 
               <button
                 type="button"

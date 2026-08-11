@@ -119,15 +119,55 @@ create table public.user_moderation_actions (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
--- Favorites table
+-- Favorites table. 즐겨찾기 겸 "경로 구독" — notify_* 컬럼으로 알림 조건을 정의한다.
+-- notify_from > notify_to 이면 자정을 넘는 구간으로 해석한다 (예: 22:00~02:00).
+-- 둘 다 null 이면 종일. 이 대소 관계를 의미로 쓰므로 from/to 순서에 제약을 걸지 않는다.
 create table public.favorites (
   id uuid default uuid_generate_v4() primary key,
   user_id uuid references public.users(id) on delete cascade not null,
   from_location location_type not null,
   to_location location_type not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  unique(user_id, from_location, to_location)
+  notify_enabled boolean not null default true,
+  notify_from time,
+  notify_to time,
+  -- 0=일요일 … 6=토요일. 빈 배열은 "알림 없음"과 같으므로 금지한다.
+  -- array_length(빈배열, 1)은 0이 아니라 NULL을 반환하므로 coalesce로 감싼다
+  -- (감싸지 않으면 NULL between ... => NULL이 되어 CHECK가 통과시켜버린다).
+  notify_weekdays smallint[] not null default '{0,1,2,3,4,5,6}',
+  unique(user_id, from_location, to_location),
+  constraint favorites_notify_weekdays_valid check (
+    coalesce(array_length(notify_weekdays, 1), 0) between 1 and 7
+    and notify_weekdays <@ '{0,1,2,3,4,5,6}'::smallint[]
+  ),
+  -- 한쪽만 설정된 반쪽 구간을 막는다.
+  constraint favorites_notify_window_paired check (
+    (notify_from is null and notify_to is null)
+    or (notify_from is not null and notify_to is not null)
+  )
 );
+
+-- 매칭 이력 보존용 append-only 이벤트 로그.
+-- room_participants 는 나가기 시 행이 삭제되므로(app/api/rooms/[id]/leave/route.ts)
+-- "누가 언제 참여했다 나갔는가"가 남지 않는다. 정원 체크와 메시지 RLS 가 모두
+-- room_participants 를 참조하므로 그 테이블의 의미는 바꾸지 않고 이벤트 로그로
+-- 별도 기록한다.
+--
+-- 멤버십 상태 1행이 아니라 이벤트 로그다: 참여할 때마다 'joined' 행을, 나갈 때마다
+-- 'left' 행을 추가만 한다(기존 행을 갱신하지 않음). 재입장/재이탈도 전부 기록에 남는다.
+-- RLS 정책은 두지 않는다 — service_role(서버) 전용 접근이며 일반 클라이언트는 읽기도
+-- 쓰기도 불가하다.
+create table public.room_participant_events (
+  id uuid default uuid_generate_v4() primary key,
+  room_id uuid references public.chat_rooms(id) on delete cascade not null,
+  user_id uuid references public.users(id) on delete cascade not null,
+  event_type varchar(10) not null check (event_type in ('joined', 'left')),
+  occurred_at timestamp with time zone not null default timezone('utc'::text, now()),
+  unique(room_id, user_id, event_type, occurred_at)
+);
+
+create index room_participant_events_room_id_occurred_at_idx
+  on public.room_participant_events using btree (room_id, occurred_at);
 
 -- Web Push 구독 (기기별 endpoint 유일). 저장/발송은 서버(service_role).
 -- 발송 파이프라인: messages insert 트리거(notify_new_message) → pg_net → /api/push/dispatch → web-push.
@@ -161,6 +201,7 @@ alter table public.messages enable row level security;
 alter table public.reports enable row level security;
 alter table public.user_moderation_actions enable row level security;
 alter table public.favorites enable row level security;
+alter table public.room_participant_events enable row level security;
 alter table public.push_subscriptions enable row level security;
 alter table public.ride_completions enable row level security;
 
@@ -178,7 +219,14 @@ grant all on table public.room_participants to service_role;
 grant select, insert on table public.messages to authenticated;
 grant select, insert, update on table public.reports to authenticated;
 grant select, insert on table public.user_moderation_actions to authenticated;
-grant select, insert, delete on table public.favorites to authenticated;
+-- 경로 구독 API가 notify_* 값을 수정/생성한다. 처음에는 PATCH 전용으로 notify_* 4개
+-- 컬럼만 update grant를 좁혔었지만(20260806093000), POST /api/routes 의
+-- upsert(ON CONFLICT DO UPDATE)는 충돌 발생 여부와 무관하게 SET 대상 전체 컬럼
+-- (user_id/from_location/to_location 포함)에 ACL_UPDATE를 요구해 모든 구독 생성 요청이
+-- permission denied로 실패했다(C-1 최종 리뷰 발견). 20260807000000이 테이블 전체
+-- update grant로 넓혔다 — RLS(auth.uid() = user_id, using만 지정)가 행을 스코프하므로
+-- 소유자 이전은 여전히 불가능하다.
+grant select, insert, update, delete on table public.favorites to authenticated;
 
 -- RLS Policies
 -- Users: public profile fields only. Private fields live in user_private_profiles.
@@ -568,6 +616,11 @@ create index user_moderation_actions_unacknowledged_warning_idx
   on public.user_moderation_actions (user_id, created_at desc)
   where action = 'warning' and acknowledged_at is null;
 create index favorites_user_id_idx on public.favorites (user_id);
+create index favorites_route_idx
+  on public.favorites (from_location, to_location) where notify_enabled;
+
+-- 참여 이력: RLS 정책 없음(일반 클라이언트는 읽기/쓰기 모두 차단), service_role 전용 접근.
+grant all on table public.room_participant_events to service_role;
 
 -- Push subscriptions / ride completions: 접근은 서버(service_role)에서, 본인 소유만 클라이언트 허용
 create policy "push_subscriptions_select_own" on public.push_subscriptions
@@ -613,6 +666,42 @@ drop trigger if exists on_message_created_push on public.messages;
 create trigger on_message_created_push
   after insert on public.messages
   for each row execute function public.notify_new_message();
+
+-- 새 방 생성 → 그 경로를 구독한 이용자에게 Web Push 발송 트리거 (notify_new_message 와 동일 구조).
+-- 발송 실패가 방 생성을 막지 않도록 예외를 삼킨다. 자세한 내용은
+-- migrations/20260806092000_room_alert_notification.sql
+create or replace function public.notify_new_room()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_secret text;
+begin
+  begin
+    select decrypted_secret into v_secret
+    from vault.decrypted_secrets
+    where name = 'push_dispatch_secret';
+
+    if v_secret is not null then
+      perform net.http_post(
+        url := 'https://gatita.kro.kr/api/push/dispatch',
+        headers := jsonb_build_object('Content-Type', 'application/json', 'x-push-secret', v_secret),
+        body := jsonb_build_object('room_id', new.id)
+      );
+    end if;
+  exception when others then
+    raise warning 'room push dispatch notify failed: %', sqlerrm;
+  end;
+  return new;
+end;
+$$;
+
+drop trigger if exists notify_new_room_trigger on public.chat_rooms;
+create trigger notify_new_room_trigger
+  after insert on public.chat_rooms
+  for each row execute function public.notify_new_room();
 
 -- Supabase Realtime publication for live chat and participant membership updates
 alter table public.messages replica identity full;

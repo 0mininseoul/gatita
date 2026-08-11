@@ -233,12 +233,13 @@ test('campus map room times are displayed without seconds', () => {
   assert.doesNotMatch(source, /<span>\{room\.departure_time\}<\/span>/)
 })
 
-test('map presence display count rotates a random one to five person offset', () => {
+test('map presence display count pads by zero to five outside the late night window', () => {
   const source = readProjectFile('lib/usePresenceDisplayCount.ts')
 
   assert.match(source, /function getRandomPresenceOffset/)
-  assert.match(source, /Math\.floor\(Math\.random\(\) \* 5\) \+ 1/)
-  assert.match(source, /setDisplayOffset\(getRandomPresenceOffset\(\)\)/)
+  assert.match(source, /Math\.floor\(Math\.random\(\) \* 6\)/)
+  assert.match(source, /function isRealCountWindow/, 'late night should report the real count')
+  assert.match(source, /isRealCountWindow\(\) \? 0 : getRandomPresenceOffset\(\)/)
   assert.doesNotMatch(source, /current === 1 \? 2 : 1/, 'presence offset should no longer alternate only between +1 and +2')
 })
 
@@ -267,7 +268,7 @@ test('map room loading keeps only rooms within the visible map window', () => {
   assert.match(loadBlock, /getMapRoomDateRange\(new Date\(\)\)/)
   assert.match(loadBlock, /\.in\('departure_date', visibleDates\)/)
   assert.match(loadBlock, /\.eq\('status', 'active'\)/)
-  assert.match(loadBlock, /isRoomVisibleOnMap/, 'map should hide rooms more than 30 minutes after departure')
+  assert.match(loadBlock, /isRoomVisibleOnMap/, 'map should keep same-day rooms visible past departure and hide only past-date rooms')
   assert.doesNotMatch(loadBlock, /departure_time\s*>=/, 'same-day room loading should not use fragile string comparisons')
 })
 
@@ -306,12 +307,47 @@ test('room joins go through a server route that verifies the session and uses th
   assert.doesNotMatch(schema, /create policy "Users can update their participation" on public\.room_participants/)
 })
 
+test('room history route only records participation for verified room_participants rows', () => {
+  const homeSource = readProjectFile('components/HomeClient.tsx')
+  const routeSource = readProjectFile('app/api/rooms/[id]/history/route.ts')
+
+  assert.match(homeSource, /fetch\(`\/api\/rooms\/\$\{room\.id\}\/history`,\s*\{\s*method:\s*'POST'/, 'room creation should record history via the server route')
+  assert.match(routeSource, /createAdminSupabase/)
+  assert.match(routeSource, /auth\.getUser\(\)/)
+
+  // roomId 는 참여자라면 누구나 관찰 가능하므로, 세션 인증만으로는 실제 참여를
+  // 증명하지 못한다. room_participants 에 실제 행이 있는지 먼저 확인해야 한다.
+  assert.match(
+    routeSource,
+    /\.from\('room_participants'\)[\s\S]*\.eq\('room_id', roomId\)[\s\S]*\.eq\('user_id', authUser\.id\)/,
+    'history route must verify the caller is an actual room participant before recording',
+  )
+  assert.match(routeSource, /if \(!participant\)/, 'history route must reject callers with no room_participants row')
+  assert.match(routeSource, /status: 403/, 'non-participants must be rejected, not silently recorded')
+
+  // room_participant_events 는 멤버십 상태 1행이 아니라 append-only 이벤트 로그이므로
+  // upsert 가 아니라 insert 로 'joined' 이벤트를 추가해야 한다.
+  assert.match(routeSource, /event_type:\s*'joined'/, 'history route must insert a joined event')
+  assert.doesNotMatch(routeSource, /\.upsert\(/, 'room_participant_events is an event log, not an upsert target')
+
+  const participantCheckIndex = routeSource.indexOf(".from('room_participants')")
+  const historyInsertIndex = routeSource.indexOf(".from('room_participant_events')")
+
+  assert.ok(participantCheckIndex >= 0, 'room_participants guard query must exist')
+  assert.ok(historyInsertIndex >= 0, 'room_participant_events insert must exist')
+  assert.ok(
+    participantCheckIndex < historyInsertIndex,
+    'the participant guard must run before the room_participant_events insert, not after',
+  )
+})
+
 test('room visibility and joinability follow departure time rules', () => {
   assert.equal(isRoomJoinable('2026-06-19', '12:00', new Date('2026-06-19T11:59:00+09:00')), true)
   assert.equal(isRoomJoinable('2026-06-19', '12:00', new Date('2026-06-19T12:00:00+09:00')), true)
   assert.equal(isRoomJoinable('2026-06-19', '12:00', new Date('2026-06-19T12:01:00+09:00')), false)
+  // 당일 방은 출발 시각을 지나도 지도에서 계속 노출된다 (입장 가능 여부와는 별개 규칙).
   assert.equal(isRoomVisibleOnMap('2026-06-19', '12:00', new Date('2026-06-19T12:29:00+09:00')), true)
-  assert.equal(isRoomVisibleOnMap('2026-06-19', '12:00', new Date('2026-06-19T12:31:00+09:00')), false)
+  assert.equal(isRoomVisibleOnMap('2026-06-19', '12:00', new Date('2026-06-19T12:31:00+09:00')), true)
 })
 
 test('map header exposes my rooms list from the user membership query', () => {
@@ -445,7 +481,7 @@ test('map shows a once-per-day PWA home screen onboarding modal', () => {
 test('service worker refreshes navigations before falling back to cached app shell', () => {
   const source = readProjectFile('public/sw.js')
 
-  assert.match(source, /gatita-v1\.0\.2/)
+  assert.match(source, /gatita-v1\.0\.3/)
   assert.match(source, /'\/map'/, 'PWA start URL should be cached as an app shell')
   assert.match(source, /event\.request\.mode !== 'navigate'/)
   assert.match(source, /fetch\(event\.request\)/)

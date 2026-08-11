@@ -435,5 +435,7 @@ test('map stats are offset from the translucent PWA status bar and room joins di
   assert.match(mapSource, /isRoomJoinable/)
   assert.match(mapSource, /isPastDeparture/)
   assert.match(mapSource, /const isJoinDisabled = !isMyRoom && isFull/)
-  assert.match(mapSource, /disabled=\{isJoinDisabled \|\| isPastDeparture\}/)
+  // I-2: 지난 방이라도 내 방이면(탑승 후 정산 채팅이 필요) 입장 버튼을 막지 않는다.
+  // 자세한 동작 검증(활성/비활성 실제 평가)은 test/campus-route-map-past-room-access.test.mjs.
+  assert.match(mapSource, /disabled=\{isJoinDisabled \|\| \(isPastDeparture && !isMyRoom\)\}/)
 })

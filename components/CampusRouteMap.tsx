@@ -726,17 +726,16 @@ export default function CampusRouteMap({
                           isMyRoom
                             ? 'border-primary-200 bg-primary-50/80 shadow-[inset_3px_0_0_#2782ff]'
                             : 'border-gray-100 bg-gray-50'
-                        } ${isPastDeparture ? 'opacity-55' : ''}`}
+                        }`}
                       >
-                        <div className="min-w-0">
+                        {/* 흐림은 텍스트 영역에만 건다 — 카드 전체에 걸면 오른쪽 버튼(내 방이면
+                            지난 방이어도 활성 상태인 "열기")까지 흐려져 눌리는데 안 눌릴 것처럼
+                            보인다. 지난 방을 알리는 별도 텍스트 뱃지는 두지 않는다 — 이 흐림과
+                            버튼 라벨("출발한 방")만으로 이미 상태가 전달된다. */}
+                        <div className={`min-w-0 ${isPastDeparture ? 'opacity-55' : ''}`}>
                           <div className="flex min-w-0 items-center gap-2 text-sm font-black text-gray-950">
                             <Clock className="h-4 w-4 shrink-0 text-primary-600" />
                             <span className="shrink-0">{formatRoomTime(room.departure_time)}</span>
-                            {isPastDeparture && (
-                              <span className="inline-flex items-center rounded-md bg-gray-100 px-1.5 py-0.5 text-[11px] font-black text-gray-500">
-                                출발함
-                              </span>
-                            )}
                             <span className="truncate text-xs font-extrabold text-gray-600">
                               ({LOCATIONS[room.to_location]})
                             </span>
@@ -758,7 +757,8 @@ export default function CampusRouteMap({
                             onClick={() => onJoinRoom(room.id)}
                             // 탑승 후 정산(계좌 공유·송금)이 채팅방에서 이뤄지므로, 출발 이후야말로
                             // 채팅이 가장 필요한 시점이다(I-2). 내 방이면 지난 방이어도 입장(열기)을
-                            // 막지 않는다 — 흐림/배지는 유지해 "출발한 건 사실"임은 계속 드러낸다.
+                            // 막지 않는다 — 이 버튼은 카드 흐림의 영향을 받지 않아 항상 제 불투명도로
+                            // 보인다(활성 컨트롤이 비활성처럼 보이면 안 된다).
                             disabled={isJoinDisabled || (isPastDeparture && !isMyRoom)}
                             className={`rounded-md px-3 py-1.5 text-xs font-black text-white transition disabled:bg-gray-300 ${
                               isMyRoom ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-950 hover:bg-gray-800'

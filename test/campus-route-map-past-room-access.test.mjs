@@ -81,10 +81,27 @@ test('입장 버튼 라벨: 지난 방 + 내 방은 "출발한 방"이 아니라
   assert.equal(fn(true, false), true)
 })
 
-test('흐림 처리와 "출발함" 배지는 내 방 여부와 무관하게 지난 방이면 계속 유지된다 (I-2 범위 밖)', () => {
+test('흐림 처리는 내 방 여부와 무관하게 지난 방이면 계속 유지되되, 텍스트 영역에만 걸려 버튼은 항상 불투명하다', () => {
   const source = readMapSource()
-  // opacity-55는 isPastDeparture 단독 조건이어야 한다 — isMyRoom으로 걸러지면 안 된다.
-  assert.match(source, /\$\{isPastDeparture \? 'opacity-55' : ''\}/)
-  // "출발함" 배지도 isPastDeparture 단독 조건.
-  assert.match(source, /\{isPastDeparture && \(\s*\n\s*<span className="inline-flex items-center rounded-md bg-gray-100/)
+  const cardStart = source.indexOf('selectedOriginRooms.map')
+  const cardEnd = source.indexOf('})}', cardStart)
+  const cardBlock = source.slice(cardStart, cardEnd)
+
+  assert.ok(cardStart > -1, '지난 방 카드 블록을 찾을 수 없습니다')
+
+  // opacity-55는 isPastDeparture 단독 조건으로, 텍스트를 감싼 min-w-0 div에만 걸려야
+  // 한다 — 카드 전체(버튼 포함)에 걸리면 활성 버튼까지 흐려져 눌리는데 안 눌릴 것처럼
+  // 보인다(접근성 문제).
+  assert.match(cardBlock, /<div className=\{`min-w-0 \$\{isPastDeparture \? 'opacity-55' : ''\}`\}>/)
+
+  // 카드 최상위 div의 className에는 opacity-55가 없어야 한다 — 버튼까지 흐려지는
+  // 회귀를 잡기 위해, 첫 className 선언(카드 wrapper)만 떼어 확인한다.
+  const wrapperClassMatch = cardBlock.match(/className=\{`flex items-center justify-between[\s\S]*?`\}/)
+  assert.ok(wrapperClassMatch, '카드 wrapper의 className 표현식을 찾을 수 없습니다')
+  assert.doesNotMatch(wrapperClassMatch[0], /opacity-55/, '카드 wrapper 자체에는 opacity-55가 없어야 한다(버튼까지 흐려지는 회귀 방지)')
+
+  // 예전의 별도 텍스트 뱃지("출발함" 한 단어짜리 <span> 태그)는 제거되었다 — 흐림
+  // 처리 + 버튼 라벨("출발한 방")로 이미 상태가 전달되므로 중복이었다. 태그 형태로
+  // 검사해, 이 단정이 위 설명 주석의 인용문과 우연히 겹치지 않게 한다.
+  assert.doesNotMatch(cardBlock, /<span className="inline-flex items-center rounded-md bg-gray-100[^>]*>\s*출발함/)
 })

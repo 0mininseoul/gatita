@@ -748,6 +748,15 @@
     letter-spacing: -0.01em;
   }
 
+  /* /routes 섹션 제목만 settings-section-heading h3(0.9rem/800)보다 한 단계 굵고 크게 —
+     위 routes-headline과 같은 이유로 공용 규칙 대신 settings-section-heading과 함께
+     붙여 쓰는 modifier로 둔다(app/settings/page.tsx는 이 클래스를 쓰지 않아 영향 없음). */
+  .settings-section-heading-lg h3 {
+    font-size: 1rem;
+    font-weight: 900;
+    letter-spacing: -0.01em;
+  }
+
   .settings-list {
     overflow: hidden;
     border: 1px solid rgba(229, 233, 240, 0.96);

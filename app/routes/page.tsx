@@ -553,7 +553,9 @@ function RoutesPageContent() {
         )}
 
         <section className="settings-section" aria-labelledby="routes-subscribed-heading">
-          <div className="settings-section-heading">
+          {/* settings-section-heading-lg: 헤드라인 > 섹션 제목 > 본문 위계를 분명히 하기
+              위해 이 화면의 섹션 제목만 한 단계 키운다(사용자 피드백). */}
+          <div className="settings-section-heading settings-section-heading-lg">
             <h3 id="routes-subscribed-heading">구독한 경로</h3>
             {/* I-5: 토글은 푸시만 끄고 이 목록/앱 내 폴백은 계속 보인다(사용자 결정).
                 라벨이 그냥 "알림"이면 "이 경로 안 볼래"로 읽히므로, 무엇이 꺼지는지와
@@ -682,7 +684,7 @@ function RoutesPageContent() {
         </section>
 
         <section className="settings-section" aria-labelledby="routes-add-heading">
-          <div className="settings-section-heading">
+          <div className="settings-section-heading settings-section-heading-lg">
             <h3 id="routes-add-heading">경로 추가</h3>
             <p>이미 구독 중인 경로를 다시 추가하면 시간대·요일 설정이 업데이트돼요</p>
           </div>

@@ -144,11 +144,16 @@ export default function AdminRoomMonitorPage() {
         throw new Error('채팅방을 찾지 못했습니다')
       }
 
-      const latestHostAppearance = result.messages
+      // 대시보드 API는 이제 메시지를 항상 최신순(내림차순)으로 내려준다(관리자 대시보드의
+      // 전체 메시지 뷰가 최신순이어야 하기 때문). 채팅 UI는 오래된 메시지가 위, 최신 메시지가
+      // 아래로 와야 하므로 여기서 오래된순으로 다시 정렬한다.
+      const orderedMessages = [...result.messages].sort((a, b) => a.created_at.localeCompare(b.created_at))
+
+      const latestHostAppearance = orderedMessages
         .map((message) => extractHostAppearanceFromMessage(message.content))
         .filter(Boolean)
         .at(-1) ?? ''
-      const visibleMessages = result.messages.filter((message) => !extractHostAppearanceFromMessage(message.content))
+      const visibleMessages = orderedMessages.filter((message) => !extractHostAppearanceFromMessage(message.content))
 
       setRoom(selectedRoom)
       setMessages(visibleMessages)

@@ -98,6 +98,23 @@ test('campus map fixed points use the requested real-world anchors', () => {
     west: 127.13295,
     east: 127.1332,
   })
+
+  assert.ok(LOCATION_ORDER.includes('학생회관'), 'student union is a fixed point')
+  assert.equal(LOCATION_POINTS['학생회관'].shortLabel, '학생회관')
+  assertPointInRange('학생회관', {
+    south: 37.453,
+    north: 37.4534,
+    west: 127.1338,
+    east: 127.1341,
+  })
+
+  // 학생회관은 중앙도서관(37.4523)과 AI공학관(37.4552) 사이, 지리적 남->북 순서를 지킨다.
+  assert.equal(
+    LOCATION_ORDER.indexOf('중앙도서관') < LOCATION_ORDER.indexOf('학생회관') &&
+      LOCATION_ORDER.indexOf('학생회관') < LOCATION_ORDER.indexOf('AI공학관'),
+    true,
+    'student union sits between central library and AI building in LOCATION_ORDER',
+  )
 })
 
 test('campus map bounds include the northern dormitory and AI building area', () => {
@@ -116,6 +133,16 @@ test('route pairs that are too close are rejected in both directions', () => {
   assert.equal(isRestrictedRoutePair('교육대학원', '중앙도서관'), true)
   assert.equal(isRestrictedRoutePair('중앙도서관', '교육대학원'), true)
   assert.equal(isRestrictedRoutePair('중앙도서관', 'AI공학관'), false)
+
+  // 중앙도서관↔학생회관은 120m로 기존 제한 대역(135m 이하)과 같아 양방향으로 막는다.
+  assert.equal(isRestrictedRoutePair('중앙도서관', '학생회관'), true)
+  assert.equal(isRestrictedRoutePair('학생회관', '중앙도서관'), true)
+
+  // AI공학관(223m)·교육대학원(238m)은 더 멀어 과도한 제한 없이 그대로 선택 가능해야 한다.
+  assert.equal(isRestrictedRoutePair('학생회관', 'AI공학관'), false)
+  assert.equal(isRestrictedRoutePair('AI공학관', '학생회관'), false)
+  assert.equal(isRestrictedRoutePair('학생회관', '교육대학원'), false)
+  assert.equal(isRestrictedRoutePair('교육대학원', '학생회관'), false)
 })
 
 test('destination options exclude the selected origin and too-close routes', () => {

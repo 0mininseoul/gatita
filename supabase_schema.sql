@@ -9,7 +9,8 @@ create type location_type as enum (
   '제3기숙사',
   '제2기숙사',
   'AI공학관',
-  '중앙도서관'
+  '중앙도서관',
+  '학생회관'
 );
 
 -- Users table (public profile). A row is auto-created on Gachon login via

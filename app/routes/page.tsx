@@ -63,7 +63,7 @@ type OpenRoom = {
   participants?: { id: string }[]
 }
 
-// 고정지점은 LOCATION_ORDER 6개(제3기숙사 제외)만 노출한다. LOCATIONS는 전체 맵(제3기숙사
+// 고정지점은 LOCATION_ORDER(제3기숙사 제외)만 노출한다. LOCATIONS는 전체 맵(제3기숙사
 // 포함)이라 그대로 순회하면 선택할 수 없는 지점이 드롭다운에 뜬다.
 const LOCATION_ENTRIES: [LocationType, string][] = LOCATION_ORDER.map((location) => [location, LOCATIONS[location]])
 

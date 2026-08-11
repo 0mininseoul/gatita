@@ -332,14 +332,25 @@ payload = {
 | --- | --- | --- |
 | `/routes` 화면 | "알림 받을 경로 추가" | 명시적 관리 |
 | 지도 하단 시트에서 출발지 선택 시 | "이 경로 알림 받기" | 이미 그 경로에 관심을 보인 순간 |
-| **내가 만든 방이 아무도 없이 닫혔을 때** | "다음에 이 경로에 방이 열리면 알려드릴까요?" | 43개 방이 겪은 바로 그 순간. 가장 전환율이 높을 것으로 예상 |
+| ~~내가 만든 방이 아무도 없이 닫혔을 때~~ (2026-08-11 제거) | ~~"다음에 이 경로에 방이 열리면 알려드릴까요?"~~ | 43개 방이 겪은 바로 그 순간이라 가장 전환율이 높을 것으로 예상했으나, 실사용에서 나가기 직후 매번 뜨는 것이 성가시다는 피드백을 받아 제거했다. 대체 지점은 아래 네 번째 행 |
+| **같은 경로로 방을 2회 이상 생성했을 때** | "이 경로에 방이 생기면 알림을 받아보시겠어요?" | 46일 실측: 방을 2개 이상 만든 9명 중 7명이 단일 경로 반복 — 반복 생성 자체가 관심의 신호. `components/HomeClient.tsx`의 `repeatRoutePrompt`(followup 스펙 8-2)로 구현 |
 
-세 번째가 핵심이다. `POST /api/rooms/[id]/leave`에서 `currentParticipants.length <= 1`로
-방이 닫히는 분기(`route.ts:123`)의 응답에 플래그를 실어 클라이언트가 프롬프트를 띄운다.
+**세 번째 행(닫힘 시 프롬프트)은 구현됐다가 2026-08-11 제거됐다.** 당시
+`POST /api/rooms/[id]/leave`가 `currentParticipants.length <= 1`로 방이 닫히는
+분기(`route.ts:123`)의 응답에 아래처럼 플래그를 실어 클라이언트가 프롬프트를 띄우게
+했었다.
 
 ```js
+// 제거된 구현 — 현재 코드에는 없다. 아래 "제거 이력" 참고.
 return NextResponse.json({ ok: true, closedAlone: true, from_location, to_location })
 ```
+
+**제거 이력.** 나가기 직후 매번 뜨는 프롬프트가 성가시다는 사용자 피드백을 받아 제거했다.
+현재 `leave/route.ts`의 응답은 `{ ok: true }`뿐이고, `closedAlone`이라는 이름은 코드
+어디에도 없다(`app/api/rooms/[id]/leave/route.ts` 참고). 대체 지점은 네 번째 행 —
+**같은 경로로 2회 이상 방을 만든 직후**(방 생성 완료 시점이지 나가기 시점이 아니다)로
+옮겼다. "실패의 순간(혼자 남아 방이 닫힘)"보다 "의도가 이미 확인된 순간(같은 경로를
+반복해서 찾음)"이 잡음이 적다고 판단했다.
 
 ---
 
@@ -571,13 +582,27 @@ route_subscribed          { from_location, to_location, source, has_time_window,
 route_unsubscribed        { from_location, to_location }
 route_alert_opened        { room_id, from_location, to_location }
 route_alert_fallback_seen  { room_count }                  // 앱 내 폴백 노출
-closed_alone_prompt_shown { from_location, to_location }
+repeat_route_prompt_shown { from_location, to_location, created_room_count }
+room_create_blocked       { from_location, to_location, departure_time, reason }
 pwa_install_instruction_shown { source: 'route_subscribe' }  // 기존 이벤트에 source 추가
 past_room_viewed          { room_id }                      // 지난 방 노출 후 탭
 ```
 
 `has_time_window`로 실제로 시간대를 설정하는 비율을 본다. 대부분이 종일로 두면 이 설계가
 과잉이었다는 신호이고, 다수가 설정하면 초안에서 제외했던 판단이 틀렸음이 확인된다.
+
+**`closed_alone_prompt_shown`은 이 목록에서 뺐다(I-3, 2026-08-11).** "구독 유도 지점"
+절에서 설명한 대로 그 프롬프트 자체가 성가심 피드백으로 제거됐고, 이 이벤트를 발화하는
+코드는 애초에 존재한 적이 없다(구현 순서상 이벤트 계장보다 프롬프트가 먼저 빠졌다).
+canonical 정의가 실제로 발화하지 않는 이벤트로 남아 있으면 다음 사람이 이 문서만 보고
+재구현할 위험이 있어 여기서 없앤다. 대체 지점의 이벤트가 `repeat_route_prompt_shown`이다
+(I-1, followup 리뷰).
+
+**`room_create_blocked`(I-2)는 중복 방 생성이 클라이언트 사전 검사에서 막힌 시점에
+발화한다** (`lib/duplicateRoom.ts`의 `findDuplicateActiveRoom`, `components/HomeClient.tsx`
+`handleCreateMapRoom`). `app/rooms/page.tsx`에도 같은 차단 로직이 있지만 이벤트를 추가하지
+않았다 — 그 페이지는 진입 경로가 없는 고아 페이지(위 비목표 참고)라 실제 트래픽이
+발생하지 않으므로 측정할 대상이 없다.
 
 ---
 

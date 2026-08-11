@@ -671,27 +671,26 @@ function RoutesPageContent() {
               </div>
 
               {!formAllDay && (
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="settings-field-label" htmlFor="routes-form-time-from">시작</label>
-                    <input
-                      id="routes-form-time-from"
-                      type="time"
-                      value={formWindow.from}
-                      onChange={(e) => handleWindowChange('from', e.target.value)}
-                      className="input-field settings-input"
-                    />
-                  </div>
-                  <div>
-                    <label className="settings-field-label" htmlFor="routes-form-time-to">종료</label>
-                    <input
-                      id="routes-form-time-to"
-                      type="time"
-                      value={formWindow.to}
-                      onChange={(e) => handleWindowChange('to', e.target.value)}
-                      className="input-field settings-input"
-                    />
-                  </div>
+                // "시작"/"종료" 라벨 없이도 사이의 ~ 하나로 범위임이 바로 읽힌다(사용자 피드백).
+                // 시각 라벨을 없애더라도 스크린리더에는 각 input의 aria-label로 계속 안내한다.
+                <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
+                  <input
+                    id="routes-form-time-from"
+                    type="time"
+                    aria-label="알림 시작 시각"
+                    value={formWindow.from}
+                    onChange={(e) => handleWindowChange('from', e.target.value)}
+                    className="input-field settings-input"
+                  />
+                  <span aria-hidden="true" className="text-sm font-bold text-gray-400">~</span>
+                  <input
+                    id="routes-form-time-to"
+                    type="time"
+                    aria-label="알림 종료 시각"
+                    value={formWindow.to}
+                    onChange={(e) => handleWindowChange('to', e.target.value)}
+                    className="input-field settings-input"
+                  />
                 </div>
               )}
 

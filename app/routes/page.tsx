@@ -1,10 +1,12 @@
 'use client'
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import {
   LOCATIONS,
+  LOCATION_ORDER,
+  getDestinationOptions,
   getMapRoomDateRange,
   isRestrictedRoutePair,
   isRoomJoinable,
@@ -61,7 +63,9 @@ type OpenRoom = {
   participants?: { id: string }[]
 }
 
-const LOCATION_ENTRIES = Object.entries(LOCATIONS) as [LocationType, string][]
+// 고정지점은 LOCATION_ORDER(제3기숙사 제외)만 노출한다. LOCATIONS는 전체 맵(제3기숙사
+// 포함)이라 그대로 순회하면 선택할 수 없는 지점이 드롭다운에 뜬다.
+const LOCATION_ENTRIES: [LocationType, string][] = LOCATION_ORDER.map((location) => [location, LOCATIONS[location]])
 
 const DEFAULT_WINDOW = { from: '17:00', to: '20:00' }
 
@@ -71,8 +75,8 @@ const WEEKDAY_PRESET_OPTIONS: { label: string; days: number[] }[] = [
   { label: '주말', days: [...WEEKDAY_PRESETS.weekend] },
 ]
 
-// route_subscribed의 source 값. Task 12의 "혼자 남아 방을 닫을 때" 유도 경로는
-// 'closed_alone'을 쓰므로, 이 화면(경로 추가 폼)에서 만든 구독임을 구분할 수 있게 한다.
+// route_subscribed의 source 값. 다른 유입 지점(지도 하단 시트의 벨 아이콘, 방 생성 반복
+// 유도 등)과 구분해 이 화면(경로 추가 폼)에서 만든 구독임을 알 수 있게 한다.
 const ROUTE_SUBSCRIBE_SOURCE = 'routes_page'
 
 function routeKey(from: LocationType, to: LocationType) {
@@ -114,6 +118,10 @@ function RoutesPageContent() {
 
   const [openRooms, setOpenRooms] = useState<OpenRoom[]>([])
   const [openRoomsLoading, setOpenRoomsLoading] = useState(false)
+  // "내 경로에 열린 방" 섹션을 없애고 구독 카드에 뱃지로 통합했다(사용자 피드백). 방이
+  // 2개 이상이면 카드 안에서 목록을 펼쳐 보여줘야 하므로, 어떤 route.id가 펼쳐졌는지만
+  // 로컬에 둔다(서버 상태 아님 — 화면을 나가면 잊혀도 무방).
+  const [expandedRouteIds, setExpandedRouteIds] = useState<Set<string>>(new Set())
 
   const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>('default')
   const [installed, setInstalled] = useState(false)
@@ -398,7 +406,8 @@ function RoutesPageContent() {
       // canonical 이벤트 계약: route_subscribed { from_location, to_location, source,
       // has_time_window, weekday_count }. has_time_window/weekday_count는 이 기능의 성패
       // 지표(대부분 종일이면 시간대 설계가 과잉, 다수가 설정하면 초안 판단이 틀렸음을 확인)라
-      // 반드시 채운다. source는 Task 12의 'closed_alone' 유도 경로와 구분하기 위한 값이다.
+      // 반드시 채운다. source는 지도 하단 시트, 반복 방 생성 유도 등 다른 유입 지점과
+      // 구분하기 위한 값이다.
       // utm_campaign이 안내 메일 것(route_alerts)이면 source를 'feature_email'로 덮어써
       // "안내 메일 → 구독 전환율"을 amplitude에서 곧바로 집계할 수 있게 한다. utm_campaign
       // 자체도 함께 실어 다른 캠페인 유입도 나중에 구분할 수 있게 한다 — null이면
@@ -429,15 +438,44 @@ function RoutesPageContent() {
     }
   }
 
-  // ---- 폴백 섹션 ----
+  // ---- 폴백: 구독 카드에 통합된 "열린 방" ----
+
+  // 경로별로 그룹핑해서 각 구독 카드가 자기 경로에 열린 방만 뱃지로 보여줄 수 있게 한다.
+  const openRoomsByRouteKey = useMemo(() => {
+    const map = new Map<string, OpenRoom[]>()
+    for (const room of openRooms) {
+      const key = routeKey(room.from_location, room.to_location)
+      const list = map.get(key)
+      if (list) list.push(room)
+      else map.set(key, [room])
+    }
+    return map
+  }, [openRooms])
 
   const handleOpenRoomClick = (room: OpenRoom) => {
+    // design doc(...design.md:571)의 canonical 이벤트 계약: 알림 → 방 입장 전환율을
+    // 재는 지표라, 뱃지에서 바로 열든 펼친 목록에서 열든 이 지점 하나로 통일한다.
     trackEvent('route_alert_opened', {
       room_id: room.id,
       from_location: room.from_location,
       to_location: room.to_location,
     })
     router.push(`/rooms/${room.id}`)
+  }
+
+  // 뱃지 탭: 방이 하나면 고를 게 없으니 바로 그 방으로 이동하고, 여러 개면 카드 안에서
+  // 목록을 펼쳐 출발 시각·인원을 보고 고르게 한다.
+  const handleRouteRoomsBadgeClick = (route: RouteSubscriptionRow, rooms: OpenRoom[]) => {
+    if (rooms.length <= 1) {
+      if (rooms[0]) handleOpenRoomClick(rooms[0])
+      return
+    }
+    setExpandedRouteIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(route.id)) next.delete(route.id)
+      else next.add(route.id)
+      return next
+    })
   }
 
   if (loading) {
@@ -472,6 +510,10 @@ function RoutesPageContent() {
       </header>
 
       <main className="settings-shell">
+        {/* 처음 들어온 이용자가 이 화면이 뭘 하는 곳인지 한눈에 알 수 있도록 첫 섹션 위에
+            헤드라인을 둔다(사용자 피드백). 헤더 아래 · 첫 섹션(권한 배너 포함) 위에 항상 노출. */}
+        <h2 className="routes-headline">자주 가는 경로는 알림을 받아 보세요</h2>
+
         {showPermissionBanner && (
           <section className="settings-section settings-section-tight" aria-labelledby="routes-push-banner">
             <div className="flex items-start gap-2.5">
@@ -512,12 +554,20 @@ function RoutesPageContent() {
         )}
 
         <section className="settings-section" aria-labelledby="routes-subscribed-heading">
-          <div className="settings-section-heading">
+          {/* settings-section-heading-lg: 헤드라인 > 섹션 제목 > 본문 위계를 분명히 하기
+              위해 이 화면의 섹션 제목만 한 단계 키운다(사용자 피드백). */}
+          <div className="settings-section-heading settings-section-heading-lg">
             <h3 id="routes-subscribed-heading">구독한 경로</h3>
             {/* I-5: 토글은 푸시만 끄고 이 목록/앱 내 폴백은 계속 보인다(사용자 결정).
                 라벨이 그냥 "알림"이면 "이 경로 안 볼래"로 읽히므로, 무엇이 꺼지는지와
                 앱 안에서는 계속 보인다는 점을 여기서 한 번 명시한다. */}
-            <p>토글은 푸시 알림만 켜고 꺼요 · 꺼도 이 목록과 열린 방은 계속 보여요</p>
+            <p>
+              {/* 예전에는 "내 경로에 열린 방"이 별도 섹션이었다. 같은 정보를 두 곳에서
+                  보여주는 게 비효율적이라는 피드백으로 각 카드의 뱃지로 합쳤다(Task 5). */}
+              {openRoomsLoading
+                ? '토글은 푸시 알림만 켜고 꺼요 · 열린 방을 확인하는 중이에요'
+                : '토글은 푸시 알림만 켜고 꺼요 · 꺼도 이 목록과 열린 방은 계속 보여요'}
+            </p>
           </div>
 
           {routes.length === 0 ? (
@@ -529,55 +579,105 @@ function RoutesPageContent() {
               {routes.map((route) => {
                 const busy = busyRouteIds.has(route.id)
                 const label = `${LOCATIONS[route.from_location]} → ${LOCATIONS[route.to_location]}`
+                const roomsForRoute = openRoomsByRouteKey.get(routeKey(route.from_location, route.to_location)) ?? []
+                const hasMultipleRooms = roomsForRoute.length > 1
+                const expanded = hasMultipleRooms && expandedRouteIds.has(route.id)
                 return (
-                  <div key={route.id} className="settings-row items-center">
-                    <div className="min-w-0 flex-1 py-0.5">
-                      <p className="flex items-center gap-1 truncate text-[0.82rem] font-extrabold text-gray-950">
-                        <span className="truncate">{LOCATIONS[route.from_location]}</span>
-                        <ArrowRight className="h-3 w-3 shrink-0 text-gray-400" aria-hidden="true" />
-                        <span className="truncate">{LOCATIONS[route.to_location]}</span>
-                      </p>
-                      <p className="mt-0.5 truncate text-[0.72rem] font-semibold text-gray-500">
-                        {summarizeWindow(route.notify_from, route.notify_to)} · {summarizeWeekdays(route.notify_weekdays)}
-                        {/* "알림 꺼짐"이라고만 하면 이 경로 전체를 안 본다는 뜻으로 읽힌다.
-                            실제로는 푸시만 꺼지고 이 목록/앱 내 폴백은 계속 보이므로(I-5,
-                            사용자 결정) 범위를 "푸시"로 명시한다. */}
-                        {!route.notify_enabled && ' · 푸시 꺼짐'}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={route.notify_enabled}
-                        aria-label={`${label} 푸시 알림 ${route.notify_enabled ? '끄기' : '켜기'}`}
-                        onClick={() => handleToggleNotify(route)}
-                        disabled={busy}
-                        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg disabled:opacity-50"
-                      >
-                        <span
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-                            route.notify_enabled ? 'bg-primary-600' : 'bg-gray-300'
-                          }`}
+                  // settings-row가 이 Fragment의 부모(settings-list)에 그대로 직속 자식으로
+                  // 들어가야 .settings-row:first-child 구분선 규칙이 깨지지 않는다 — 감싸는
+                  // div를 두면 매 행이 "자기 부모의 첫째 자식"이 되어 구분선이 전부 사라진다.
+                  <Fragment key={route.id}>
+                    <div className="settings-row items-center">
+                      <div className="min-w-0 flex-1 py-0.5">
+                        <p className="flex items-center gap-1 truncate text-[0.82rem] font-extrabold text-gray-950">
+                          <span className="truncate">{LOCATIONS[route.from_location]}</span>
+                          <ArrowRight className="h-3 w-3 shrink-0 text-gray-400" aria-hidden="true" />
+                          <span className="truncate">{LOCATIONS[route.to_location]}</span>
+                        </p>
+                        <p className="mt-0.5 truncate text-[0.72rem] font-semibold text-gray-500">
+                          {summarizeWindow(route.notify_from, route.notify_to)} · {summarizeWeekdays(route.notify_weekdays)}
+                          {/* "알림 꺼짐"이라고만 하면 이 경로 전체를 안 본다는 뜻으로 읽힌다.
+                              실제로는 푸시만 꺼지고 이 목록/앱 내 폴백은 계속 보이므로(I-5,
+                              사용자 결정) 범위를 "푸시"로 명시한다. */}
+                          {!route.notify_enabled && ' · 푸시 꺼짐'}
+                        </p>
+                        {roomsForRoute.length > 0 && (
+                          // 색상만으로 정보를 주지 않도록(PRODUCT.md 접근성) 숫자를 텍스트로
+                          // 함께 표기한다. 방이 1개면 고를 게 없어 바로 열고, 여러 개면
+                          // 펼쳐서 출발 시각·인원을 보고 고르게 한다.
+                          <button
+                            type="button"
+                            onClick={() => handleRouteRoomsBadgeClick(route, roomsForRoute)}
+                            aria-expanded={hasMultipleRooms ? expanded : undefined}
+                            aria-label={
+                              hasMultipleRooms
+                                ? `${label} 열린 방 ${roomsForRoute.length}개 ${expanded ? '목록 접기' : '목록 보기'}`
+                                : `${label} 열린 방으로 이동`
+                            }
+                            className="mt-1.5 inline-flex min-h-6 items-center gap-1 rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-[0.68rem] font-black text-primary-700 transition hover:bg-primary-100"
+                          >
+                            <Users className="h-3 w-3" aria-hidden="true" />
+                            열린 방 {roomsForRoute.length}개
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={route.notify_enabled}
+                          aria-label={`${label} 푸시 알림 ${route.notify_enabled ? '끄기' : '켜기'}`}
+                          onClick={() => handleToggleNotify(route)}
+                          disabled={busy}
+                          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg disabled:opacity-50"
                         >
                           <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
-                              route.notify_enabled ? 'translate-x-6' : 'translate-x-1'
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                              route.notify_enabled ? 'bg-primary-600' : 'bg-gray-300'
                             }`}
-                          />
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`${label} 경로 삭제`}
-                        onClick={() => handleDeleteRoute(route)}
-                        disabled={busy}
-                        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                          >
+                            <span
+                              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                                route.notify_enabled ? 'translate-x-6' : 'translate-x-1'
+                              }`}
+                            />
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`${label} 경로 삭제`}
+                          onClick={() => handleDeleteRoute(route)}
+                          disabled={busy}
+                          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
+
+                    {expanded && (
+                      <div className="space-y-1.5 border-t border-gray-100 bg-gray-50/60 px-3 py-2">
+                        {roomsForRoute.map((room) => (
+                          <button
+                            key={room.id}
+                            type="button"
+                            aria-label={`${LOCATIONS[room.from_location]}에서 ${LOCATIONS[room.to_location]} ${room.departure_date.slice(5).replace('-', '/')} ${room.departure_time.slice(0, 5)} 방 열기`}
+                            onClick={() => handleOpenRoomClick(room)}
+                            className="flex w-full items-center justify-between gap-2 rounded-lg border border-gray-100 bg-white px-2.5 py-2 text-left transition hover:border-primary-100 hover:bg-primary-50"
+                          >
+                            <span className="inline-flex items-center gap-1.5 text-[0.78rem] font-black text-gray-950">
+                              <Clock className="h-3.5 w-3.5 text-primary-600" aria-hidden="true" />
+                              {room.departure_date.slice(5).replace('-', '/')} {room.departure_time.slice(0, 5)}
+                            </span>
+                            <span className="inline-flex items-center gap-1 text-[0.7rem] font-black text-gray-500">
+                              <Users className="h-3 w-3" aria-hidden="true" />
+                              {room.participants?.length ?? 0}/{room.max_participants}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </Fragment>
                 )
               })}
             </div>
@@ -585,7 +685,7 @@ function RoutesPageContent() {
         </section>
 
         <section className="settings-section" aria-labelledby="routes-add-heading">
-          <div className="settings-section-heading">
+          <div className="settings-section-heading settings-section-heading-lg">
             <h3 id="routes-add-heading">경로 추가</h3>
             <p>이미 구독 중인 경로를 다시 추가하면 시간대·요일 설정이 업데이트돼요</p>
           </div>
@@ -615,15 +715,11 @@ function RoutesPageContent() {
                   className="input-field settings-input"
                 >
                   <option value="">선택하세요</option>
-                  {LOCATION_ENTRIES.map(([value, name]) => {
-                    const disabled =
-                      formFrom !== '' && (value === formFrom || isRestrictedRoutePair(formFrom, value))
-                    return (
-                      <option key={value} value={value} disabled={disabled}>
-                        {name}{disabled ? ` (${value === formFrom ? '출발지와 동일' : '선택 불가'})` : ''}
-                      </option>
-                    )
-                  })}
+                  {/* 선택 불가한 도착지(출발지 자신·근거리 제한 쌍)는 비활성 옵션으로 보여주지
+                      않고 아예 렌더하지 않는다 — getDestinationOptions가 그 필터링을 맡는다. */}
+                  {getDestinationOptions(formFrom).map((value) => (
+                    <option key={value} value={value}>{LOCATIONS[value]}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -667,27 +763,26 @@ function RoutesPageContent() {
               </div>
 
               {!formAllDay && (
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="settings-field-label" htmlFor="routes-form-time-from">시작</label>
-                    <input
-                      id="routes-form-time-from"
-                      type="time"
-                      value={formWindow.from}
-                      onChange={(e) => handleWindowChange('from', e.target.value)}
-                      className="input-field settings-input"
-                    />
-                  </div>
-                  <div>
-                    <label className="settings-field-label" htmlFor="routes-form-time-to">종료</label>
-                    <input
-                      id="routes-form-time-to"
-                      type="time"
-                      value={formWindow.to}
-                      onChange={(e) => handleWindowChange('to', e.target.value)}
-                      className="input-field settings-input"
-                    />
-                  </div>
+                // "시작"/"종료" 라벨 없이도 사이의 ~ 하나로 범위임이 바로 읽힌다(사용자 피드백).
+                // 시각 라벨을 없애더라도 스크린리더에는 각 input의 aria-label로 계속 안내한다.
+                <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
+                  <input
+                    id="routes-form-time-from"
+                    type="time"
+                    aria-label="알림 시작 시각"
+                    value={formWindow.from}
+                    onChange={(e) => handleWindowChange('from', e.target.value)}
+                    className="input-field settings-input"
+                  />
+                  <span aria-hidden="true" className="text-sm font-bold text-gray-400">~</span>
+                  <input
+                    id="routes-form-time-to"
+                    type="time"
+                    aria-label="알림 종료 시각"
+                    value={formWindow.to}
+                    onChange={(e) => handleWindowChange('to', e.target.value)}
+                    className="input-field settings-input"
+                  />
                 </div>
               )}
 
@@ -769,55 +864,6 @@ function RoutesPageContent() {
               )}
             </button>
           </div>
-        </section>
-
-        <section className="settings-section" aria-labelledby="routes-open-rooms-heading">
-          <div className="settings-section-heading">
-            <h3 id="routes-open-rooms-heading">내 경로에 열린 방</h3>
-            <p>구독한 경로에 지금 열려 있는 방이에요</p>
-          </div>
-
-          {openRoomsLoading ? (
-            <div className="flex justify-center py-6">
-              <div className="loading-spinner" />
-            </div>
-          ) : routes.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-8 text-center text-sm font-bold text-gray-500">
-              알림 경로를 추가하면 열린 방을 여기서 볼 수 있어요
-            </div>
-          ) : openRooms.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-8 text-center text-sm font-bold text-gray-500">
-              아직 열린 방이 없어요. 방이 열리면 여기에 표시돼요.
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {openRooms.map((room) => (
-                <button
-                  key={room.id}
-                  type="button"
-                  aria-label={`${LOCATIONS[room.from_location]}에서 ${LOCATIONS[room.to_location]} ${room.departure_date.slice(5).replace('-', '/')} ${room.departure_time.slice(0, 5)} 방 열기`}
-                  onClick={() => handleOpenRoomClick(room)}
-                  className="w-full rounded-lg border border-gray-100 bg-gray-50 px-3 py-3 text-left transition hover:border-primary-100 hover:bg-primary-50"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-1.5 text-sm font-black text-gray-950">
-                      <Clock className="h-4 w-4 text-primary-600" aria-hidden="true" />
-                      {room.departure_date.slice(5).replace('-', '/')} {room.departure_time.slice(0, 5)}
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-xs font-black text-gray-500">
-                      <Users className="h-3.5 w-3.5" aria-hidden="true" />
-                      {room.participants?.length ?? 0}/{room.max_participants}
-                    </span>
-                  </div>
-                  <div className="mt-1 flex min-w-0 items-center gap-1 text-xs font-bold text-gray-600">
-                    <span className="truncate">{LOCATIONS[room.from_location]}</span>
-                    <ArrowRight className="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden="true" />
-                    <span className="truncate">{LOCATIONS[room.to_location]}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
         </section>
       </main>
 

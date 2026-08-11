@@ -4,7 +4,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, Fra
 import Image from 'next/image'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { ChatRoom, User, Message, RoomParticipant, PayoutAccount, LOCATIONS, isRoomJoinable, getRoomDepartureDateTime, type LocationType } from '@/lib/supabase'
+import { ChatRoom, User, Message, RoomParticipant, PayoutAccount, LOCATIONS, isRoomJoinable, getRoomDepartureDateTime } from '@/lib/supabase'
 import {
   extractHostAppearanceFromMessage,
   splitMessages,
@@ -18,7 +18,7 @@ import { formatAccountNumberForBank, isAccountNumberCompleteForBank } from '@/li
 import { AccountNumberSegmentField, BankSelectField } from '@/components/BankAccountFields'
 import { identifyAnalyticsUser, trackEvent } from '@/lib/analytics/client'
 import { buildRoomInviteSharePayload } from '@/lib/roomInvite'
-import { ArrowLeft, Users, Clock, Send, Flag, X, LogOut, Phone, CreditCard, Copy, Share2, BellRing } from 'lucide-react'
+import { ArrowLeft, Users, Clock, Send, Flag, X, LogOut, Phone, CreditCard, Copy, Share2 } from 'lucide-react'
 import { format, isSameDay } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -76,11 +76,6 @@ export default function ChatRoomPage() {
   // 출발 이후 나가기 시 "택시 탑승을 완료하셨나요?" 응답. null = 미선택
   const [rideBoarded, setRideBoarded] = useState<boolean | null>(null)
   const [isLeavingRoom, setIsLeavingRoom] = useState(false)
-  // 혼자 남아 방이 닫혔을 때(closedAlone) 뜨는 "다음엔 알림 받을까요?" 프롬프트.
-  // 46일 실측 기준 37개 방 중 35개가 이 순간을 겪었다 — 세 유도 지점 중 전환율이
-  // 가장 높을 것으로 보는 지점(docs/superpowers/specs/2026-08-06-route-subscription-alerts-design.md).
-  const [closedAloneRoute, setClosedAloneRoute] = useState<{ from: LocationType; to: LocationType } | null>(null)
-  const [isSubscribingClosedAlone, setIsSubscribingClosedAlone] = useState(false)
   const [reportReason, setReportReason] = useState('')
   const [reportTarget, setReportTarget] = useState<string>('')
   const [timestampReveal, setTimestampReveal] = useState(0)
@@ -1167,9 +1162,6 @@ export default function ChatRoomPage() {
 
       const result = await response.json().catch(() => null) as {
         error?: string
-        closedAlone?: boolean
-        from_location?: LocationType
-        to_location?: LocationType
       } | null
 
       if (!response.ok) {
@@ -1188,16 +1180,6 @@ export default function ChatRoomPage() {
           room_id: roomId,
           boarded,
         })
-      }
-
-      // 혼자 남아 방이 닫혔다면 지도로 바로 보내지 않고 구독 유도 프롬프트를 먼저 보여준다.
-      if (result?.closedAlone && result.from_location && result.to_location) {
-        setClosedAloneRoute({ from: result.from_location, to: result.to_location })
-        trackEvent('closed_alone_prompt_shown', {
-          from_location: result.from_location,
-          to_location: result.to_location,
-        })
-        return
       }
 
       router.push('/map')
@@ -1237,54 +1219,6 @@ export default function ChatRoomPage() {
     setRideBoarded(boarded)
     setShowRideCompletionModal(false)
     await completeLeaveRoom(undefined, boarded)
-  }
-
-  // "다음엔 이 경로에 방이 열리면 알려드릴까요?" 프롬프트를 닫고 지도로 이동한다.
-  // 구독하지 않고 넘어가는 경로에서도 쓴다.
-  const dismissClosedAlonePrompt = () => {
-    setClosedAloneRoute(null)
-    router.push('/map')
-  }
-
-  // 한 번 탭으로 구독을 완료한다 — 방금 겪은 "아무도 안 왔다"는 순간을 그대로 다음 알림
-  // 조건(종일·매일)으로 넘긴다. 실패해도(예: favorites 신규 컬럼 미배포) 나가기 자체는
-  // 이미 끝난 뒤라 지도 이동은 그대로 진행한다.
-  const handleSubscribeClosedAloneRoute = async () => {
-    if (!closedAloneRoute) return
-
-    setIsSubscribingClosedAlone(true)
-    try {
-      const res = await fetch('/api/routes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from_location: closedAloneRoute.from,
-          to_location: closedAloneRoute.to,
-        }),
-      })
-      const json = await res.json().catch(() => null)
-
-      if (!res.ok) throw new Error(json?.error ?? '경로 알림을 등록하지 못했습니다')
-
-      // design doc(docs/superpowers/specs/2026-08-06-route-subscription-alerts-design.md:570)의
-      // canonical 이벤트 계약: route_subscribed { from_location, to_location, source,
-      // has_time_window, weekday_count }. source='closed_alone'으로 /routes 화면 구독과 구분한다.
-      trackEvent('route_subscribed', {
-        from_location: closedAloneRoute.from,
-        to_location: closedAloneRoute.to,
-        source: 'closed_alone',
-        has_time_window: false,
-        weekday_count: 7,
-      })
-      toast.success('알림을 받을게요')
-    } catch (error) {
-      console.error('Closed-alone route subscribe error:', error)
-      toast.error(error instanceof Error ? error.message : '경로 알림을 등록하지 못했습니다')
-    } finally {
-      setIsSubscribingClosedAlone(false)
-      setClosedAloneRoute(null)
-      router.push('/map')
-    }
   }
 
   const handleConfirmHostLeave = async () => {
@@ -2296,71 +2230,6 @@ export default function ChatRoomPage() {
                 className="inline-flex h-12 items-center justify-center rounded-xl border border-gray-300 bg-white text-sm font-black text-gray-800 transition hover:border-gray-400 disabled:opacity-50"
               >
                 아니오, 안 탔어요
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 혼자 남아 방이 닫혔을 때: 다음 알림 구독 유도 */}
-      {closedAloneRoute && (
-        <div
-          className="fixed inset-0 z-50 flex items-end bg-gray-950/35 px-3 pb-3 pt-16"
-          onClick={() => {
-            if (!isSubscribingClosedAlone) dismissClosedAlonePrompt()
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="closed-alone-prompt-title"
-            className="w-full rounded-2xl bg-white p-4 shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">알림 받기</p>
-                <h2 id="closed-alone-prompt-title" className="mt-1 text-lg font-extrabold text-gray-950">
-                  이 경로 알림을 받을까요?
-                </h2>
-              </div>
-              <button
-                type="button"
-                aria-label="닫기"
-                onClick={dismissClosedAlonePrompt}
-                disabled={isSubscribingClosedAlone}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="flex gap-2 rounded-xl border border-primary-100 bg-primary-50 px-3 py-2.5">
-              <BellRing className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
-              <p className="text-sm font-bold leading-5 text-gray-700">
-                <span className="font-black text-gray-950">
-                  {LOCATIONS[closedAloneRoute.from]} → {LOCATIONS[closedAloneRoute.to]}
-                </span>
-                에 방이 열리면 알려드릴게요.
-              </p>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={handleSubscribeClosedAloneRoute}
-                disabled={isSubscribingClosedAlone}
-                className="inline-flex h-12 items-center justify-center rounded-xl bg-primary-600 text-sm font-black text-white transition hover:bg-primary-700 disabled:bg-gray-300"
-              >
-                {isSubscribingClosedAlone ? '등록 중...' : '알림 받을게요'}
-              </button>
-              <button
-                type="button"
-                onClick={dismissClosedAlonePrompt}
-                disabled={isSubscribingClosedAlone}
-                className="inline-flex h-12 items-center justify-center rounded-xl border border-gray-300 bg-white text-sm font-black text-gray-800 transition hover:border-gray-400 disabled:opacity-50"
-              >
-                다음에요
               </button>
             </div>
           </div>

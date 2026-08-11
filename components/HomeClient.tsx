@@ -18,6 +18,13 @@ import {
   isRoomVisibleOnMap,
   isRestrictedRoutePair,
 } from '@/lib/supabase'
+import {
+  DUPLICATE_ROOM_MESSAGE,
+  findDuplicateActiveRoom,
+  getDuplicateRoomMessage,
+  isDuplicateRoomFull,
+  POSTGRES_UNIQUE_VIOLATION_CODE,
+} from '@/lib/duplicateRoom'
 import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
 import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, detectInAppBrowser, escapeInAppBrowser, extractGachonProfileFromMetadata, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
 import { isInstalled } from '@/lib/pwa'
@@ -26,7 +33,8 @@ import { PREVIEW_TEST_ACCOUNTS, isPreviewTestLoginEnabled } from '@/lib/previewT
 import { hasServiceShareIntent, removeServiceShareIntent, shareService } from '@/lib/serviceShare'
 import { identifyAnalyticsUser, shouldSuppressAnalyticsForUser, suppressAnalyticsForCurrentDevice, trackEvent } from '@/lib/analytics/client'
 import { ROUTES_SEEN_STORAGE_KEY } from '@/lib/routeSummary'
-import { AlertTriangle, ArrowRight, Ban, Bell, Clock, MessageSquareText, Share2, Star, Settings, Users, X } from 'lucide-react'
+import { buildRepeatRoutePromptDismissKey, shouldPromptRepeatRouteSubscription } from '@/lib/repeatRoutePrompt'
+import { AlertTriangle, ArrowRight, Ban, Bell, BellRing, Clock, MessageSquareText, Share2, Star, Settings, Users, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import CampusRouteMap, { CampusMapRoom } from '@/components/CampusRouteMap'
@@ -244,6 +252,10 @@ export default function HomeClient() {
   const [moderationStatus, setModerationStatus] = useState<ModerationStatusPayload | null>(null)
   const [moderationModal, setModerationModal] = useState<'warning' | 'suspension' | null>(null)
   const [isAcknowledgingWarning, setIsAcknowledgingWarning] = useState(false)
+  // 8-2: 같은 경로로 방을 2회 이상 만들었는데 아직 구독하지 않은 이용자에게, 방 생성
+  // 성공 직후 띄우는 구독 유도 시트. roomId는 시트를 닫을 때 이동할 목적지(방금 만든 방)다.
+  const [repeatRoutePrompt, setRepeatRoutePrompt] = useState<{ from: LocationType; to: LocationType; roomId: string } | null>(null)
+  const [isSubscribingRepeatRoute, setIsSubscribingRepeatRoute] = useState(false)
   const lastAuthErrorAtRef = useRef(0)
   const hasShownProfileRequiredPromptRef = useRef(false)
   const mapHeaderRef = useRef<HTMLElement>(null)
@@ -1246,6 +1258,30 @@ export default function HomeClient() {
       return
     }
 
+    // 클라이언트에 이미 로드된 mapRooms로 먼저 중복을 판정한다. 같은 경로·같은 출발일시에
+    // 방이 둘로 갈리면 매칭 확률이 그대로 절반이 되므로(46일 실측: 참여자 2명 이상 방은
+    // 37개 중 2개뿐), insert를 시도하기 전에 걸러 이용자에게 왜 안 되는지 바로 보여준다.
+    // 다만 이 검사는 UX용일 뿐 경쟁 조건 방어선이 아니다 — 최종 방어는 DB 유니크
+    // 인덱스(chat_rooms_active_route_departure_unique_idx)이고, 그 위반(23505)은 아래
+    // insert 에러 처리에서 별도로 잡는다.
+    const duplicate = findDuplicateActiveRoom(mapRooms, {
+      fromLocation: roomFromLocation,
+      toLocation: roomToLocation,
+      departureDate,
+      departureTime,
+    })
+
+    if (duplicate) {
+      trackEvent('room_create_blocked', {
+        from_location: roomFromLocation,
+        to_location: roomToLocation,
+        departure_time: departureTime,
+        reason: 'duplicate_active_room',
+      })
+      promptDuplicateRoom(duplicate)
+      return
+    }
+
     setIsCreatingMapRoom(true)
 
     try {
@@ -1265,7 +1301,45 @@ export default function HomeClient() {
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        if (error.code === POSTGRES_UNIQUE_VIOLATION_CODE) {
+          // 위 mapRooms 체크를 지나친 경쟁 조건(두 사람이 거의 동시에 같은 방을 만듦).
+          // 방금 DB에 먼저 들어간 그 방을 다시 조회해 같은 안내로 유도한다.
+          trackEvent('room_create_failed', {
+            from_location: roomFromLocation,
+            to_location: roomToLocation,
+            departure_time: departureTime,
+            reason: 'duplicate_active_room',
+          })
+
+          const { data: existingRoom } = await supabase
+            .from('chat_rooms')
+            .select(`
+              id,
+              from_location,
+              to_location,
+              departure_date,
+              departure_time,
+              max_participants,
+              participants:room_participants(id, user_id)
+            `)
+            .eq('from_location', roomFromLocation)
+            .eq('to_location', roomToLocation)
+            .eq('departure_date', departureDate)
+            .eq('departure_time', departureTime)
+            .eq('status', 'active')
+            .maybeSingle()
+
+          if (existingRoom) {
+            promptDuplicateRoom(existingRoom as CampusMapRoom)
+          } else {
+            toast.error(DUPLICATE_ROOM_MESSAGE)
+          }
+          return
+        }
+
+        throw error
+      }
 
       const { error: participantError } = await supabase
         .from('room_participants')
@@ -1298,6 +1372,60 @@ export default function HomeClient() {
         departure_time: departureTime,
         source: 'map_bottom_sheet',
       })
+
+      // 8-2: 같은 경로로 2번째(+) 방을 만든 순간이 구독 유도 최적 시점이라는 근거(46일
+      // 실측: 방을 2개 이상 만든 9명 중 7명이 단일 경로 반복). 이 조회는 부가 기능이라
+      // 실패해도 방 생성 흐름(입장 이동)을 막지 않는다 — 전체를 try/catch로 감싸고
+      // 실패 시 조용히 기존 흐름(즉시 이동)으로 넘어간다.
+      try {
+        const { count: routeRoomCount, error: countError } = await supabase
+          .from('chat_rooms')
+          .select('id', { count: 'exact', head: true })
+          .eq('created_by', user.id)
+          .eq('from_location', roomFromLocation)
+          .eq('to_location', roomToLocation)
+
+        if (countError) throw countError
+
+        const dismissKey = buildRepeatRoutePromptDismissKey(roomFromLocation, roomToLocation)
+        const wasPreviouslyDismissed = window.localStorage.getItem(dismissKey) === 'true'
+
+        // 어차피 2회 미만이거나 이미 거절했으면 뜨지 않을 프롬프트이므로, 그 경우엔
+        // /api/routes 조회 자체를 건너뛴다.
+        let isAlreadySubscribed = false
+        if (!wasPreviouslyDismissed && (routeRoomCount ?? 0) >= 2) {
+          const routesRes = await fetch('/api/routes', { cache: 'no-store' })
+          if (routesRes.ok) {
+            const routesJson = (await routesRes.json().catch(() => null)) as
+              | { routes?: { from_location: string; to_location: string }[] }
+              | null
+            isAlreadySubscribed = (routesJson?.routes ?? []).some(
+              (route) => route.from_location === roomFromLocation && route.to_location === roomToLocation,
+            )
+          }
+        }
+
+        if (
+          shouldPromptRepeatRouteSubscription({
+            createdRoomCount: routeRoomCount ?? 0,
+            isAlreadySubscribed,
+            wasPreviouslyDismissed,
+          })
+        ) {
+          // I-1: route_subscribed(전환, 분자)만 있고 이 프롬프트의 노출(분모)이 없으면
+          // 전환율을 잴 수 없다. 설계 문서 "신규 분석 이벤트" 절의 canonical 정의를 따른다.
+          trackEvent('repeat_route_prompt_shown', {
+            from_location: roomFromLocation,
+            to_location: roomToLocation,
+            created_room_count: routeRoomCount ?? 0,
+          })
+          setRepeatRoutePrompt({ from: roomFromLocation, to: roomToLocation, roomId: room.id })
+          return
+        }
+      } catch (error) {
+        console.error('Repeat route prompt check error:', error)
+      }
+
       router.push(`/rooms/${room.id}`)
     } catch (error) {
       console.error('Create map room error:', error)
@@ -1309,6 +1437,74 @@ export default function HomeClient() {
       toast.error('채팅방 생성 중 오류가 발생했습니다')
     } finally {
       setIsCreatingMapRoom(false)
+    }
+  }
+
+  // 프롬프트를 닫고 방금 만든 방으로 이동만 하는 공용 로직. persist 여부는 호출부가 결정한다.
+  const closeRepeatRoutePrompt = () => {
+    const roomId = repeatRoutePrompt?.roomId
+    setRepeatRoutePrompt(null)
+    if (roomId) router.push(`/rooms/${roomId}`)
+  }
+
+  // 배경(backdrop) 탭 전용: 실수로 배경을 한 번 눌렀다고 그 경로가 영구 봉인되면 안 되므로
+  // localStorage에는 아무것도 남기지 않는다. "다음에요"/X처럼 명시적으로 거절한 경우에만
+  // dismissRepeatRoutePrompt로 영구 저장한다.
+  const dismissRepeatRoutePromptSilently = () => {
+    closeRepeatRoutePrompt()
+  }
+
+  // "다음에요"/X: 이 경로에 대해서는 다시 묻지 않도록 localStorage에 기억해두고 방금 만든
+  // 방으로 이동한다. 매번 뜨면 방 나갈 때 프롬프트(11번에서 제거)와 같은 성가심이 된다.
+  const dismissRepeatRoutePrompt = () => {
+    if (repeatRoutePrompt) {
+      window.localStorage.setItem(
+        buildRepeatRoutePromptDismissKey(repeatRoutePrompt.from, repeatRoutePrompt.to),
+        'true',
+      )
+    }
+    closeRepeatRoutePrompt()
+  }
+
+  // 한 번 탭으로 구독을 완료한다 — notify_*를 생략하면 종일·매일 구독이 된다. 실패해도
+  // 방 생성 흐름(입장)은 이미 끝난 뒤라 그대로 방으로 이동한다.
+  const handleSubscribeRepeatRoute = async () => {
+    if (!repeatRoutePrompt) return
+
+    setIsSubscribingRepeatRoute(true)
+    try {
+      const res = await fetch('/api/routes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from_location: repeatRoutePrompt.from,
+          to_location: repeatRoutePrompt.to,
+        }),
+      })
+      const json = await res.json().catch(() => null)
+
+      if (!res.ok) throw new Error(json?.error ?? '경로 알림을 등록하지 못했습니다')
+
+      // design doc(docs/superpowers/specs/2026-08-06-route-subscription-alerts-design.md:570)의
+      // canonical 이벤트 계약: route_subscribed { from_location, to_location, source,
+      // has_time_window, weekday_count }. source='repeat_route_prompt'로 같은 경로 반복
+      // 생성 유도(followup 스펙 8-2)를 다른 유입 지점과 구분한다.
+      trackEvent('route_subscribed', {
+        from_location: repeatRoutePrompt.from,
+        to_location: repeatRoutePrompt.to,
+        source: 'repeat_route_prompt',
+        has_time_window: false,
+        weekday_count: 7,
+      })
+      toast.success('알림을 받을게요')
+    } catch (error) {
+      console.error('Repeat route subscribe error:', error)
+      toast.error(error instanceof Error ? error.message : '경로 알림을 등록하지 못했습니다')
+    } finally {
+      setIsSubscribingRepeatRoute(false)
+      const roomId = repeatRoutePrompt.roomId
+      setRepeatRoutePrompt(null)
+      router.push(`/rooms/${roomId}`)
     }
   }
 
@@ -1344,7 +1540,13 @@ export default function HomeClient() {
     await supabase.removeChannel(channel)
   }, [supabase])
 
-  const handleJoinMapRoom = async (roomId: string) => {
+  // handleJoinMapRoom(지도 하단시트 참여)과 중복 방 안내 토스트(promptDuplicateRoom) 양쪽에서
+  // 쓰는 공용 참여 로직. room을 mapRooms 조회가 아니라 인자로 직접 받는 이유는, 중복 방 안내는
+  // 방금 DB에서 새로 조회한 방(23505 이후) 또는 mapRooms에 이미 있던 방을 그대로 써야 해서다.
+  const joinExistingRoom = async (
+    room: CampusMapRoom,
+    source: 'map_bottom_sheet' | 'duplicate_room_prompt',
+  ) => {
     if (isResolvingMapSession) return
 
     if (!user || !supabase) {
@@ -1360,25 +1562,22 @@ export default function HomeClient() {
     }
 
     try {
-      const room = mapRooms.find((mapRoom) => mapRoom.id === roomId)
-      if (!room) return
-
       // I-2: 내 방이면 지난 방이어도(정산 채팅이 출발 후에 가장 필요) 그대로 열어야 하므로,
       // isMyRoom 조기 반환을 isRoomJoinable 가드보다 먼저 둔다. join API를 타지 않고
       // router.push만 하므로 서버 가드(app/api/rooms/[id]/join/route.ts)와는 무관하다.
       if (room.participants?.some((participant) => participant.user_id === user.id)) {
         trackEvent('room_reopened', {
-          room_id: roomId,
-          source: 'map_bottom_sheet',
+          room_id: room.id,
+          source,
         })
-        router.push(`/rooms/${roomId}`)
+        router.push(`/rooms/${room.id}`)
         return
       }
 
       if (!isRoomJoinable(room.departure_date, room.departure_time)) {
         toast.error('이미 지난 출발 시간입니다')
         trackEvent('room_join_blocked', {
-          room_id: roomId,
+          room_id: room.id,
           reason: 'past_departure',
           from_location: room.from_location,
           to_location: room.to_location,
@@ -1389,7 +1588,7 @@ export default function HomeClient() {
       if ((room.participants?.length ?? 0) >= room.max_participants) {
         toast.error('채팅방이 가득 찼습니다')
         trackEvent('room_join_blocked', {
-          room_id: roomId,
+          room_id: room.id,
           reason: 'full',
           from_location: room.from_location,
           to_location: room.to_location,
@@ -1398,14 +1597,14 @@ export default function HomeClient() {
       }
 
       trackEvent('room_join_started', {
-        room_id: roomId,
+        room_id: room.id,
         from_location: room.from_location,
         to_location: room.to_location,
         departure_date: room.departure_date,
         departure_time: room.departure_time,
-        source: 'map_bottom_sheet',
+        source,
       })
-      const response = await fetch(`/api/rooms/${roomId}/join`, {
+      const response = await fetch(`/api/rooms/${room.id}/join`, {
         method: 'POST',
       })
       const result = await response.json().catch(() => null)
@@ -1414,24 +1613,71 @@ export default function HomeClient() {
         throw new Error(result?.error ?? '채팅방 참여 중 오류가 발생했습니다')
       }
 
-      await broadcastRoomSync(roomId, 'participants')
+      await broadcastRoomSync(room.id, 'participants')
       trackEvent('room_joined', {
-        room_id: roomId,
+        room_id: room.id,
         from_location: room.from_location,
         to_location: room.to_location,
         departure_date: room.departure_date,
         departure_time: room.departure_time,
-        source: 'map_bottom_sheet',
+        source,
       })
-      router.push(`/rooms/${roomId}`)
+      router.push(`/rooms/${room.id}`)
     } catch (error) {
       console.error('Join map room error:', error)
       trackEvent('room_join_failed', {
-        room_id: roomId,
-        source: 'map_bottom_sheet',
+        room_id: room.id,
+        source,
       })
       toast.error(error instanceof Error ? error.message : '채팅방 참여 중 오류가 발생했습니다')
     }
+  }
+
+  const handleJoinMapRoom = async (roomId: string) => {
+    const room = mapRooms.find((mapRoom) => mapRoom.id === roomId)
+    if (!room) return
+    await joinExistingRoom(room, 'map_bottom_sheet')
+  }
+
+  // 같은 경로·같은 출발일시로 이미 열린 active 방이 있을 때 안내하는 토스트.
+  // 이용자가 원한 건 "그 시각 그 경로로 이동"이지 방 그 자체가 아니므로, 막기만 하지 않고
+  // 이미 있는 방으로 들어갈 수 있게 버튼을 준다 — 단, 자동 입장은 하지 않고 선택은 이용자가 한다.
+  const promptDuplicateRoom = (room: CampusMapRoom) => {
+    // I-4: 기존 방이 이미 가득 찼으면 "그 방으로 입장해주세요"라고 안내해봐야
+    // joinExistingRoom의 정원 가드에 다시 막혀 "채팅방이 가득 찼습니다"라는 모순된
+    // 메시지로 막다른 길이 된다. 가득 찬 경우 이동 버튼 자체를 없애고 다른 시각으로
+    // 새로 만들라고 안내한다.
+    const isFull = isDuplicateRoomFull(room)
+
+    toast.custom(
+      (t) => (
+        <div className="pointer-events-auto flex w-full max-w-sm flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-lg">
+          <p className="text-sm text-gray-900">{getDuplicateRoomMessage(isFull)}</p>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => toast.dismiss(t.id)}
+              className="rounded-lg px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100"
+            >
+              닫기
+            </button>
+            {!isFull && (
+              <button
+                type="button"
+                onClick={() => {
+                  toast.dismiss(t.id)
+                  void joinExistingRoom(room, 'duplicate_room_prompt')
+                }}
+                className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-700"
+              >
+                그 방으로 이동
+              </button>
+            )}
+          </div>
+        </div>
+      ),
+      { duration: 6000 },
+    )
   }
 
   const handleGoogleStart = async () => {
@@ -1894,6 +2140,74 @@ export default function HomeClient() {
                 참여 중인 방이 없습니다
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 8-2: 같은 경로로 방을 2회 이상 만들었을 때(방 생성 직후) 구독 유도 */}
+      {repeatRoutePrompt && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end bg-gray-950/35 px-3 pb-3 pt-16"
+          onClick={() => {
+            // 배경 탭은 실수로 누르기 쉬우므로 영구 거절로 기록하지 않는다(persist는
+            // X/"다음에요"에서만). 간단히 닫고 방으로 이동만 한다.
+            if (!isSubscribingRepeatRoute) dismissRepeatRoutePromptSilently()
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="repeat-route-prompt-title"
+            className="w-full rounded-2xl bg-white p-4 shadow-2xl"
+            style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">알림 받기</p>
+                <h2 id="repeat-route-prompt-title" className="mt-1 text-lg font-extrabold text-gray-950">
+                  이 경로에 방이 생기면 알림을 받아보시겠어요?
+                </h2>
+              </div>
+              <button
+                type="button"
+                aria-label="닫기"
+                onClick={dismissRepeatRoutePrompt}
+                disabled={isSubscribingRepeatRoute}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="flex gap-2 rounded-xl border border-primary-100 bg-primary-50 px-3 py-2.5">
+              <BellRing className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
+              <p className="text-sm font-bold leading-5 text-gray-700">
+                <span className="font-black text-gray-950">
+                  {LOCATIONS[repeatRoutePrompt.from]} → {LOCATIONS[repeatRoutePrompt.to]}
+                </span>
+                {' '}경로로 방을 두 번 이상 만드셨어요. 다음에 이 경로에 방이 열리면 알려드릴게요.
+              </p>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleSubscribeRepeatRoute}
+                disabled={isSubscribingRepeatRoute}
+                className="inline-flex h-12 items-center justify-center rounded-xl bg-primary-600 text-sm font-black text-white transition hover:bg-primary-700 disabled:bg-gray-300"
+              >
+                {isSubscribingRepeatRoute ? '등록 중...' : '알림 받을게요'}
+              </button>
+              <button
+                type="button"
+                onClick={dismissRepeatRoutePrompt}
+                disabled={isSubscribingRepeatRoute}
+                className="inline-flex h-12 items-center justify-center rounded-xl border border-gray-300 bg-white text-sm font-black text-gray-800 transition hover:border-gray-400 disabled:opacity-50"
+              >
+                다음에요
+              </button>
+            </div>
           </div>
         </div>
       )}

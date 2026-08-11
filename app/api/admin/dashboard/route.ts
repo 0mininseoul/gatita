@@ -31,6 +31,10 @@ type AdminActionPayload =
       reason?: string
     }
 
+// 46일간 전체 메시지가 28건일 정도로 트래픽이 적어 페이지네이션은 과잉이지만, 방을 고르지 않고
+// 전체 메시지를 보는 화면이 생긴 만큼 앞으로 늘어날 것을 감안해 상한을 둔다.
+const MESSAGES_FEED_LIMIT = 200
+
 const MODERATION_ACTION_LABELS = {
   warning: '경고',
   suspend_7d: '7일 정지',
@@ -193,6 +197,10 @@ async function getDashboard(request: Request) {
         )
       `)
       .order('created_at', { ascending: false }),
+    // roomId가 없으면(관리자 대시보드의 "메시지" 탭 기본 화면) 방 선택 없이도 신고 처리에 바로 쓸 수 있도록
+    // 전체 메시지를 최신순으로(최근 MESSAGES_FEED_LIMIT건) 반환한다. roomId가 있으면(방 모니터링 화면,
+    // 또는 대시보드에서 특정 방으로 좁힌 경우) 해당 방 전체 메시지를 반환한다 — 모니터링 화면은 채팅 UI
+    // 특성상 오래된순 표시가 필요하므로 클라이언트(app/admin/rooms/[id]/page.tsx)에서 다시 정렬한다.
     roomId
       ? admin
           .from('messages')
@@ -202,11 +210,24 @@ async function getDashboard(request: Request) {
             user_id,
             content,
             created_at,
-            user:users(nickname, department)
+            user:users(nickname, department),
+            room:room_id(title, from_location, to_location, departure_date, departure_time)
           `)
           .eq('room_id', roomId)
-          .order('created_at', { ascending: true })
-      : Promise.resolve({ data: [], error: null }),
+          .order('created_at', { ascending: false })
+      : admin
+          .from('messages')
+          .select(`
+            id,
+            room_id,
+            user_id,
+            content,
+            created_at,
+            user:users(nickname, department),
+            room:room_id(title, from_location, to_location, departure_date, departure_time)
+          `)
+          .order('created_at', { ascending: false })
+          .limit(MESSAGES_FEED_LIMIT),
     admin
       .from('user_moderation_actions')
       .select(`

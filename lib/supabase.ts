@@ -141,6 +141,7 @@ export type LocationType =
   | '제2기숙사'
   | 'AI공학관'
   | '중앙도서관'
+  | '학생회관'
 
 export type LocationPoint = {
   id: LocationType
@@ -161,14 +162,18 @@ export const LOCATIONS: Record<LocationType, string> = {
   '제3기숙사': '제3기숙사',
   '제2기숙사': '제2기숙사',
   'AI공학관': 'AI공학관',
-  '중앙도서관': '중앙도서관'
+  '중앙도서관': '중앙도서관',
+  '학생회관': '학생회관'
 }
 
+// 남쪽(가천대역)에서 북쪽(제2기숙사)으로 지리적 흐름 순서.
+// 학생회관(37.4532)은 중앙도서관(37.4523)과 AI공학관(37.4552) 사이에 위치한다.
 export const LOCATION_ORDER: LocationType[] = [
   '가천대역_1번출구',
   '가천대학교_정문',
   '교육대학원',
   '중앙도서관',
+  '학생회관',
   'AI공학관',
   '제2기숙사'
 ]
@@ -181,7 +186,11 @@ const restrictedRoutePairs = new Set([
   '제2기숙사__AI공학관',
   'AI공학관__제2기숙사',
   '교육대학원__중앙도서관',
-  '중앙도서관__교육대학원'
+  '중앙도서관__교육대학원',
+  // 중앙도서관↔학생회관 120m — 기존 규칙이 막는 135m 이하 대역과 같아 함께 제한한다.
+  // AI공학관(223m)·교육대학원(238m)은 더 멀어 막지 않는다.
+  '중앙도서관__학생회관',
+  '학생회관__중앙도서관'
 ])
 
 export function isRestrictedRoutePair(fromLocation: LocationType | '', toLocation: LocationType | '') {
@@ -378,6 +387,21 @@ export const LOCATION_POINTS: Record<LocationType, LocationPoint> = {
     lng: 127.13309824619479,
     mapX: 73.3,
     mapY: 49
+  },
+  '학생회관': {
+    id: '학생회관',
+    label: '학생회관',
+    shortLabel: '학생회관',
+    description: '학생회관 건물',
+    lat: 37.4531875,
+    lng: 127.1339531,
+    // mapX/mapY는 기존 7개 지점의 (lat, lng) → (mapX, mapY) 관계를 최소자승 아핀 변환
+    // (mapX = -11.1548·lat + 8626.6499·lng - 1096241.6744, mapY = -10528.7854·lat -
+    // 0.9083·lng + 394492.1736)으로 근사(기존 7개 지점 잔차 ≈0.02, 반올림 수준)해서
+    // 얻었다. 이 좌표(lat 37.4531875, lng 127.1339531)를 대입하면 mapX≈80.65→80.6,
+    // mapY≈40.12→40.1.
+    mapX: 80.6,
+    mapY: 40.1
   }
 }
 

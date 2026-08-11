@@ -98,6 +98,13 @@ type AdminMessage = {
   content: string
   created_at: string
   user?: { nickname?: string; department?: string } | null
+  room?: {
+    title?: string
+    from_location?: LocationType
+    to_location?: LocationType
+    departure_date?: string
+    departure_time?: string
+  } | null
 }
 
 type DashboardData = {
@@ -150,6 +157,9 @@ const ACTION_LABELS: Record<ModerationActionType | ReportResolutionActionType, s
   suspend_permanent: '영구 정지',
   release: '해제',
 }
+
+// app/api/admin/dashboard/route.ts의 MESSAGES_FEED_LIMIT과 맞춰야 한다.
+const MESSAGES_FEED_LIMIT = 200
 
 function statusClass(status: string) {
   if (status === 'active' || status === 'resolved') return 'bg-emerald-50 text-emerald-700 ring-emerald-100'
@@ -377,6 +387,12 @@ export default function AdminPage() {
 
     return grouped
   }, [dashboard?.moderationActions])
+  const recentRooms = useMemo(() => {
+    // 서버(app/api/admin/dashboard/route.ts)가 이미 created_at 내림차순으로 내려주지만,
+    // "최근 개설 방" 위젯의 정렬 기준을 이 컴포넌트 안에서도 명시적으로 보장한다 — 다른 화면 요구로
+    // roomsResult 쿼리의 order()가 나중에 바뀌어도 이 위젯만은 생성순을 유지해야 하기 때문.
+    return [...(dashboard?.rooms ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at))
+  }, [dashboard?.rooms])
   const roomDateOptions = useMemo(() => {
     const dates = Array.from(new Set((dashboard?.rooms ?? []).map((room) => room.departure_date)))
     return dates.sort((a, b) => b.localeCompare(a))
@@ -426,7 +442,12 @@ export default function AdminPage() {
 
   return (
     <main className="min-h-screen bg-gray-50 text-gray-950">
-      <header className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 px-4 py-3 backdrop-blur">
+      {/* iOS PWA(홈 화면 추가)에서 상태바에 헤더가 가려지지 않도록 safe-area-inset-top 적용.
+          app/settings/page.tsx의 .app-header, components/HomeClient.tsx의 지도 헤더와 동일한 패턴. */}
+      <header
+        className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 px-4 pb-3 backdrop-blur"
+        style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
+      >
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <div>
             <p className="text-xs font-black text-primary-600">같이타 운영</p>
@@ -499,7 +520,7 @@ export default function AdminPage() {
             <div className="rounded-lg border border-gray-200 bg-white p-4">
               <h2 className="text-base font-black">최근 개설 방</h2>
               <div className="mt-3 space-y-2">
-                {dashboard.rooms.slice(0, 5).map((room) => (
+                {recentRooms.slice(0, 5).map((room) => (
                   <div
                     key={room.id}
                     className="rounded-lg bg-gray-50 px-3 py-2 text-sm"
@@ -775,8 +796,10 @@ export default function AdminPage() {
 
         {activeTab === 'messages' && (
           <section className="mt-5 rounded-lg border border-gray-200 bg-white p-4">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-base font-black">메시지 조회</h2>
+              {/* 방을 먼저 고르지 않아도 전체 메시지를 최신순으로 볼 수 있어야 하므로 기본값은
+                  "전체 메시지"다. 특정 방으로 좁히고 싶을 때만 선택해서 필터로 쓴다. */}
               <select
                 value={selectedRoomId}
                 onChange={(event) => {
@@ -785,37 +808,51 @@ export default function AdminPage() {
                 }}
                 className="h-10 max-w-full rounded-lg border border-gray-200 bg-white px-3 text-sm font-bold text-gray-950"
               >
-                <option value="">채팅방 선택</option>
+                <option value="">전체 메시지 (최신순)</option>
                 {roomsByDeparture.map((room) => (
                   <option key={room.id} value={room.id}>{formatAdminRoomTitle(room)}</option>
                 ))}
               </select>
             </div>
-            {!selectedRoomId && (
-              <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-10 text-center text-sm font-bold text-gray-500">
-                채팅방을 선택하면 메시지가 표시됩니다
-              </div>
-            )}
-            {selectedRoomId && dashboard.messages.length === 0 && (
+            <p className="mb-4 text-xs font-semibold text-gray-500">
+              {selectedRoomId
+                ? '선택한 방의 메시지를 최신순으로 표시합니다'
+                : `모든 방의 메시지를 최신순으로 표시합니다 (최근 ${MESSAGES_FEED_LIMIT}건까지)`}
+            </p>
+            {dashboard.messages.length === 0 && (
               <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-10 text-center text-sm font-bold text-gray-500">
                 메시지가 없습니다
               </div>
             )}
             {dashboard.messages.length > 0 && (
               <div className="max-h-[60vh] space-y-3 overflow-y-auto rounded-lg bg-gray-50 p-3">
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => selectedRoomId && router.push(`/admin/rooms/${selectedRoomId}`)}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-gray-950 px-3 text-xs font-black text-white transition hover:bg-gray-800"
-                  >
-                    <Eye className="h-4 w-4" />
-                    실제 채팅방 UI로 보기
-                  </button>
-                </div>
+                {selectedRoomId && (
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/admin/rooms/${selectedRoomId}`)}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-gray-950 px-3 text-xs font-black text-white transition hover:bg-gray-800"
+                    >
+                      <Eye className="h-4 w-4" />
+                      실제 채팅방 UI로 보기
+                    </button>
+                  </div>
+                )}
                 {dashboard.messages.map((message) => (
                   <div key={message.id} className="rounded-lg bg-white px-3 py-2">
-                    <div className="flex items-center justify-between gap-2">
+                    {/* 전체 메시지 뷰에서는 방 선택 없이도 신고 처리에 쓸 수 있도록 메시지마다
+                        어느 방인지 보여주고, 눌러서 바로 해당 방 모니터링으로 이동할 수 있게 한다. */}
+                    {!selectedRoomId && (
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/admin/rooms/${message.room_id}`)}
+                        className="mb-1 inline-flex items-center gap-1 text-xs font-black text-primary-600 hover:text-primary-700"
+                      >
+                        <Eye className="h-3 w-3" />
+                        {formatAdminRoomTitle(message.room ?? {})}
+                      </button>
+                    )}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm font-black text-gray-950">
                         {message.user?.nickname ?? '알 수 없음'}
                         <span className="ml-1 text-xs font-semibold text-gray-500">{message.user?.department}</span>

@@ -12,6 +12,7 @@ import {
   User,
   isRestrictedRoutePair,
 } from '@/lib/supabase'
+import { DUPLICATE_ROOM_MESSAGE, findDuplicateActiveRoom, POSTGRES_UNIQUE_VIOLATION_CODE } from '@/lib/duplicateRoom'
 import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
 import { ArrowLeft, Users, Clock, Plus, Star } from 'lucide-react'
 import { format } from 'date-fns'
@@ -388,6 +389,8 @@ function RoomsPageContent() {
           toLocation={toLocation}
           selectedDate={selectedDate}
           user={user}
+          existingRooms={rooms}
+          onDuplicate={loadRooms}
           onClose={() => setIsCreatingRoom(false)}
           onSuccess={(roomId) => {
             setIsCreatingRoom(false)
@@ -478,17 +481,39 @@ interface CreateRoomModalProps {
   toLocation: LocationType
   selectedDate: string
   user: User | null
+  // 같은 경로·같은 출발일시로 이미 열린 active 방이 있는지 판정하는 데 쓴다(부모의
+  // rooms 상태 — 이미 fromLocation/toLocation/selectedDate로 필터링돼 있다).
+  existingRooms: ChatRoom[]
+  // 생성이 DB 유니크 인덱스 위반(23505, 경쟁 조건)으로 막혔을 때 부모의 방 목록을
+  // 새로고침해 방금 생긴 그 방이 목록에 보이도록 한다. 자동 입장은 시키지 않고,
+  // 목록에 노출된 "참여하기" 버튼을 이용자가 직접 눌러야 한다.
+  onDuplicate: () => void
   onClose: () => void
   onSuccess: (roomId: string) => void
 }
 
-function CreateRoomModal({ fromLocation, toLocation, selectedDate, user, onClose, onSuccess }: CreateRoomModalProps) {
+function CreateRoomModal({ fromLocation, toLocation, selectedDate, user, existingRooms, onDuplicate, onClose, onSuccess }: CreateRoomModalProps) {
   const [departureTime, setDepartureTime] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const supabase = createClient()
 
   const handleCreateRoom = async () => {
     if (!departureTime || !user) return
+
+    // DB insert를 시도하기 전에 이미 로드된 방 목록으로 먼저 걸러, 왜 안 되는지
+    // 바로 안내한다. 최종 방어선은 아래 insert의 23505 처리다(경쟁 조건 대비).
+    const duplicate = findDuplicateActiveRoom(existingRooms, {
+      fromLocation,
+      toLocation,
+      departureDate: selectedDate,
+      departureTime,
+    })
+
+    if (duplicate) {
+      toast.error(DUPLICATE_ROOM_MESSAGE)
+      onClose()
+      return
+    }
 
     setIsLoading(true)
 
@@ -509,7 +534,17 @@ function CreateRoomModal({ fromLocation, toLocation, selectedDate, user, onClose
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        if (error.code === POSTGRES_UNIQUE_VIOLATION_CODE) {
+          // mapRooms 사전 체크를 지나친 경쟁 조건. 부모 목록을 새로고침하면 방금
+          // 먼저 들어간 그 방이 보이니, 이용자가 거기서 직접 참여하기를 누르면 된다.
+          toast.error(DUPLICATE_ROOM_MESSAGE)
+          onDuplicate()
+          onClose()
+          return
+        }
+        throw error
+      }
 
       // 자동으로 방장을 참여자로 추가
       const { error: participantError } = await supabase

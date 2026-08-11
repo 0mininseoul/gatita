@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { BellRing, Clock, Compass, MapPin, Minus, Plus, Sparkles, Users, X } from 'lucide-react'
+import { Bell, BellRing, Clock, Compass, MapPin, Minus, Plus, Sparkles, Users, X } from 'lucide-react'
 import {
   getDepartureTimeOptions,
   getDestinationOptions,
@@ -55,8 +55,8 @@ type CampusRouteMapProps = {
   onCloseRouteHint?: (action: 'select-close' | 'action-close') => void
   onOpenRoutes: () => void
   hasUnseenRouteRooms?: boolean
-  // 하단 시트에서 "이 경로 알림 받기"를 눌렀을 때. 도착지가 아직 정해지지 않은 단계이므로
-  // /routes?from={location}으로 보내 도착지를 고르게 한다(Task 12).
+  // 하단 시트 우측 상단의 벨 아이콘을 눌렀을 때. 도착지가 아직 정해지지 않은 단계이므로
+  // /routes?from={location}으로 보내 도착지를 고르게 한다(Task 12, 이후 8-1로 위치 변경).
   onOpenRouteSubscribe?: (from: LocationType) => void
 }
 
@@ -614,6 +614,23 @@ export default function CampusRouteMap({
           className="gatita-bottom-sheet absolute inset-x-3 z-30 mx-auto max-w-2xl rounded-lg border border-white/80 bg-white/95 px-4 pt-4 shadow-[0_18px_48px_rgba(17,24,39,0.22)] backdrop-blur"
           style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
         >
+          {/* "이 경로 알림 받기" 링크였던 것을 벨 아이콘 버튼으로 옮겨 X 닫기 버튼 왼쪽에
+              둔다 — 모든 출발지 시트마다 전체 폭 버튼이 뜨는 게 과하다는 피드백.
+              구독 여부는 표시하지 않는다: 이 시트는 출발지만 정해진 상태라 경로(from+to)
+              단위 구독을 알 수 없고, 출발지만으로 근사하면 다른 도착지를 구독한 경우에도
+              "구독 중"으로 보인다. 틀린 정보를 주느니 표시하지 않고, 정확한 상태는
+              /routes 에서 보게 한다. */}
+          {onOpenRouteSubscribe && selectedFrom && (
+            <button
+              type="button"
+              aria-label="이 경로 알림 받기"
+              onClick={() => onOpenRouteSubscribe(selectedFrom)}
+              className="absolute right-14 top-2.5 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-950"
+            >
+              <Bell className="h-5 w-5" />
+            </button>
+          )}
+
           <button
             type="button"
             aria-label="선택 닫기"
@@ -626,7 +643,7 @@ export default function CampusRouteMap({
 
           {selectedFrom ? (
             <div className="gatita-bottom-sheet-body">
-              <div className="pr-14">
+              <div className="pr-24">
                 <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">출발 지점</p>
                 <div className="mt-1 flex min-w-0 items-center gap-2 text-base font-extrabold text-gray-950">
                   <Compass className="h-4 w-4 shrink-0 text-primary-600" />
@@ -724,17 +741,6 @@ export default function CampusRouteMap({
                   아직 방이 없습니다
                 </div>
               ) : null}
-
-              {onOpenRouteSubscribe && (
-                <button
-                  type="button"
-                  onClick={() => onOpenRouteSubscribe(selectedFrom)}
-                  className="mt-2 inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-primary-200 bg-primary-50/60 px-3 text-xs font-black text-primary-700 transition hover:bg-primary-50"
-                >
-                  <BellRing className="h-3.5 w-3.5" aria-hidden="true" />
-                  이 경로 알림 받기
-                </button>
-              )}
 
               <button
                 type="button"

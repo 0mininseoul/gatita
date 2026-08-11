@@ -472,6 +472,10 @@ function RoutesPageContent() {
       </header>
 
       <main className="settings-shell">
+        {/* 처음 들어온 이용자가 이 화면이 뭘 하는 곳인지 한눈에 알 수 있도록 첫 섹션 위에
+            헤드라인을 둔다(사용자 피드백). 헤더 아래 · 첫 섹션(권한 배너 포함) 위에 항상 노출. */}
+        <h2 className="routes-headline">자주 가는 경로는 알림을 받아 보세요</h2>
+
         {showPermissionBanner && (
           <section className="settings-section settings-section-tight" aria-labelledby="routes-push-banner">
             <div className="flex items-start gap-2.5">

@@ -1440,7 +1440,21 @@ export default function HomeClient() {
     }
   }
 
-  // "다음에요": 이 경로에 대해서는 다시 묻지 않도록 localStorage에 기억해두고 방금 만든
+  // 프롬프트를 닫고 방금 만든 방으로 이동만 하는 공용 로직. persist 여부는 호출부가 결정한다.
+  const closeRepeatRoutePrompt = () => {
+    const roomId = repeatRoutePrompt?.roomId
+    setRepeatRoutePrompt(null)
+    if (roomId) router.push(`/rooms/${roomId}`)
+  }
+
+  // 배경(backdrop) 탭 전용: 실수로 배경을 한 번 눌렀다고 그 경로가 영구 봉인되면 안 되므로
+  // localStorage에는 아무것도 남기지 않는다. "다음에요"/X처럼 명시적으로 거절한 경우에만
+  // dismissRepeatRoutePrompt로 영구 저장한다.
+  const dismissRepeatRoutePromptSilently = () => {
+    closeRepeatRoutePrompt()
+  }
+
+  // "다음에요"/X: 이 경로에 대해서는 다시 묻지 않도록 localStorage에 기억해두고 방금 만든
   // 방으로 이동한다. 매번 뜨면 방 나갈 때 프롬프트(11번에서 제거)와 같은 성가심이 된다.
   const dismissRepeatRoutePrompt = () => {
     if (repeatRoutePrompt) {
@@ -1449,9 +1463,7 @@ export default function HomeClient() {
         'true',
       )
     }
-    const roomId = repeatRoutePrompt?.roomId
-    setRepeatRoutePrompt(null)
-    if (roomId) router.push(`/rooms/${roomId}`)
+    closeRepeatRoutePrompt()
   }
 
   // 한 번 탭으로 구독을 완료한다 — notify_*를 생략하면 종일·매일 구독이 된다. 실패해도
@@ -2137,7 +2149,9 @@ export default function HomeClient() {
         <div
           className="fixed inset-0 z-[60] flex items-end bg-gray-950/35 px-3 pb-3 pt-16"
           onClick={() => {
-            if (!isSubscribingRepeatRoute) dismissRepeatRoutePrompt()
+            // 배경 탭은 실수로 누르기 쉬우므로 영구 거절로 기록하지 않는다(persist는
+            // X/"다음에요"에서만). 간단히 닫고 방으로 이동만 한다.
+            if (!isSubscribingRepeatRoute) dismissRepeatRoutePromptSilently()
           }}
         >
           <div

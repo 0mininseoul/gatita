@@ -122,3 +122,38 @@ test('buildRepeatRoutePromptDismissKey는 같은 입력에 대해 결정적이�
 
   assert.equal(first, second)
 })
+
+// "간단하면 지금": 배경(backdrop)을 실수로 한 번 탭해도 그 경로가 영구 봉인되면 안
+// 된다. 명시적 거절(X, "다음에요")에만 localStorage에 저장돼야 한다. lib/repeatRoutePrompt.ts
+// 는 순수 함수만 있어 이 동작 자체는 components/HomeClient.tsx 쪽 핸들러 배선 문제이므로
+// 소스 텍스트를 직접 검사한다(profile-setup-analytics.test.mjs 관례).
+test('반복 방 생성 프롬프트: 배경 탭은 영구 거절을 저장하지 않는 핸들러를 쓴다', () => {
+  const homeClient = readFileSync(join(process.cwd(), 'components', 'HomeClient.tsx'), 'utf8')
+
+  assert.match(
+    homeClient,
+    /if \(!isSubscribingRepeatRoute\) dismissRepeatRoutePromptSilently\(\)/,
+    '배경(backdrop) onClick은 dismissRepeatRoutePromptSilently를 호출해야 한다',
+  )
+
+  const silentHandlerMatch = homeClient.match(
+    /const dismissRepeatRoutePromptSilently = \(\) => \{([\s\S]*?)\n  \}/,
+  )
+  assert.ok(silentHandlerMatch, 'dismissRepeatRoutePromptSilently 정의를 찾아야 한다')
+  assert.doesNotMatch(
+    silentHandlerMatch[1],
+    /localStorage\.setItem/,
+    '배경 탭 핸들러는 localStorage에 영구 거절을 기록하면 안 된다',
+  )
+
+  // X 버튼과 "다음에요" 버튼은 여전히 영구 저장하는 dismissRepeatRoutePrompt를 써야 한다.
+  const persistingHandlerMatch = homeClient.match(
+    /const dismissRepeatRoutePrompt = \(\) => \{([\s\S]*?)\n  \}/,
+  )
+  assert.ok(persistingHandlerMatch, 'dismissRepeatRoutePrompt(영구 저장) 정의를 찾아야 한다')
+  assert.match(
+    persistingHandlerMatch[1],
+    /localStorage\.setItem/,
+    '명시적 거절(X/다음에요)은 여전히 localStorage에 기록해야 한다',
+  )
+})

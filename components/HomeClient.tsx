@@ -1406,6 +1406,13 @@ export default function HomeClient() {
             wasPreviouslyDismissed,
           })
         ) {
+          // I-1: route_subscribed(전환, 분자)만 있고 이 프롬프트의 노출(분모)이 없으면
+          // 전환율을 잴 수 없다. 설계 문서 "신규 분석 이벤트" 절의 canonical 정의를 따른다.
+          trackEvent('repeat_route_prompt_shown', {
+            from_location: roomFromLocation,
+            to_location: roomToLocation,
+            created_room_count: routeRoomCount ?? 0,
+          })
           setRepeatRoutePrompt({ from: roomFromLocation, to: roomToLocation, roomId: room.id })
           return
         }

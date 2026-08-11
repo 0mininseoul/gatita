@@ -395,10 +395,11 @@ export const LOCATION_POINTS: Record<LocationType, LocationPoint> = {
     description: '학생회관 건물',
     lat: 37.4531875,
     lng: 127.1339531,
-    // mapX/mapY는 기존 7개 지점의 (lat, lng) → (mapX, mapY) 관계를 최소자승 아핀
-    // 변환으로 근사(잔차 ≈0.02, 즉 반올림 수준)해서 얻었다. 좌표계가 사실상 선형이라
-    // 이 변환으로 새 지점도 정확히 예측된다. 자세한 계산은
-    // .superpowers/sdd/followup-student-union-report.md 참고.
+    // mapX/mapY는 기존 7개 지점의 (lat, lng) → (mapX, mapY) 관계를 최소자승 아핀 변환
+    // (mapX = -11.1548·lat + 8626.6499·lng - 1096241.6744, mapY = -10528.7854·lat -
+    // 0.9083·lng + 394492.1736)으로 근사(기존 7개 지점 잔차 ≈0.02, 반올림 수준)해서
+    // 얻었다. 이 좌표(lat 37.4531875, lng 127.1339531)를 대입하면 mapX≈80.65→80.6,
+    // mapY≈40.12→40.1.
     mapX: 80.6,
     mapY: 40.1
   }

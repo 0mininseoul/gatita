@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import {
   LOCATIONS,
+  LOCATION_ORDER,
+  getDestinationOptions,
   getMapRoomDateRange,
   isRestrictedRoutePair,
   isRoomJoinable,
@@ -61,7 +63,9 @@ type OpenRoom = {
   participants?: { id: string }[]
 }
 
-const LOCATION_ENTRIES = Object.entries(LOCATIONS) as [LocationType, string][]
+// 고정지점은 LOCATION_ORDER 6개(제3기숙사 제외)만 노출한다. LOCATIONS는 전체 맵(제3기숙사
+// 포함)이라 그대로 순회하면 선택할 수 없는 지점이 드롭다운에 뜬다.
+const LOCATION_ENTRIES: [LocationType, string][] = LOCATION_ORDER.map((location) => [location, LOCATIONS[location]])
 
 const DEFAULT_WINDOW = { from: '17:00', to: '20:00' }
 
@@ -619,15 +623,11 @@ function RoutesPageContent() {
                   className="input-field settings-input"
                 >
                   <option value="">선택하세요</option>
-                  {LOCATION_ENTRIES.map(([value, name]) => {
-                    const disabled =
-                      formFrom !== '' && (value === formFrom || isRestrictedRoutePair(formFrom, value))
-                    return (
-                      <option key={value} value={value} disabled={disabled}>
-                        {name}{disabled ? ` (${value === formFrom ? '출발지와 동일' : '선택 불가'})` : ''}
-                      </option>
-                    )
-                  })}
+                  {/* 선택 불가한 도착지(출발지 자신·근거리 제한 쌍)는 비활성 옵션으로 보여주지
+                      않고 아예 렌더하지 않는다 — getDestinationOptions가 그 필터링을 맡는다. */}
+                  {getDestinationOptions(formFrom).map((value) => (
+                    <option key={value} value={value}>{LOCATIONS[value]}</option>
+                  ))}
                 </select>
               </div>
             </div>

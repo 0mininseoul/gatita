@@ -27,7 +27,8 @@ import { PREVIEW_TEST_ACCOUNTS, isPreviewTestLoginEnabled } from '@/lib/previewT
 import { hasServiceShareIntent, removeServiceShareIntent, shareService } from '@/lib/serviceShare'
 import { identifyAnalyticsUser, shouldSuppressAnalyticsForUser, suppressAnalyticsForCurrentDevice, trackEvent } from '@/lib/analytics/client'
 import { ROUTES_SEEN_STORAGE_KEY } from '@/lib/routeSummary'
-import { AlertTriangle, ArrowRight, Ban, Bell, Clock, MessageSquareText, Share2, Star, Settings, Users, X } from 'lucide-react'
+import { buildRepeatRoutePromptDismissKey, shouldPromptRepeatRouteSubscription } from '@/lib/repeatRoutePrompt'
+import { AlertTriangle, ArrowRight, Ban, Bell, BellRing, Clock, MessageSquareText, Share2, Star, Settings, Users, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import CampusRouteMap, { CampusMapRoom } from '@/components/CampusRouteMap'
@@ -245,6 +246,10 @@ export default function HomeClient() {
   const [moderationStatus, setModerationStatus] = useState<ModerationStatusPayload | null>(null)
   const [moderationModal, setModerationModal] = useState<'warning' | 'suspension' | null>(null)
   const [isAcknowledgingWarning, setIsAcknowledgingWarning] = useState(false)
+  // 8-2: 같은 경로로 방을 2회 이상 만들었는데 아직 구독하지 않은 이용자에게, 방 생성
+  // 성공 직후 띄우는 구독 유도 시트. roomId는 시트를 닫을 때 이동할 목적지(방금 만든 방)다.
+  const [repeatRoutePrompt, setRepeatRoutePrompt] = useState<{ from: LocationType; to: LocationType; roomId: string } | null>(null)
+  const [isSubscribingRepeatRoute, setIsSubscribingRepeatRoute] = useState(false)
   const lastAuthErrorAtRef = useRef(0)
   const hasShownProfileRequiredPromptRef = useRef(false)
   const mapHeaderRef = useRef<HTMLElement>(null)
@@ -872,6 +877,13 @@ export default function HomeClient() {
     setHasUnseenRouteRooms(hasUnseen)
   }, [mapRooms, subscribedRoutes])
 
+  // 8-1: 지도 하단 시트의 벨 아이콘 상태(구독 중 표시)에 쓰는 출발지 집합. 시트는 출발지만
+  // 정해진 단계라 "경로"(from+to) 단위 매치는 불가능하므로 출발지 단위로만 근사한다.
+  const subscribedFromLocations = useMemo(
+    () => new Set(subscribedRoutes.map((route) => route.from_location)),
+    [subscribedRoutes]
+  )
+
   const onlineDisplayCount = usePresenceDisplayCount(
     supabase,
     user && hasEnteredApp ? 'presence:gachon-map' : null,
@@ -1361,6 +1373,53 @@ export default function HomeClient() {
         departure_time: departureTime,
         source: 'map_bottom_sheet',
       })
+
+      // 8-2: 같은 경로로 2번째(+) 방을 만든 순간이 구독 유도 최적 시점이라는 근거(46일
+      // 실측: 방을 2개 이상 만든 9명 중 7명이 단일 경로 반복). 이 조회는 부가 기능이라
+      // 실패해도 방 생성 흐름(입장 이동)을 막지 않는다 — 전체를 try/catch로 감싸고
+      // 실패 시 조용히 기존 흐름(즉시 이동)으로 넘어간다.
+      try {
+        const { count: routeRoomCount, error: countError } = await supabase
+          .from('chat_rooms')
+          .select('id', { count: 'exact', head: true })
+          .eq('created_by', user.id)
+          .eq('from_location', roomFromLocation)
+          .eq('to_location', roomToLocation)
+
+        if (countError) throw countError
+
+        const dismissKey = buildRepeatRoutePromptDismissKey(roomFromLocation, roomToLocation)
+        const wasPreviouslyDismissed = window.localStorage.getItem(dismissKey) === 'true'
+
+        // 어차피 2회 미만이거나 이미 거절했으면 뜨지 않을 프롬프트이므로, 그 경우엔
+        // /api/routes 조회 자체를 건너뛴다.
+        let isAlreadySubscribed = false
+        if (!wasPreviouslyDismissed && (routeRoomCount ?? 0) >= 2) {
+          const routesRes = await fetch('/api/routes', { cache: 'no-store' })
+          if (routesRes.ok) {
+            const routesJson = (await routesRes.json().catch(() => null)) as
+              | { routes?: { from_location: string; to_location: string }[] }
+              | null
+            isAlreadySubscribed = (routesJson?.routes ?? []).some(
+              (route) => route.from_location === roomFromLocation && route.to_location === roomToLocation,
+            )
+          }
+        }
+
+        if (
+          shouldPromptRepeatRouteSubscription({
+            createdRoomCount: routeRoomCount ?? 0,
+            isAlreadySubscribed,
+            wasPreviouslyDismissed,
+          })
+        ) {
+          setRepeatRoutePrompt({ from: roomFromLocation, to: roomToLocation, roomId: room.id })
+          return
+        }
+      } catch (error) {
+        console.error('Repeat route prompt check error:', error)
+      }
+
       router.push(`/rooms/${room.id}`)
     } catch (error) {
       console.error('Create map room error:', error)
@@ -1372,6 +1431,62 @@ export default function HomeClient() {
       toast.error('채팅방 생성 중 오류가 발생했습니다')
     } finally {
       setIsCreatingMapRoom(false)
+    }
+  }
+
+  // "다음에요": 이 경로에 대해서는 다시 묻지 않도록 localStorage에 기억해두고 방금 만든
+  // 방으로 이동한다. 매번 뜨면 방 나갈 때 프롬프트(11번에서 제거)와 같은 성가심이 된다.
+  const dismissRepeatRoutePrompt = () => {
+    if (repeatRoutePrompt) {
+      window.localStorage.setItem(
+        buildRepeatRoutePromptDismissKey(repeatRoutePrompt.from, repeatRoutePrompt.to),
+        'true',
+      )
+    }
+    const roomId = repeatRoutePrompt?.roomId
+    setRepeatRoutePrompt(null)
+    if (roomId) router.push(`/rooms/${roomId}`)
+  }
+
+  // 한 번 탭으로 구독을 완료한다 — notify_*를 생략하면 종일·매일 구독이 된다. 실패해도
+  // 방 생성 흐름(입장)은 이미 끝난 뒤라 그대로 방으로 이동한다.
+  const handleSubscribeRepeatRoute = async () => {
+    if (!repeatRoutePrompt) return
+
+    setIsSubscribingRepeatRoute(true)
+    try {
+      const res = await fetch('/api/routes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from_location: repeatRoutePrompt.from,
+          to_location: repeatRoutePrompt.to,
+        }),
+      })
+      const json = await res.json().catch(() => null)
+
+      if (!res.ok) throw new Error(json?.error ?? '경로 알림을 등록하지 못했습니다')
+
+      // design doc(docs/superpowers/specs/2026-08-06-route-subscription-alerts-design.md:570)의
+      // canonical 이벤트 계약: route_subscribed { from_location, to_location, source,
+      // has_time_window, weekday_count }. source='repeat_route_prompt'로 같은 경로 반복
+      // 생성 유도(followup 스펙 8-2)를 다른 유입 지점과 구분한다.
+      trackEvent('route_subscribed', {
+        from_location: repeatRoutePrompt.from,
+        to_location: repeatRoutePrompt.to,
+        source: 'repeat_route_prompt',
+        has_time_window: false,
+        weekday_count: 7,
+      })
+      toast.success('알림을 받을게요')
+    } catch (error) {
+      console.error('Repeat route subscribe error:', error)
+      toast.error(error instanceof Error ? error.message : '경로 알림을 등록하지 못했습니다')
+    } finally {
+      setIsSubscribingRepeatRoute(false)
+      const roomId = repeatRoutePrompt.roomId
+      setRepeatRoutePrompt(null)
+      router.push(`/rooms/${roomId}`)
     }
   }
 
@@ -1929,6 +2044,7 @@ export default function HomeClient() {
           // 도착지는 아직 정해지지 않았으므로 /routes에서 고르게 한다.
           router.push(`/routes?from=${encodeURIComponent(from)}`)
         }}
+        subscribedFromLocations={subscribedFromLocations}
       />
 
       {serviceSharePrompt}
@@ -1999,6 +2115,72 @@ export default function HomeClient() {
                 참여 중인 방이 없습니다
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 8-2: 같은 경로로 방을 2회 이상 만들었을 때(방 생성 직후) 구독 유도 */}
+      {repeatRoutePrompt && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end bg-gray-950/35 px-3 pb-3 pt-16"
+          onClick={() => {
+            if (!isSubscribingRepeatRoute) dismissRepeatRoutePrompt()
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="repeat-route-prompt-title"
+            className="w-full rounded-2xl bg-white p-4 shadow-2xl"
+            style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">알림 받기</p>
+                <h2 id="repeat-route-prompt-title" className="mt-1 text-lg font-extrabold text-gray-950">
+                  이 경로에 방이 생기면 알림을 받아보시겠어요?
+                </h2>
+              </div>
+              <button
+                type="button"
+                aria-label="닫기"
+                onClick={dismissRepeatRoutePrompt}
+                disabled={isSubscribingRepeatRoute}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="flex gap-2 rounded-xl border border-primary-100 bg-primary-50 px-3 py-2.5">
+              <BellRing className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
+              <p className="text-sm font-bold leading-5 text-gray-700">
+                <span className="font-black text-gray-950">
+                  {LOCATIONS[repeatRoutePrompt.from]} → {LOCATIONS[repeatRoutePrompt.to]}
+                </span>
+                {' '}경로로 방을 두 번 이상 만드셨어요. 다음에 이 경로에 방이 열리면 알려드릴게요.
+              </p>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleSubscribeRepeatRoute}
+                disabled={isSubscribingRepeatRoute}
+                className="inline-flex h-12 items-center justify-center rounded-xl bg-primary-600 text-sm font-black text-white transition hover:bg-primary-700 disabled:bg-gray-300"
+              >
+                {isSubscribingRepeatRoute ? '등록 중...' : '알림 받을게요'}
+              </button>
+              <button
+                type="button"
+                onClick={dismissRepeatRoutePrompt}
+                disabled={isSubscribingRepeatRoute}
+                className="inline-flex h-12 items-center justify-center rounded-xl border border-gray-300 bg-white text-sm font-black text-gray-800 transition hover:border-gray-400 disabled:opacity-50"
+              >
+                다음에요
+              </button>
+            </div>
           </div>
         </div>
       )}

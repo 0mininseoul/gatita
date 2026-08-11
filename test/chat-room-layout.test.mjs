@@ -389,7 +389,7 @@ test('map app and bottom sheet use the visual viewport and internal sheet scroll
     /handleCloseSheetPointerDown = useCallback\(\(event: ReactPointerEvent<HTMLButtonElement>\) => \{\s*if \(event\.pointerType !== 'touch'\) return\s*event\.preventDefault\(\)\s*closeSheet\(\)/,
     'close button pointerdown handler should preventDefault and close on the first touch',
   )
-  assert.match(mapSource, /gatita-bottom-sheet-body">\s*<div className="pr-14"/, 'sheet body should clear the enlarged close button')
+  assert.match(mapSource, /gatita-bottom-sheet-body">\s*<div className="pr-24"/, 'sheet body should clear the close button and the bell (route alert) button next to it')
   // The bottom sheet is positioned via the .gatita-bottom-sheet CSS block (asserted below),
   // not Tailwind bottom-3; a decorative pointer-events-none overlay may still use bottom-3.
   assert.match(sheetBlock, /max-height:\s*min\(72vh, calc\(var\(--app-viewport-height\) - 8\.75rem\)\);/)

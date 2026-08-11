@@ -18,6 +18,7 @@ import {
   isRoomVisibleOnMap,
   isRestrictedRoutePair,
 } from '@/lib/supabase'
+import { DUPLICATE_ROOM_MESSAGE, findDuplicateActiveRoom, POSTGRES_UNIQUE_VIOLATION_CODE } from '@/lib/duplicateRoom'
 import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
 import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, detectInAppBrowser, escapeInAppBrowser, extractGachonProfileFromMetadata, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
 import { isInstalled } from '@/lib/pwa'
@@ -1246,6 +1247,30 @@ export default function HomeClient() {
       return
     }
 
+    // 클라이언트에 이미 로드된 mapRooms로 먼저 중복을 판정한다. 같은 경로·같은 출발일시에
+    // 방이 둘로 갈리면 매칭 확률이 그대로 절반이 되므로(46일 실측: 참여자 2명 이상 방은
+    // 37개 중 2개뿐), insert를 시도하기 전에 걸러 이용자에게 왜 안 되는지 바로 보여준다.
+    // 다만 이 검사는 UX용일 뿐 경쟁 조건 방어선이 아니다 — 최종 방어는 DB 유니크
+    // 인덱스(chat_rooms_active_route_departure_unique_idx)이고, 그 위반(23505)은 아래
+    // insert 에러 처리에서 별도로 잡는다.
+    const duplicate = findDuplicateActiveRoom(mapRooms, {
+      fromLocation: roomFromLocation,
+      toLocation: roomToLocation,
+      departureDate,
+      departureTime,
+    })
+
+    if (duplicate) {
+      trackEvent('room_create_blocked', {
+        from_location: roomFromLocation,
+        to_location: roomToLocation,
+        departure_time: departureTime,
+        reason: 'duplicate_active_room',
+      })
+      promptDuplicateRoom(duplicate)
+      return
+    }
+
     setIsCreatingMapRoom(true)
 
     try {
@@ -1265,7 +1290,45 @@ export default function HomeClient() {
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        if (error.code === POSTGRES_UNIQUE_VIOLATION_CODE) {
+          // 위 mapRooms 체크를 지나친 경쟁 조건(두 사람이 거의 동시에 같은 방을 만듦).
+          // 방금 DB에 먼저 들어간 그 방을 다시 조회해 같은 안내로 유도한다.
+          trackEvent('room_create_failed', {
+            from_location: roomFromLocation,
+            to_location: roomToLocation,
+            departure_time: departureTime,
+            reason: 'duplicate_active_room',
+          })
+
+          const { data: existingRoom } = await supabase
+            .from('chat_rooms')
+            .select(`
+              id,
+              from_location,
+              to_location,
+              departure_date,
+              departure_time,
+              max_participants,
+              participants:room_participants(id, user_id)
+            `)
+            .eq('from_location', roomFromLocation)
+            .eq('to_location', roomToLocation)
+            .eq('departure_date', departureDate)
+            .eq('departure_time', departureTime)
+            .eq('status', 'active')
+            .maybeSingle()
+
+          if (existingRoom) {
+            promptDuplicateRoom(existingRoom as CampusMapRoom)
+          } else {
+            toast.error(DUPLICATE_ROOM_MESSAGE)
+          }
+          return
+        }
+
+        throw error
+      }
 
       const { error: participantError } = await supabase
         .from('room_participants')
@@ -1344,7 +1407,13 @@ export default function HomeClient() {
     await supabase.removeChannel(channel)
   }, [supabase])
 
-  const handleJoinMapRoom = async (roomId: string) => {
+  // handleJoinMapRoom(지도 하단시트 참여)과 중복 방 안내 토스트(promptDuplicateRoom) 양쪽에서
+  // 쓰는 공용 참여 로직. room을 mapRooms 조회가 아니라 인자로 직접 받는 이유는, 중복 방 안내는
+  // 방금 DB에서 새로 조회한 방(23505 이후) 또는 mapRooms에 이미 있던 방을 그대로 써야 해서다.
+  const joinExistingRoom = async (
+    room: CampusMapRoom,
+    source: 'map_bottom_sheet' | 'duplicate_room_prompt',
+  ) => {
     if (isResolvingMapSession) return
 
     if (!user || !supabase) {
@@ -1360,25 +1429,22 @@ export default function HomeClient() {
     }
 
     try {
-      const room = mapRooms.find((mapRoom) => mapRoom.id === roomId)
-      if (!room) return
-
       // I-2: 내 방이면 지난 방이어도(정산 채팅이 출발 후에 가장 필요) 그대로 열어야 하므로,
       // isMyRoom 조기 반환을 isRoomJoinable 가드보다 먼저 둔다. join API를 타지 않고
       // router.push만 하므로 서버 가드(app/api/rooms/[id]/join/route.ts)와는 무관하다.
       if (room.participants?.some((participant) => participant.user_id === user.id)) {
         trackEvent('room_reopened', {
-          room_id: roomId,
-          source: 'map_bottom_sheet',
+          room_id: room.id,
+          source,
         })
-        router.push(`/rooms/${roomId}`)
+        router.push(`/rooms/${room.id}`)
         return
       }
 
       if (!isRoomJoinable(room.departure_date, room.departure_time)) {
         toast.error('이미 지난 출발 시간입니다')
         trackEvent('room_join_blocked', {
-          room_id: roomId,
+          room_id: room.id,
           reason: 'past_departure',
           from_location: room.from_location,
           to_location: room.to_location,
@@ -1389,7 +1455,7 @@ export default function HomeClient() {
       if ((room.participants?.length ?? 0) >= room.max_participants) {
         toast.error('채팅방이 가득 찼습니다')
         trackEvent('room_join_blocked', {
-          room_id: roomId,
+          room_id: room.id,
           reason: 'full',
           from_location: room.from_location,
           to_location: room.to_location,
@@ -1398,14 +1464,14 @@ export default function HomeClient() {
       }
 
       trackEvent('room_join_started', {
-        room_id: roomId,
+        room_id: room.id,
         from_location: room.from_location,
         to_location: room.to_location,
         departure_date: room.departure_date,
         departure_time: room.departure_time,
-        source: 'map_bottom_sheet',
+        source,
       })
-      const response = await fetch(`/api/rooms/${roomId}/join`, {
+      const response = await fetch(`/api/rooms/${room.id}/join`, {
         method: 'POST',
       })
       const result = await response.json().catch(() => null)
@@ -1414,24 +1480,63 @@ export default function HomeClient() {
         throw new Error(result?.error ?? '채팅방 참여 중 오류가 발생했습니다')
       }
 
-      await broadcastRoomSync(roomId, 'participants')
+      await broadcastRoomSync(room.id, 'participants')
       trackEvent('room_joined', {
-        room_id: roomId,
+        room_id: room.id,
         from_location: room.from_location,
         to_location: room.to_location,
         departure_date: room.departure_date,
         departure_time: room.departure_time,
-        source: 'map_bottom_sheet',
+        source,
       })
-      router.push(`/rooms/${roomId}`)
+      router.push(`/rooms/${room.id}`)
     } catch (error) {
       console.error('Join map room error:', error)
       trackEvent('room_join_failed', {
-        room_id: roomId,
-        source: 'map_bottom_sheet',
+        room_id: room.id,
+        source,
       })
       toast.error(error instanceof Error ? error.message : '채팅방 참여 중 오류가 발생했습니다')
     }
+  }
+
+  const handleJoinMapRoom = async (roomId: string) => {
+    const room = mapRooms.find((mapRoom) => mapRoom.id === roomId)
+    if (!room) return
+    await joinExistingRoom(room, 'map_bottom_sheet')
+  }
+
+  // 같은 경로·같은 출발일시로 이미 열린 active 방이 있을 때 안내하는 토스트.
+  // 이용자가 원한 건 "그 시각 그 경로로 이동"이지 방 그 자체가 아니므로, 막기만 하지 않고
+  // 이미 있는 방으로 들어갈 수 있게 버튼을 준다 — 단, 자동 입장은 하지 않고 선택은 이용자가 한다.
+  const promptDuplicateRoom = (room: CampusMapRoom) => {
+    toast.custom(
+      (t) => (
+        <div className="pointer-events-auto flex w-full max-w-sm flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-lg">
+          <p className="text-sm text-gray-900">{DUPLICATE_ROOM_MESSAGE}</p>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => toast.dismiss(t.id)}
+              className="rounded-lg px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100"
+            >
+              닫기
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                toast.dismiss(t.id)
+                void joinExistingRoom(room, 'duplicate_room_prompt')
+              }}
+              className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-700"
+            >
+              그 방으로 이동
+            </button>
+          </div>
+        </div>
+      ),
+      { duration: 6000 },
+    )
   }
 
   const handleGoogleStart = async () => {

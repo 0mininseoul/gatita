@@ -596,6 +596,14 @@ create trigger enforce_room_capacity_before_insert
 create index chat_rooms_route_date_status_time_idx
   on public.chat_rooms (from_location, to_location, departure_date, status, departure_time);
 
+-- 같은 경로·같은 출발일시로 active 방을 중복 개설하지 못하게 막는다. 방을 닫으면
+-- (status='closed') 같은 조합으로 다시 열 수 있어야 하므로 active 행만 대상으로 하는
+-- 부분 유니크 인덱스다. 자세한 배경과 적용 전 확인해야 할 기존 중복 점검 쿼리는
+-- supabase/migrations/20260811110000_dedupe_active_chat_rooms.sql 주석 참고.
+create unique index chat_rooms_active_route_departure_unique_idx
+  on public.chat_rooms (from_location, to_location, departure_date, departure_time)
+  where status = 'active';
+
 create index chat_rooms_created_by_idx on public.chat_rooms (created_by);
 create index room_participants_room_id_idx on public.room_participants (room_id);
 create index room_participants_user_id_idx on public.room_participants (user_id);

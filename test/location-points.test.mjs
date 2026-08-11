@@ -316,8 +316,10 @@ test('room joins go through a server route that verifies the session and uses th
   const routeSource = readProjectFile('app/api/rooms/[id]/join/route.ts')
   const schema = readProjectFile('supabase_schema.sql')
 
-  assert.match(mapSource, /fetch\(`\/api\/rooms\/\$\{roomId\}\/join`,\s*\{\s*method:\s*'POST'/)
-  assert.match(roomsSource, /fetch\(`\/api\/rooms\/\$\{roomId\}\/join`,\s*\{\s*method:\s*'POST'/)
+  // 식별자는 리팩터링으로 바뀔 수 있으므로(roomId → room.id 등) 형태만 고정한다.
+  // 지키려는 것은 "클라이언트가 직접 insert 하지 않고 서버 라우트로 POST 한다"이다.
+  assert.match(mapSource, /fetch\(`\/api\/rooms\/\$\{[\w.]+\}\/join`,\s*\{\s*method:\s*'POST'/)
+  assert.match(roomsSource, /fetch\(`\/api\/rooms\/\$\{[\w.]+\}\/join`,\s*\{\s*method:\s*'POST'/)
   assert.match(routeSource, /createAdminSupabase/)
   assert.match(routeSource, /auth\.getUser\(\)/)
   assert.match(routeSource, /\.from\('user_private_profiles'\)[\s\S]*\.eq\('user_id', authUser\.id\)/)

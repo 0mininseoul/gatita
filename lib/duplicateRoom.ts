@@ -55,3 +55,22 @@ export function findDuplicateActiveRoom<T extends DuplicateRoomCandidate>(
 export const POSTGRES_UNIQUE_VIOLATION_CODE = '23505'
 
 export const DUPLICATE_ROOM_MESSAGE = '같은 시각·경로로 이미 열린 방이 있어요. 그 방으로 입장해주세요.'
+
+// I-4: 위 메시지로 "그 방으로 입장해주세요"라고 안내해놓고, 그 방이 이미 가득 차서
+// joinExistingRoom의 정원 가드("채팅방이 가득 찼습니다")에 다시 막히면 두 메시지가
+// 모순되고 이용자는 나갈 길이 없다. 가득 찬 방인지를 먼저 판정해 문구를 분기한다.
+export type DuplicateRoomOccupancy = {
+  participants?: { id: string }[] | null
+  max_participants: number
+}
+
+export function isDuplicateRoomFull(room: DuplicateRoomOccupancy): boolean {
+  return (room.participants?.length ?? 0) >= room.max_participants
+}
+
+export const DUPLICATE_ROOM_FULL_MESSAGE =
+  '같은 시각·경로로 이미 열린 방이 있는데 정원이 가득 찼어요. 출발 시각을 조금 바꿔서 새로 만들어주세요.'
+
+export function getDuplicateRoomMessage(isFull: boolean): string {
+  return isFull ? DUPLICATE_ROOM_FULL_MESSAGE : DUPLICATE_ROOM_MESSAGE
+}

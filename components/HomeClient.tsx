@@ -18,7 +18,13 @@ import {
   isRoomVisibleOnMap,
   isRestrictedRoutePair,
 } from '@/lib/supabase'
-import { DUPLICATE_ROOM_MESSAGE, findDuplicateActiveRoom, POSTGRES_UNIQUE_VIOLATION_CODE } from '@/lib/duplicateRoom'
+import {
+  DUPLICATE_ROOM_MESSAGE,
+  findDuplicateActiveRoom,
+  getDuplicateRoomMessage,
+  isDuplicateRoomFull,
+  POSTGRES_UNIQUE_VIOLATION_CODE,
+} from '@/lib/duplicateRoom'
 import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
 import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, detectInAppBrowser, escapeInAppBrowser, extractGachonProfileFromMetadata, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
 import { isInstalled } from '@/lib/pwa'
@@ -1625,10 +1631,16 @@ export default function HomeClient() {
   // 이용자가 원한 건 "그 시각 그 경로로 이동"이지 방 그 자체가 아니므로, 막기만 하지 않고
   // 이미 있는 방으로 들어갈 수 있게 버튼을 준다 — 단, 자동 입장은 하지 않고 선택은 이용자가 한다.
   const promptDuplicateRoom = (room: CampusMapRoom) => {
+    // I-4: 기존 방이 이미 가득 찼으면 "그 방으로 입장해주세요"라고 안내해봐야
+    // joinExistingRoom의 정원 가드에 다시 막혀 "채팅방이 가득 찼습니다"라는 모순된
+    // 메시지로 막다른 길이 된다. 가득 찬 경우 이동 버튼 자체를 없애고 다른 시각으로
+    // 새로 만들라고 안내한다.
+    const isFull = isDuplicateRoomFull(room)
+
     toast.custom(
       (t) => (
         <div className="pointer-events-auto flex w-full max-w-sm flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-lg">
-          <p className="text-sm text-gray-900">{DUPLICATE_ROOM_MESSAGE}</p>
+          <p className="text-sm text-gray-900">{getDuplicateRoomMessage(isFull)}</p>
           <div className="flex justify-end gap-2">
             <button
               type="button"
@@ -1637,16 +1649,18 @@ export default function HomeClient() {
             >
               닫기
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                toast.dismiss(t.id)
-                void joinExistingRoom(room, 'duplicate_room_prompt')
-              }}
-              className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-700"
-            >
-              그 방으로 이동
-            </button>
+            {!isFull && (
+              <button
+                type="button"
+                onClick={() => {
+                  toast.dismiss(t.id)
+                  void joinExistingRoom(room, 'duplicate_room_prompt')
+                }}
+                className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-700"
+              >
+                그 방으로 이동
+              </button>
+            )}
           </div>
         </div>
       ),

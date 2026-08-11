@@ -143,3 +143,41 @@ test('POSTGRES_UNIQUE_VIOLATION_CODE는 Postgres 유니크 위반 코드(23505)�
   const { POSTGRES_UNIQUE_VIOLATION_CODE } = loadDuplicateRoom()
   assert.equal(POSTGRES_UNIQUE_VIOLATION_CODE, '23505')
 })
+
+// I-4: 기존 방이 가득 찬 상태에서 "그 방으로 입장해주세요" → "채팅방이 가득 찼습니다"로
+// 이어지는 막다른 안내를 막기 위한 판정. HomeClient.tsx의 promptDuplicateRoom이 이
+// 값으로 "그 방으로 이동" 버튼 노출 여부와 메시지를 분기한다.
+test('isDuplicateRoomFull: 참여자 수가 정원과 같거나 넘으면 가득 찬 것으로 판정한다', () => {
+  const { isDuplicateRoomFull } = loadDuplicateRoom()
+
+  assert.equal(
+    isDuplicateRoomFull({ participants: [{ id: 'p1' }, { id: 'p2' }], max_participants: 4 }),
+    false,
+  )
+  assert.equal(
+    isDuplicateRoomFull({
+      participants: [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }, { id: 'p4' }],
+      max_participants: 4,
+    }),
+    true,
+  )
+})
+
+test('isDuplicateRoomFull: participants가 없거나 빈 배열이면 가득 차지 않은 것으로 판정한다', () => {
+  const { isDuplicateRoomFull } = loadDuplicateRoom()
+
+  assert.equal(isDuplicateRoomFull({ participants: undefined, max_participants: 4 }), false)
+  assert.equal(isDuplicateRoomFull({ participants: null, max_participants: 4 }), false)
+  assert.equal(isDuplicateRoomFull({ participants: [], max_participants: 4 }), false)
+})
+
+test('getDuplicateRoomMessage: 가득 찬 방과 그렇지 않은 방의 안내 문구가 서로 다르고 모순되지 않는다', () => {
+  const { getDuplicateRoomMessage, DUPLICATE_ROOM_MESSAGE, DUPLICATE_ROOM_FULL_MESSAGE } = loadDuplicateRoom()
+
+  assert.equal(getDuplicateRoomMessage(false), DUPLICATE_ROOM_MESSAGE)
+  assert.equal(getDuplicateRoomMessage(true), DUPLICATE_ROOM_FULL_MESSAGE)
+  assert.notEqual(DUPLICATE_ROOM_MESSAGE, DUPLICATE_ROOM_FULL_MESSAGE)
+  // 가득 찬 방 메시지는 "그 방으로 입장해주세요"처럼 결국 정원 가드에 막히는 안내를
+  // 포함하면 안 되고, 다른 시각으로 새로 만들라는 실행 가능한 대안을 줘야 한다.
+  assert.match(DUPLICATE_ROOM_FULL_MESSAGE, /시각/)
+})

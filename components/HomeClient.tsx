@@ -1201,6 +1201,15 @@ export default function HomeClient() {
 
     setFromLocation(location)
     if (location) {
+      void fetch('/api/analytics/location-sheet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from_location: location }),
+        keepalive: true,
+      }).catch(() => {
+        // Metrics 기록 실패가 지도/시트 사용성을 방해하지 않도록 무시한다.
+      })
+
       advanceRouteCoachmark()
       trackEvent('fixed_point_selected', {
         from_location: location,

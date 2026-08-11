@@ -877,13 +877,6 @@ export default function HomeClient() {
     setHasUnseenRouteRooms(hasUnseen)
   }, [mapRooms, subscribedRoutes])
 
-  // 8-1: 지도 하단 시트의 벨 아이콘 상태(구독 중 표시)에 쓰는 출발지 집합. 시트는 출발지만
-  // 정해진 단계라 "경로"(from+to) 단위 매치는 불가능하므로 출발지 단위로만 근사한다.
-  const subscribedFromLocations = useMemo(
-    () => new Set(subscribedRoutes.map((route) => route.from_location)),
-    [subscribedRoutes]
-  )
-
   const onlineDisplayCount = usePresenceDisplayCount(
     supabase,
     user && hasEnteredApp ? 'presence:gachon-map' : null,
@@ -2044,7 +2037,6 @@ export default function HomeClient() {
           // 도착지는 아직 정해지지 않았으므로 /routes에서 고르게 한다.
           router.push(`/routes?from=${encodeURIComponent(from)}`)
         }}
-        subscribedFromLocations={subscribedFromLocations}
       />
 
       {serviceSharePrompt}

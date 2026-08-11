@@ -559,20 +559,31 @@ function RoutesPageContent() {
           <div className="settings-section-heading settings-section-heading-lg">
             <h3 id="routes-subscribed-heading">구독한 경로</h3>
             {/* I-5: 토글은 푸시만 끄고 이 목록/앱 내 폴백은 계속 보인다(사용자 결정).
-                라벨이 그냥 "알림"이면 "이 경로 안 볼래"로 읽히므로, 무엇이 꺼지는지와
-                앱 안에서는 계속 보인다는 점을 여기서 한 번 명시한다. */}
-            <p>
-              {/* 예전에는 "내 경로에 열린 방"이 별도 섹션이었다. 같은 정보를 두 곳에서
-                  보여주는 게 비효율적이라는 피드백으로 각 카드의 뱃지로 합쳤다(Task 5). */}
-              {openRoomsLoading
-                ? '토글은 푸시 알림만 켜고 꺼요 · 열린 방을 확인하는 중이에요'
-                : '토글은 푸시 알림만 켜고 꺼요 · 꺼도 이 목록과 열린 방은 계속 보여요'}
-            </p>
+                라벨이 그냥 "알림"이면 "이 경로 안 볼래"로 읽히므로 무엇이 꺼지는지 알려야
+                한다. 다만 구독이 0개일 때는 토글 자체가 화면에 없으므로, 있지도 않은
+                컨트롤을 설명하는 문장이 먼저 나오면 순서가 뒤바뀐다 — 카드가 있을 때만
+                설명한다. */}
+            {routes.length > 0 && (
+              <p>
+                {/* 예전에는 "내 경로에 열린 방"이 별도 섹션이었다. 같은 정보를 두 곳에서
+                    보여주는 게 비효율적이라는 피드백으로 각 카드의 뱃지로 합쳤다(Task 5). */}
+                {openRoomsLoading
+                  ? '토글은 푸시 알림만 켜고 꺼요 · 열린 방을 확인하는 중이에요'
+                  : '토글은 푸시 알림만 켜고 꺼요 · 꺼도 이 목록과 열린 방은 계속 보여요'}
+              </p>
+            )}
           </div>
 
           {routes.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-8 text-center text-sm font-bold text-gray-500">
-              아직 구독한 경로가 없어요
+            /* 섹션 설명을 구독이 있을 때만 띄우므로, 비어 있을 때의 안내는 여기가 맡는다.
+               큰 여백만 있는 빈 상자는 "없음"만 강조하니, 다음에 할 일을 한 줄 덧붙인다. */
+            <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/70 px-4 py-6 text-center">
+              <p className="text-sm font-bold text-gray-600">아직 구독한 경로가 없어요</p>
+              <p className="mt-1 text-xs font-medium leading-relaxed text-gray-400">
+                아래에서 자주 가는 경로를 추가하면
+                <br />
+                그 경로에 방이 열릴 때 알려드려요
+              </p>
             </div>
           ) : (
             <div className="settings-list">
@@ -690,7 +701,9 @@ function RoutesPageContent() {
             <p>이미 구독 중인 경로를 다시 추가하면 시간대·요일 설정이 업데이트돼요</p>
           </div>
 
-          <div className="settings-field-stack">
+          {/* routes-form: 이 화면에서만 필드 라벨 위계를 낮추기 위한 스코프
+              (app/globals.css 의 .routes-form .settings-field-label 참고). */}
+          <div className="settings-field-stack routes-form">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <div>
                 <label className="settings-field-label" htmlFor="routes-form-from">출발지</label>
@@ -816,6 +829,10 @@ function RoutesPageContent() {
                   )
                 })}
               </div>
+              {/* 프리셋(매일/평일/주말)은 요약, 개별 요일은 세부다. 둘 다 solid 파랑이면
+                  "매일" 선택 시 파란 블록이 8개가 되어 화면을 덮는다 — 개별 요일은 한 단계
+                  낮춘 톤(연한 배경 + 진한 글자)으로 두어 프리셋이 요약으로 읽히게 한다.
+                  색 외에 글자 굵기·테두리·aria-pressed 로도 상태를 구분한다(PRODUCT.md). */}
               <div className="mt-1.5 flex flex-wrap gap-1">
                 {WEEKDAY_LABELS.map((label, day) => {
                   const active = formWeekdays.includes(day)
@@ -828,8 +845,8 @@ function RoutesPageContent() {
                       onClick={() => toggleWeekday(day)}
                       className={`flex h-10 w-10 items-center justify-center rounded-lg border text-sm transition ${
                         active
-                          ? 'border-primary-600 bg-primary-600 font-extrabold text-white'
-                          : 'border-gray-200 bg-white font-medium text-gray-500 hover:bg-gray-50'
+                          ? 'border-primary-200 bg-primary-50 font-extrabold text-primary-700'
+                          : 'border-gray-200 bg-white font-medium text-gray-400 hover:bg-gray-50'
                       }`}
                     >
                       {label}

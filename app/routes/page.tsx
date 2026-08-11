@@ -75,8 +75,8 @@ const WEEKDAY_PRESET_OPTIONS: { label: string; days: number[] }[] = [
   { label: '주말', days: [...WEEKDAY_PRESETS.weekend] },
 ]
 
-// route_subscribed의 source 값. Task 12의 "혼자 남아 방을 닫을 때" 유도 경로는
-// 'closed_alone'을 쓰므로, 이 화면(경로 추가 폼)에서 만든 구독임을 구분할 수 있게 한다.
+// route_subscribed의 source 값. 다른 유입 지점(지도 하단 시트의 벨 아이콘, 방 생성 반복
+// 유도 등)과 구분해 이 화면(경로 추가 폼)에서 만든 구독임을 알 수 있게 한다.
 const ROUTE_SUBSCRIBE_SOURCE = 'routes_page'
 
 function routeKey(from: LocationType, to: LocationType) {
@@ -406,7 +406,8 @@ function RoutesPageContent() {
       // canonical 이벤트 계약: route_subscribed { from_location, to_location, source,
       // has_time_window, weekday_count }. has_time_window/weekday_count는 이 기능의 성패
       // 지표(대부분 종일이면 시간대 설계가 과잉, 다수가 설정하면 초안 판단이 틀렸음을 확인)라
-      // 반드시 채운다. source는 Task 12의 'closed_alone' 유도 경로와 구분하기 위한 값이다.
+      // 반드시 채운다. source는 지도 하단 시트, 반복 방 생성 유도 등 다른 유입 지점과
+      // 구분하기 위한 값이다.
       // utm_campaign이 안내 메일 것(route_alerts)이면 source를 'feature_email'로 덮어써
       // "안내 메일 → 구독 전환율"을 amplitude에서 곧바로 집계할 수 있게 한다. utm_campaign
       // 자체도 함께 실어 다른 캠페인 유입도 나중에 구분할 수 있게 한다 — null이면

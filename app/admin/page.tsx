@@ -377,6 +377,12 @@ export default function AdminPage() {
 
     return grouped
   }, [dashboard?.moderationActions])
+  const recentRooms = useMemo(() => {
+    // 서버(app/api/admin/dashboard/route.ts)가 이미 created_at 내림차순으로 내려주지만,
+    // "최근 개설 방" 위젯의 정렬 기준을 이 컴포넌트 안에서도 명시적으로 보장한다 — 다른 화면 요구로
+    // roomsResult 쿼리의 order()가 나중에 바뀌어도 이 위젯만은 생성순을 유지해야 하기 때문.
+    return [...(dashboard?.rooms ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at))
+  }, [dashboard?.rooms])
   const roomDateOptions = useMemo(() => {
     const dates = Array.from(new Set((dashboard?.rooms ?? []).map((room) => room.departure_date)))
     return dates.sort((a, b) => b.localeCompare(a))
@@ -504,7 +510,7 @@ export default function AdminPage() {
             <div className="rounded-lg border border-gray-200 bg-white p-4">
               <h2 className="text-base font-black">최근 개설 방</h2>
               <div className="mt-3 space-y-2">
-                {dashboard.rooms.slice(0, 5).map((room) => (
+                {recentRooms.slice(0, 5).map((room) => (
                   <div
                     key={room.id}
                     className="rounded-lg bg-gray-50 px-3 py-2 text-sm"

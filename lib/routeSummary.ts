@@ -60,3 +60,12 @@ export function isValidNotifyWindow(from: string, to: string): boolean {
 export function toNotifyTimeSeconds(time: string): string {
   return `${time}:00`
 }
+
+// toNotifyTimeSeconds의 역방향. 구독을 수정할 때 DB의 'HH:MM:SS'를 <input type="time">이
+// 받는 'HH:MM'으로 되돌린다. 종일 구독은 두 값이 null이라 여기서 빈 문자열을 주고,
+// 호출부가 그 경우 기본 시간대(DEFAULT_WINDOW)를 대신 넣는다 — null을 그대로 input에
+// 흘리면 제어 컴포넌트가 비제어로 바뀌며 경고가 난다.
+export function toNotifyTimeInput(value: string | null): string {
+  if (!value) return ''
+  return value.slice(0, 5)
+}

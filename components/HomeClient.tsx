@@ -1429,10 +1429,9 @@ export default function HomeClient() {
         throw participantError
       }
 
-      // 방장 참여 이력 기록. 클라이언트는 room_participant_events 에 쓸 권한이 없어
-      // (RLS 정책 없음) 서버 라우트를 거쳐야 한다. 이력 기록 전용 호출이므로 실패해도 무시한다.
-      void fetch(`/api/rooms/${room.id}/history`, { method: 'POST' }).catch(() => {})
-
+      // 방장 참여 이력은 위 room_participants insert 를 log_room_participant_join
+      // 트리거가 직접 잡아 기록한다. 예전에는 이력 기록용 서버 라우트를 따로 호출했는데,
+      // 트리거와 중복이었고 그 라우트 자체가 인가 공백을 만들어 함께 제거했다.
       toast.success('채팅방이 생성되었습니다!')
       trackEvent('room_created', {
         room_id: room.id,

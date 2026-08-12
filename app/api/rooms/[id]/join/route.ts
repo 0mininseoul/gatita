@@ -111,16 +111,10 @@ async function joinRoom(
     return NextResponse.json({ error: '채팅방에 참여하지 못했습니다' }, { status: 500 })
   }
 
-  // 매칭 이력 보존. 이벤트 로그이므로 매번 새 행을 추가한다(갱신하지 않음).
-  // 기록 실패가 참여 자체를 막지는 않는다.
-  const { error: historyError } = await admin
-    .from('room_participant_events')
-    .insert({ room_id: roomId, user_id: authUser.id, event_type: 'joined' })
-
-  if (historyError) {
-    console.error('participation history record error:', historyError)
-  }
-
+  // 참여 이력(room_participant_events)은 여기서 남기지 않는다. room_participants 의
+  // log_room_participant_join 트리거가 INSERT 를 직접 잡아 기록하므로, 앱에서 또 넣으면
+  // 같은 이벤트가 두 벌 쌓인다(실제로 프로덕션에서 22ms 간격 중복이 확인됐다).
+  // 트리거는 앱을 우회하는 경로도 잡으므로 그쪽만 남긴다.
   return NextResponse.json({ ok: true })
 }
 

@@ -580,6 +580,9 @@ Resend가 이미 구성돼 있다(`lib/welcome-email.ts`). 신규 의존성이 �
 ```
 route_subscribed          { from_location, to_location, source, has_time_window, weekday_count }
 route_unsubscribed        { from_location, to_location }
+route_subscription_updated { from_location, to_location, has_time_window, weekday_count }
+route_notify_enabled      { route_id, from_location, to_location }   // 카드의 푸시 토글 on
+route_notify_disabled     { route_id, from_location, to_location }   // 카드의 푸시 토글 off
 route_alert_opened        { room_id, from_location, to_location }
 route_alert_fallback_seen  { room_count }                  // 앱 내 폴백 노출
 repeat_route_prompt_shown { from_location, to_location, created_room_count }
@@ -590,6 +593,10 @@ past_room_viewed          { room_id }                      // 지난 방 노출 
 
 `has_time_window`로 실제로 시간대를 설정하는 비율을 본다. 대부분이 종일로 두면 이 설계가
 과잉이었다는 신호이고, 다수가 설정하면 초안에서 제외했던 판단이 틀렸음이 확인된다.
+
+`route_subscription_updated`를 `route_subscribed`와 나눈 것도 같은 이유다 — "추가할 때
+설정했다"와 "쓰다 보니 고쳤다"가 한 이벤트에 섞이면 위 판정이 흐려진다.
+`route_notify_enabled/disabled`는 이 문서에 빠져 있었으나 코드에는 있었다(2026-08-12 등재).
 
 **`closed_alone_prompt_shown`은 이 목록에서 뺐다(I-3, 2026-08-11).** "구독 유도 지점"
 절에서 설명한 대로 그 프롬프트 자체가 성가심 피드백으로 제거됐고, 이 이벤트를 발화하는

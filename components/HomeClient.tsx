@@ -2232,31 +2232,41 @@ export default function HomeClient() {
             style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
+            {/* 닫기 버튼을 헤드라인과 같은 행에 두면 52px 만큼 글자 폭이 줄어 잘린다.
+                버튼은 짧은 eyebrow 와만 행을 나눠 쓰고, 헤드라인은 카드 폭을 다 쓴다. */}
+            <div className="mb-3">
+              <div className="flex items-start justify-between gap-2">
                 <p className="text-xs font-black uppercase tracking-[0.08em] text-primary-600">알림 받기</p>
-                <h2 id="repeat-route-prompt-title" className="mt-1 text-lg font-extrabold text-gray-950">
-                  이 경로에 방이 생기면 알림을 받아보시겠어요?
-                </h2>
+                <button
+                  type="button"
+                  aria-label="닫기"
+                  onClick={dismissRepeatRoutePrompt}
+                  disabled={isSubscribingRepeatRoute}
+                  className="-mr-2 -mt-2.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
+                >
+                  <X className="h-5 w-5" />
+                </button>
               </div>
-              <button
-                type="button"
-                aria-label="닫기"
-                onClick={dismissRepeatRoutePrompt}
-                disabled={isSubscribingRepeatRoute}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
+              {/* 좁은 기기에서도 한 줄을 유지하려고 글자 크기를 카드 안쪽 폭(오버레이
+                  px-3 + 카드 p-4 = 56px 제외)에 연동한다. 이 문구는 실제 서체에서 17.98em
+                  폭이라 폴백 서체 여유를 5% 두고 19 로 나눴다. 상한은 기존 text-lg 와 같다. */}
+              <h2
+                id="repeat-route-prompt-title"
+                className="mt-0.5 whitespace-nowrap font-black leading-snug tracking-[-0.02em] text-gray-950"
+                style={{ fontSize: 'min(1.125rem, calc((100vw - 56px) / 19))' }}
               >
-                <X className="h-5 w-5" />
-              </button>
+                이 경로에 방이 생기면 알림을 받아보시겠어요?
+              </h2>
             </div>
 
             <div className="flex gap-2 rounded-xl border border-primary-100 bg-primary-50 px-3 py-2.5">
               <BellRing className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
               <p className="text-sm font-bold leading-5 text-gray-700">
+                다음에{' '}
                 <span className="font-black text-gray-950">
                   {LOCATIONS[repeatRoutePrompt.from]} → {LOCATIONS[repeatRoutePrompt.to]}
                 </span>
-                {' '}경로로 방을 두 번 이상 만드셨어요. 다음에 이 경로에 방이 열리면 알려드릴게요.
+                {' '}경로에 방이 열리면 알려드릴게요.
               </p>
             </div>
 

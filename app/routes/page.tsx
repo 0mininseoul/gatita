@@ -24,6 +24,7 @@ import {
   isValidNotifyWindow,
   summarizeWeekdays,
   summarizeWindow,
+  toNotifyTimeInput,
   toNotifyTimeSeconds,
   weekdaysEqual,
 } from '@/lib/routeSummary'
@@ -34,6 +35,7 @@ import {
   BellOff,
   BellRing,
   Clock,
+  Pencil,
   Plus,
   Share2,
   Star,
@@ -139,6 +141,9 @@ function RoutesPageContent() {
   const [formWindow, setFormWindow] = useState(DEFAULT_WINDOW)
   const [formWeekdays, setFormWeekdays] = useState<number[]>([...WEEKDAY_PRESETS.everyday])
   const [formSubmitting, setFormSubmitting] = useState(false)
+  // 구독 카드의 연필 아이콘을 누르면 이 값이 채워지고, 아래 폼이 "경로 추가"에서
+  // "경로 수정"으로 바뀐다. 폼을 하나로 유지해 필드 UI가 두 벌로 갈라지지 않게 한다.
+  const [editingRouteId, setEditingRouteId] = useState<string | null>(null)
 
   const loadRoutes = useCallback(async (): Promise<RouteSubscriptionRow[]> => {
     const res = await fetch('/api/routes')
@@ -302,6 +307,12 @@ function RoutesPageContent() {
         nextRoutes = prev.filter((r) => r.id !== route.id)
         return nextRoutes
       })
+      // 수정 중이던 경로를 지웠으면 폼을 추가 모드로 되돌린다. 그대로 두면 이미 없는
+      // 경로를 수정하는 폼이 남아 저장 시 404가 난다.
+      if (editingRouteId === route.id) {
+        setEditingRouteId(null)
+        resetForm()
+      }
       // design doc(docs/superpowers/specs/2026-08-06-route-subscription-alerts-design.md:571)의
       // canonical 이벤트 계약: route_unsubscribed { from_location, to_location }.
       trackEvent('route_unsubscribed', {
@@ -372,10 +383,93 @@ function RoutesPageContent() {
     setFormWeekdays([...WEEKDAY_PRESETS.everyday])
   }
 
+  // ---- 경로 수정 모드 ----
+
+  // 목록에서 사라진 경로(다른 탭에서 삭제 등)를 계속 수정 중인 것처럼 두지 않는다.
+  const editingRoute = editingRouteId === null ? null : routes.find((r) => r.id === editingRouteId) ?? null
+
+  const handleStartEditRoute = (route: RouteSubscriptionRow) => {
+    setEditingRouteId(route.id)
+    setFormFrom(route.from_location)
+    setFormTo(route.to_location)
+
+    // 종일 구독은 notify_from/notify_to가 둘 다 null이다. 그대로 input에 넣으면 제어
+    // 컴포넌트가 비제어로 바뀌므로, "직접 설정"으로 전환했을 때 보여줄 값으로
+    // 기본 시간대를 미리 채워둔다.
+    const allDay = !route.notify_from || !route.notify_to
+    setFormAllDay(allDay)
+    setFormWindow(
+      allDay
+        ? DEFAULT_WINDOW
+        : { from: toNotifyTimeInput(route.notify_from), to: toNotifyTimeInput(route.notify_to) },
+    )
+    setFormWeekdays([...route.notify_weekdays])
+
+    // 폼은 목록보다 아래에 있어 화면 밖일 수 있다. 눌렀는데 아무 일도 안 일어난 것처럼
+    // 보이지 않도록 폼으로 스크롤한다.
+    requestAnimationFrame(() => {
+      document.getElementById('routes-form-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
+
+  const handleCancelEditRoute = () => {
+    setEditingRouteId(null)
+    resetForm()
+  }
+
+  // 수정 모드 저장. 출발지/도착지는 잠겨 있으므로 시간대·요일만 PATCH 한다
+  // (PATCH /api/routes/[id] 도 이 세 필드 + notify_enabled 만 받는다).
+  const handleUpdateRoute = async (route: RouteSubscriptionRow) => {
+    setFormSubmitting(true)
+    try {
+      const res = await fetch(`/api/routes/${route.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          notify_from: formAllDay ? null : toNotifyTimeSeconds(formWindow.from),
+          notify_to: formAllDay ? null : toNotifyTimeSeconds(formWindow.to),
+          notify_weekdays: formWeekdays,
+        }),
+      })
+      const json = await res.json().catch(() => null)
+
+      if (!res.ok) throw new Error(json?.error ?? '경로를 수정하지 못했습니다')
+
+      const savedRoute = json.route as RouteSubscriptionRow
+      let nextRoutes: RouteSubscriptionRow[] = []
+      setRoutes((prev) => {
+        nextRoutes = prev.map((r) => (r.id === savedRoute.id ? savedRoute : r))
+        return nextRoutes
+      })
+
+      // route_subscribed(추가)와 구분되는 별도 이벤트. 시간대 설계가 실제로 쓰이는지를
+      // 보려면 "추가할 때 설정했다"와 "나중에 고쳤다"가 섞이면 안 된다.
+      trackEvent('route_subscription_updated', {
+        from_location: savedRoute.from_location,
+        to_location: savedRoute.to_location,
+        has_time_window: !formAllDay,
+        weekday_count: formWeekdays.length,
+      })
+      toast.success('알림 설정을 수정했어요')
+      setEditingRouteId(null)
+      resetForm()
+      await loadOpenRooms(nextRoutes)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '경로를 수정하지 못했습니다')
+    } finally {
+      setFormSubmitting(false)
+    }
+  }
+
   const handleSubmitForm = async () => {
     // canSubmitForm 자체가 formFrom/formTo !== '' 를 포함하는 조건이라, 이 체크 하나로
     // 아래에서 formFrom/formTo를 LocationType으로 안전하게 쓸 수 있다.
     if (!canSubmitForm) return
+
+    if (editingRoute) {
+      await handleUpdateRoute(editingRoute)
+      return
+    }
 
     setFormSubmitting(true)
     try {
@@ -600,71 +694,91 @@ function RoutesPageContent() {
                   // 들어가야 .settings-row:first-child 구분선 규칙이 깨지지 않는다 — 감싸는
                   // div를 두면 매 행이 "자기 부모의 첫째 자식"이 되어 구분선이 전부 사라진다.
                   <Fragment key={route.id}>
-                    <div className="settings-row items-center">
-                      <div className="min-w-0 flex-1 py-0.5">
-                        <p className="flex items-center gap-1 truncate text-[0.82rem] font-extrabold text-gray-950">
-                          <span className="truncate">{LOCATIONS[route.from_location]}</span>
-                          <ArrowRight className="h-3 w-3 shrink-0 text-gray-400" aria-hidden="true" />
-                          <span className="truncate">{LOCATIONS[route.to_location]}</span>
-                        </p>
-                        <p className="mt-0.5 truncate text-[0.72rem] font-semibold text-gray-500">
-                          {summarizeWindow(route.notify_from, route.notify_to)} · {summarizeWeekdays(route.notify_weekdays)}
-                          {/* "알림 꺼짐"이라고만 하면 이 경로 전체를 안 본다는 뜻으로 읽힌다.
-                              실제로는 푸시만 꺼지고 이 목록/앱 내 폴백은 계속 보이므로(I-5,
-                              사용자 결정) 범위를 "푸시"로 명시한다. */}
-                          {!route.notify_enabled && ' · 푸시 꺼짐'}
-                        </p>
-                        {roomsForRoute.length > 0 && (
-                          // 색상만으로 정보를 주지 않도록(PRODUCT.md 접근성) 숫자를 텍스트로
-                          // 함께 표기한다. 방이 1개면 고를 게 없어 바로 열고, 여러 개면
-                          // 펼쳐서 출발 시각·인원을 보고 고르게 한다.
+                    {/* 경로 이름이 컨트롤과 같은 행이면 아이콘 3개에 밀려 375px 에서
+                        48개 조합 중 20개가 잘린다. 이름에 한 행을 통째로 준다. */}
+                    <div className="settings-row flex-col items-stretch gap-1">
+                      <p className="flex items-center gap-1 truncate text-[0.82rem] font-extrabold text-gray-950">
+                        <span className="truncate">{LOCATIONS[route.from_location]}</span>
+                        <ArrowRight className="h-3 w-3 shrink-0 text-gray-400" aria-hidden="true" />
+                        <span className="truncate">{LOCATIONS[route.to_location]}</span>
+                      </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[0.72rem] font-semibold text-gray-500">
+                            {summarizeWindow(route.notify_from, route.notify_to)} · {summarizeWeekdays(route.notify_weekdays)}
+                            {/* "알림 꺼짐"이라고만 하면 이 경로 전체를 안 본다는 뜻으로 읽힌다.
+                                실제로는 푸시만 꺼지고 이 목록/앱 내 폴백은 계속 보이므로(I-5,
+                                사용자 결정) 범위를 "푸시"로 명시한다. */}
+                            {!route.notify_enabled && ' · 푸시 꺼짐'}
+                          </p>
+                          {roomsForRoute.length > 0 && (
+                            // 색상만으로 정보를 주지 않도록(PRODUCT.md 접근성) 숫자를 텍스트로
+                            // 함께 표기한다. 방이 1개면 고를 게 없어 바로 열고, 여러 개면
+                            // 펼쳐서 출발 시각·인원을 보고 고르게 한다.
+                            <button
+                              type="button"
+                              onClick={() => handleRouteRoomsBadgeClick(route, roomsForRoute)}
+                              aria-expanded={hasMultipleRooms ? expanded : undefined}
+                              aria-label={
+                                hasMultipleRooms
+                                  ? `${label} 열린 방 ${roomsForRoute.length}개 ${expanded ? '목록 접기' : '목록 보기'}`
+                                  : `${label} 열린 방으로 이동`
+                              }
+                              className="mt-1.5 inline-flex min-h-6 items-center gap-1 rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-[0.68rem] font-black text-primary-700 transition hover:bg-primary-100"
+                            >
+                              <Users className="h-3 w-3" aria-hidden="true" />
+                              열린 방 {roomsForRoute.length}개
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
                           <button
                             type="button"
-                            onClick={() => handleRouteRoomsBadgeClick(route, roomsForRoute)}
-                            aria-expanded={hasMultipleRooms ? expanded : undefined}
-                            aria-label={
-                              hasMultipleRooms
-                                ? `${label} 열린 방 ${roomsForRoute.length}개 ${expanded ? '목록 접기' : '목록 보기'}`
-                                : `${label} 열린 방으로 이동`
-                            }
-                            className="mt-1.5 inline-flex min-h-6 items-center gap-1 rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-[0.68rem] font-black text-primary-700 transition hover:bg-primary-100"
-                          >
-                            <Users className="h-3 w-3" aria-hidden="true" />
-                            열린 방 {roomsForRoute.length}개
-                          </button>
-                        )}
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1">
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={route.notify_enabled}
-                          aria-label={`${label} 푸시 알림 ${route.notify_enabled ? '끄기' : '켜기'}`}
-                          onClick={() => handleToggleNotify(route)}
-                          disabled={busy}
-                          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg disabled:opacity-50"
-                        >
-                          <span
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-                              route.notify_enabled ? 'bg-primary-600' : 'bg-gray-300'
-                            }`}
+                            role="switch"
+                            aria-checked={route.notify_enabled}
+                            aria-label={`${label} 푸시 알림 ${route.notify_enabled ? '끄기' : '켜기'}`}
+                            onClick={() => handleToggleNotify(route)}
+                            disabled={busy}
+                            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg disabled:opacity-50"
                           >
                             <span
-                              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
-                                route.notify_enabled ? 'translate-x-6' : 'translate-x-1'
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                                route.notify_enabled ? 'bg-primary-600' : 'bg-gray-300'
                               }`}
-                            />
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={`${label} 경로 삭제`}
-                          onClick={() => handleDeleteRoute(route)}
-                          disabled={busy}
-                          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                            >
+                              <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                                  route.notify_enabled ? 'translate-x-6' : 'translate-x-1'
+                                }`}
+                              />
+                            </span>
+                          </button>
+                          {/* 삭제는 남겨두고 수정만 추가한다(사용자 요청). 수정 중인 경로는
+                              아래 폼과 짝이 맞는다는 걸 알 수 있게 아이콘을 강조해둔다. */}
+                          <button
+                            type="button"
+                            aria-label={`${label} 알림 설정 수정`}
+                            aria-pressed={editingRouteId === route.id}
+                            onClick={() => handleStartEditRoute(route)}
+                            disabled={busy}
+                            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition disabled:opacity-50 ${
+                              editingRouteId === route.id
+                                ? 'bg-primary-50 text-primary-700'
+                                : 'text-gray-400 hover:bg-primary-50 hover:text-primary-700'
+                            }`}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`${label} 경로 삭제`}
+                            onClick={() => handleDeleteRoute(route)}
+                            disabled={busy}
+                            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
 
@@ -697,10 +811,16 @@ function RoutesPageContent() {
           )}
         </section>
 
-        <section className="settings-section" aria-labelledby="routes-add-heading">
+        {/* 추가 폼과 수정 폼이 같은 자리를 쓴다. 필드 UI를 두 벌로 만들면 한쪽만 고쳐지는
+            일이 생기므로, 헤딩·버튼·잠금 여부만 모드에 따라 바꾼다. */}
+        <section id="routes-form-section" className="settings-section" aria-labelledby="routes-add-heading">
           <div className="settings-section-heading settings-section-heading-lg">
-            <h3 id="routes-add-heading">경로 추가</h3>
-            <p>이미 구독 중인 경로를 다시 추가하면 시간대·요일 설정이 업데이트돼요</p>
+            <h3 id="routes-add-heading">{editingRoute ? '경로 수정' : '경로 추가'}</h3>
+            <p>
+              {editingRoute
+                ? '출발지·도착지는 그대로 두고 알림 시간대와 요일만 바꿔요'
+                : '이미 구독 중인 경로를 다시 추가하면 시간대·요일 설정이 업데이트돼요'}
+            </p>
           </div>
 
           {/* routes-form: 이 화면에서만 필드 라벨 위계를 낮추기 위한 스코프
@@ -709,11 +829,14 @@ function RoutesPageContent() {
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <div>
                 <label className="settings-field-label" htmlFor="routes-form-from">출발지</label>
+                {/* 수정 모드에서는 경로를 잠근다 — PATCH /api/routes/[id] 는 위치 변경을
+                    받지 않으므로 열어두면 저장해도 반영 안 되는 조용한 실패가 된다. */}
                 <select
                   id="routes-form-from"
                   value={formFrom}
+                  disabled={editingRoute !== null}
                   onChange={(e) => handleFromChange(e.target.value as LocationType | '')}
-                  className="input-field settings-input"
+                  className="input-field settings-input disabled:bg-gray-100 disabled:text-gray-600"
                 >
                   <option value="">선택하세요</option>
                   {LOCATION_ENTRIES.map(([value, name]) => (
@@ -726,8 +849,9 @@ function RoutesPageContent() {
                 <select
                   id="routes-form-to"
                   value={formTo}
+                  disabled={editingRoute !== null}
                   onChange={(e) => setFormTo(e.target.value as LocationType | '')}
-                  className="input-field settings-input"
+                  className="input-field settings-input disabled:bg-gray-100 disabled:text-gray-600"
                 >
                   <option value="">선택하세요</option>
                   {/* 선택 불가한 도착지(출발지 자신·근거리 제한 쌍)는 비활성 옵션으로 보여주지
@@ -780,14 +904,16 @@ function RoutesPageContent() {
               {!formAllDay && (
                 // "시작"/"종료" 라벨 없이도 사이의 ~ 하나로 범위임이 바로 읽힌다(사용자 피드백).
                 // 시각 라벨을 없애더라도 스크린리더에는 각 input의 aria-label로 계속 안내한다.
-                <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
+                // 1fr 은 minmax(auto,1fr) 이라 <input type="time"> 의 고유 폭 아래로 트랙이
+                // 줄지 않아 오른쪽으로 삐져나갔다. minmax(0,1fr) + min-w-0 으로 풀어준다.
+                <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5">
                   <input
                     id="routes-form-time-from"
                     type="time"
                     aria-label="알림 시작 시각"
                     value={formWindow.from}
                     onChange={(e) => handleWindowChange('from', e.target.value)}
-                    className="input-field settings-input"
+                    className="input-field settings-input w-full min-w-0"
                   />
                   <span aria-hidden="true" className="text-sm font-bold text-gray-400">~</span>
                   <input
@@ -796,7 +922,7 @@ function RoutesPageContent() {
                     aria-label="알림 종료 시각"
                     value={formWindow.to}
                     onChange={(e) => handleWindowChange('to', e.target.value)}
-                    className="input-field settings-input"
+                    className="input-field settings-input w-full min-w-0"
                   />
                 </div>
               )}
@@ -878,8 +1004,10 @@ function RoutesPageContent() {
               {formSubmitting ? (
                 <span className="inline-flex items-center justify-center">
                   <span className="loading-spinner mr-2 h-4 w-4" />
-                  추가 중
+                  {editingRoute ? '저장 중' : '추가 중'}
                 </span>
+              ) : editingRoute ? (
+                '수정 저장'
               ) : (
                 <>
                   <Plus className="mr-1.5 h-4 w-4" />
@@ -887,6 +1015,33 @@ function RoutesPageContent() {
                 </>
               )}
             </button>
+
+            {editingRoute && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleCancelEditRoute}
+                  disabled={formSubmitting}
+                  className="inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-gray-300 bg-white text-sm font-extrabold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+                >
+                  취소
+                </button>
+                {/* 삭제는 되돌릴 수 없어 주 버튼과 붙여두면 오탭 위험이 크다. 구분선을 넣어
+                    한 칸 떨어뜨리고, 색도 저장/취소와 분리한다. 실제 삭제 직전에는
+                    handleDeleteRoute 가 다시 한 번 확인을 받는다. */}
+                <div className="mt-1 border-t border-gray-100 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteRoute(editingRoute)}
+                    disabled={formSubmitting || busyRouteIds.has(editingRoute.id)}
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-white text-sm font-extrabold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                    이 경로 알림 삭제
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </section>
       </main>

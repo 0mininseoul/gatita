@@ -106,6 +106,29 @@ test('toNotifyTimeSeconds: HH:MM에 :00을 붙인다', () => {
   assert.equal(toNotifyTimeSeconds('00:00'), '00:00:00')
 })
 
+// ---- toNotifyTimeInput ----
+// 구독 수정 모드가 DB 값을 <input type="time">에 되돌릴 때 쓴다. null(종일 구독)을
+// 그대로 흘리면 제어 컴포넌트가 비제어로 바뀌므로 빈 문자열로 떨어지는지까지 본다.
+
+test('toNotifyTimeInput: HH:MM:SS에서 초를 떼어낸다', () => {
+  const { toNotifyTimeInput } = loadRouteSummary()
+  assert.equal(toNotifyTimeInput('17:00:00'), '17:00')
+  assert.equal(toNotifyTimeInput('08:30:00'), '08:30')
+})
+
+test('toNotifyTimeInput: 종일 구독(null)과 빈 값은 빈 문자열', () => {
+  const { toNotifyTimeInput } = loadRouteSummary()
+  assert.equal(toNotifyTimeInput(null), '')
+  assert.equal(toNotifyTimeInput(''), '')
+})
+
+test('toNotifyTimeInput: toNotifyTimeSeconds와 왕복해도 값이 보존된다', () => {
+  const { toNotifyTimeInput, toNotifyTimeSeconds } = loadRouteSummary()
+  for (const time of ['00:00', '09:15', '17:00', '23:59']) {
+    assert.equal(toNotifyTimeInput(toNotifyTimeSeconds(time)), time)
+  }
+})
+
 // ---- ROUTES_SEEN_STORAGE_KEY ----
 // I-4: app/routes/page.tsx(쓰기)와 components/HomeClient.tsx(읽기)가 이 키를 각자
 // 리터럴로 선언했었다 — 한쪽 오타가 "새로 열린 방" 배지 계약을 조용히 깨뜨릴 수 있으므로,

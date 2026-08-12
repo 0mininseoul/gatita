@@ -250,11 +250,16 @@ function DuplicateRoomToastCard({
           </button>
         )}
       </div>
+      {/* 아이콘만 있는 닫기 버튼이라 두 가지를 맞춰준다.
+          - gray-400 은 흰 카드 위 2.54:1 로 UI 컴포넌트 식별 기준(3:1) 미달이다. gray-500
+            은 4.83:1 로 통과한다.
+          - h-4 아이콘에 패딩이 없으면 탭 영역이 16px 뿐이다. 음수 마진으로 상쇄한 패딩을
+            줘서 보이는 위치는 그대로 두고 32px 로 넓힌다(이 앱의 다른 버튼은 40px). */}
       <button
         type="button"
         onClick={onDismiss}
         aria-label="닫기"
-        className="shrink-0 text-gray-400 hover:text-gray-600"
+        className="-m-2 shrink-0 p-2 text-gray-500 hover:text-gray-700"
       >
         <X className="h-4 w-4" />
       </button>

@@ -579,7 +579,9 @@ function RoutesPageContent() {
                큰 여백만 있는 빈 상자는 "없음"만 강조하니, 다음에 할 일을 한 줄 덧붙인다. */
             <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/70 px-4 py-6 text-center">
               <p className="text-sm font-bold text-gray-600">아직 구독한 경로가 없어요</p>
-              <p className="mt-1 text-xs font-medium leading-relaxed text-gray-400">
+              {/* 다음에 할 일을 알려주는 안내라 읽혀야 한다. gray-400 은 이 옅은 배경
+                  위에서 약 2.5:1 로 AA 미달이므로 gray-500(약 4.6:1)을 쓴다. */}
+              <p className="mt-1 text-xs font-medium leading-relaxed text-gray-500">
                 아래에서 자주 가는 경로를 추가하면
                 <br />
                 그 경로에 방이 열릴 때 알려드려요
@@ -832,7 +834,12 @@ function RoutesPageContent() {
               {/* 프리셋(매일/평일/주말)은 요약, 개별 요일은 세부다. 둘 다 solid 파랑이면
                   "매일" 선택 시 파란 블록이 8개가 되어 화면을 덮는다 — 개별 요일은 한 단계
                   낮춘 톤(연한 배경 + 진한 글자)으로 두어 프리셋이 요약으로 읽히게 한다.
-                  색 외에 글자 굵기·테두리·aria-pressed 로도 상태를 구분한다(PRODUCT.md). */}
+                  색 외에 글자 굵기·테두리·aria-pressed 로도 상태를 구분한다(PRODUCT.md).
+
+                  꺼진 요일에 gray-400 을 쓰면 흰 배경 위 2.54:1 이라 AA(4.5:1) 미달이다.
+                  disabled 가 아니라 누를 수 있는 토글이므로 대비 예외 대상도 아니다.
+                  gray-500 은 4.83:1 로 통과하면서 프리셋의 gray-600(7.56:1) 보다는
+                  연해서 "한 단계 낮춘 톤"이라는 의도도 그대로 유지된다. */}
               <div className="mt-1.5 flex flex-wrap gap-1">
                 {WEEKDAY_LABELS.map((label, day) => {
                   const active = formWeekdays.includes(day)
@@ -846,7 +853,7 @@ function RoutesPageContent() {
                       className={`flex h-10 w-10 items-center justify-center rounded-lg border text-sm transition ${
                         active
                           ? 'border-primary-200 bg-primary-50 font-extrabold text-primary-700'
-                          : 'border-gray-200 bg-white font-medium text-gray-400 hover:bg-gray-50'
+                          : 'border-gray-200 bg-white font-medium text-gray-500 hover:bg-gray-50'
                       }`}
                     >
                       {label}

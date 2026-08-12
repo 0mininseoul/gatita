@@ -3,6 +3,7 @@ import localFont from 'next/font/local'
 import { Toaster } from 'react-hot-toast'
 import { Metadata, Viewport } from 'next'
 import AnalyticsProvider from '@/components/AnalyticsProvider'
+import ToastTouchPauseFix from '@/components/ToastTouchPauseFix'
 import { Analytics } from '@vercel/analytics/next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import { OG_IMAGE, SITE_NAME, SITE_URL } from '@/lib/seo'
@@ -162,6 +163,7 @@ export default function RootLayout({
           {children}
         </div>
         <AnalyticsProvider />
+        <ToastTouchPauseFix />
         <Toaster
           position="top-center"
           containerStyle={{

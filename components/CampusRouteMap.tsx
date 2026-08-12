@@ -13,6 +13,7 @@ import {
   LOCATIONS,
   LocationType,
 } from '@/lib/supabase'
+import { shouldShowMarkerNames } from '@/lib/mapMarkerDisplay'
 import { trackEvent } from '@/lib/analytics/client'
 
 export type CampusMapRoom = {
@@ -70,6 +71,7 @@ declare global {
 const KAKAO_MAP_SDK_ID = 'gatita-kakao-map-sdk'
 const MAX_MAP_LEVEL = 6
 const MIN_MAP_LEVEL = 1
+const INITIAL_MAP_LEVEL = 3
 
 const emptyStat = (): Stat => ({
   roomCount: 0,
@@ -206,6 +208,10 @@ export default function CampusRouteMap({
   const markerRefs = useRef<any[]>([])
   const overlayRefs = useRef<any[]>([])
   const [mapStatus, setMapStatus] = useState<'loading' | 'ready' | 'missing-key' | 'error'>('loading')
+  // 마커에 지점 이름을 보여줄지(확대) 핀+개수만 보여줄지(축소) 판단하는 데만 쓰는
+  // 상태 — 실제 지도 인스턴스의 level은 mapRef 안에 있고, 이건 그 값을 zoom_changed
+  // 이벤트로 미러링한 렌더용 사본이다(lib/mapMarkerDisplay 참고).
+  const [mapLevel, setMapLevel] = useState(INITIAL_MAP_LEVEL)
   const [focusedLocation, setFocusedLocation] = useState<LocationType | null>(selectedFrom || null)
   const [isCreateMode, setIsCreateMode] = useState(false)
   const [draftDestination, setDraftDestination] = useState<LocationType | ''>('')
@@ -218,6 +224,8 @@ export default function CampusRouteMap({
   const [departureOptionsNonce, setDepartureOptionsNonce] = useState(0)
 
   const { originStats } = useMemo(() => buildStats(rooms, currentUserId), [currentUserId, rooms])
+  // 축소 상태(레벨 5~6)에서는 이름을 숨기고 핀+개수만 보여준다 — 근거는 lib/mapMarkerDisplay.
+  const showMarkerNames = shouldShowMarkerNames(mapLevel)
   const destinationOptions = useMemo(() => getDestinationOptions(selectedFrom), [selectedFrom])
   const departureTimeOptions = useMemo(
     // departureOptionsNonce intentionally drives recomputation; new Date() is read fresh.
@@ -310,16 +318,25 @@ export default function CampusRouteMap({
         kakaoRef.current = kakao
         const map = new kakao.maps.Map(mapContainerRef.current, {
           center: new kakao.maps.LatLng(GACHON_GLOBAL_CAMPUS_CENTER.lat, GACHON_GLOBAL_CAMPUS_CENTER.lng),
-          level: 3,
+          level: INITIAL_MAP_LEVEL,
         })
 
         map.setDraggable(true)
         map.setZoomable(true)
         mapRef.current = map
 
+        // 캠퍼스 경계로 clamp된 "최종" 레벨을 읽어야 하므로 clamp 이후에 읽는다 —
+        // clampMapToCampus가 setLevel로 값을 보정하면 그 안에서 다시 zoom_changed가
+        // 걸릴 수 있지만, 여기서 map.getLevel()은 항상 그 시점의 확정값을 돌려준다.
+        const handleZoomChanged = () => {
+          clampMapToCampus(map, kakao)
+          setMapLevel(map.getLevel())
+        }
+
         kakao.maps.event.addListener(map, 'dragend', () => clampMapToCampus(map, kakao))
-        kakao.maps.event.addListener(map, 'zoom_changed', () => clampMapToCampus(map, kakao))
+        kakao.maps.event.addListener(map, 'zoom_changed', handleZoomChanged)
         clampMapToCampus(map, kakao)
+        setMapLevel(map.getLevel())
         setMapStatus('ready')
       })
       .catch((error) => {
@@ -357,17 +374,24 @@ export default function CampusRouteMap({
         isOrigin ? 'is-origin' : '',
         hasMyOriginRoom ? 'is-my-origin' : '',
         isEmpty ? 'is-empty' : '',
+        // 축소 상태(레벨 5~6)에서는 캠퍼스 전체가 한 덩어리로 보여 이름이 겹쳐
+        // 읽을 수 없다(lib/mapMarkerDisplay 근거). 이때는 핀 + 방 개수만 남긴다.
+        showMarkerNames ? '' : 'is-compact',
       ].filter(Boolean).join(' ')
       const overlayElement = document.createElement('button')
       overlayElement.type = 'button'
       overlayElement.className = overlayClass
       overlayElement.setAttribute('aria-label', hasMyOriginRoom ? `${point.label} 참여 중인 방 출발지` : `${point.label} 선택`)
 
-      const overlayLabel = document.createElement('span')
-      overlayLabel.textContent = point.shortLabel
+      if (showMarkerNames) {
+        const overlayLabel = document.createElement('span')
+        overlayLabel.textContent = point.shortLabel
+        overlayElement.append(overlayLabel)
+      }
+
       const overlayCount = document.createElement('strong')
       overlayCount.textContent = label
-      overlayElement.append(overlayLabel, overlayCount)
+      overlayElement.append(overlayCount)
       overlayElement.addEventListener('click', (event) => {
         event.preventDefault()
         event.stopPropagation()
@@ -393,7 +417,7 @@ export default function CampusRouteMap({
       markerRefs.current = []
       overlayRefs.current = []
     }
-  }, [handleLocationSelect, mapStatus, originStats, selectedFrom])
+  }, [handleLocationSelect, mapStatus, originStats, selectedFrom, showMarkerNames])
 
   useEffect(() => {
     if (!selectedFrom || mapStatus !== 'ready' || !mapRef.current || !kakaoRef.current) return
@@ -545,27 +569,38 @@ export default function CampusRouteMap({
             const isOrigin = selectedFrom === location
             const hasMyOriginRoom = originStat.myRoomCount > 0
 
+            // 폴백 지도는 확대/축소가 없어 캠퍼스 전체가 늘 한 화면에 들어오는, 실제
+            // 지도로 치면 "가장 축소된" 상태와 같다. 그런데 배경이 실제 지형이 아니라
+            // 장식용 도형이라 실제 지도의 축소 규칙(이름을 지우고 핀+개수만)을 그대로
+            // 옮기면 이름이 유일한 단서인 이 화면에서 어느 지점인지 구분할 방법이
+            // 사라진다. 그래서 이름은 남기되 상태/인원 텍스트를 두 번째 줄 대신 우상단
+            // 원형 배지로 옮겨 한 줄로 줄인다 — 가장 가까운 두 지점(112m)도 세로 폭이
+            // 절반으로 줄어 더 이상 겹치지 않는다.
+            const badgeText = hasMyOriginRoom ? '참여' : isOrigin ? '출발' : String(originStat.roomCount)
+
             return (
               <button
                 key={location}
                 type="button"
                 onClick={() => handleLocationSelect(location)}
-                className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-lg border px-3 py-2 text-left text-xs shadow-lg transition ${
+                aria-label={hasMyOriginRoom ? `${point.label} 참여 중인 방 출발지` : `${point.label} 선택`}
+                className={`absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border px-2.5 py-1.5 text-[11px] font-black shadow-lg transition ${
                   hasMyOriginRoom
-                    ? 'border-primary-500 bg-white text-gray-950 ring-4 ring-primary-500/20'
+                    ? 'z-30 border-primary-500 bg-white text-gray-950 ring-4 ring-primary-500/20'
                     : isOrigin
-                      ? 'border-primary-600 bg-primary-600 text-white'
-                      : 'border-white bg-white text-gray-900 hover:border-primary-300'
+                      ? 'z-20 border-primary-600 bg-primary-600 text-white'
+                      : 'z-10 border-white bg-white text-gray-900 hover:border-primary-300'
                 }`}
                 style={{ left: `${point.mapX}%`, top: `${point.mapY}%` }}
               >
-                <span className="block whitespace-nowrap font-bold">{point.shortLabel}</span>
-                <span className="block whitespace-nowrap opacity-80">
-                  {hasMyOriginRoom ? '참여중' : isOrigin ? '출발' : `${originStat.roomCount}개 방`}
+                {point.shortLabel}
+                <span
+                  className={`absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full border-2 border-white px-1 text-[9px] font-black leading-none ${
+                    hasMyOriginRoom ? 'bg-primary-600 text-white' : isOrigin ? 'bg-white text-primary-700' : 'bg-gray-900 text-white'
+                  }`}
+                >
+                  {badgeText}
                 </span>
-                {hasMyOriginRoom && (
-                  <span className="absolute -right-1.5 -top-1.5 h-3 w-3 rounded-full border-2 border-white bg-primary-600 shadow-[0_0_0_4px_rgba(39,130,255,0.18)]" />
-                )}
               </button>
             )
           })}
@@ -691,17 +726,16 @@ export default function CampusRouteMap({
                           isMyRoom
                             ? 'border-primary-200 bg-primary-50/80 shadow-[inset_3px_0_0_#2782ff]'
                             : 'border-gray-100 bg-gray-50'
-                        } ${isPastDeparture ? 'opacity-55' : ''}`}
+                        }`}
                       >
-                        <div className="min-w-0">
+                        {/* 흐림은 텍스트 영역에만 건다 — 카드 전체에 걸면 오른쪽 버튼(내 방이면
+                            지난 방이어도 활성 상태인 "열기")까지 흐려져 눌리는데 안 눌릴 것처럼
+                            보인다. 지난 방을 알리는 별도 텍스트 뱃지는 두지 않는다 — 이 흐림과
+                            버튼 라벨("출발한 방")만으로 이미 상태가 전달된다. */}
+                        <div className={`min-w-0 ${isPastDeparture ? 'opacity-55' : ''}`}>
                           <div className="flex min-w-0 items-center gap-2 text-sm font-black text-gray-950">
                             <Clock className="h-4 w-4 shrink-0 text-primary-600" />
                             <span className="shrink-0">{formatRoomTime(room.departure_time)}</span>
-                            {isPastDeparture && (
-                              <span className="inline-flex items-center rounded-md bg-gray-100 px-1.5 py-0.5 text-[11px] font-black text-gray-500">
-                                출발함
-                              </span>
-                            )}
                             <span className="truncate text-xs font-extrabold text-gray-600">
                               ({LOCATIONS[room.to_location]})
                             </span>
@@ -723,7 +757,8 @@ export default function CampusRouteMap({
                             onClick={() => onJoinRoom(room.id)}
                             // 탑승 후 정산(계좌 공유·송금)이 채팅방에서 이뤄지므로, 출발 이후야말로
                             // 채팅이 가장 필요한 시점이다(I-2). 내 방이면 지난 방이어도 입장(열기)을
-                            // 막지 않는다 — 흐림/배지는 유지해 "출발한 건 사실"임은 계속 드러낸다.
+                            // 막지 않는다 — 이 버튼은 카드 흐림의 영향을 받지 않아 항상 제 불투명도로
+                            // 보인다(활성 컨트롤이 비활성처럼 보이면 안 된다).
                             disabled={isJoinDisabled || (isPastDeparture && !isMyRoom)}
                             className={`rounded-md px-3 py-1.5 text-xs font-black text-white transition disabled:bg-gray-300 ${
                               isMyRoom ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-950 hover:bg-gray-800'

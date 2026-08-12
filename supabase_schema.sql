@@ -799,6 +799,48 @@ create trigger notify_new_room_trigger
   after insert on public.chat_rooms
   for each row execute function public.notify_new_room();
 
+-- 참여/이탈을 room_participant_events 에 기록한다. 앱 코드가 아니라 트리거가 맡으므로
+-- 앱을 우회하는 경로(직접 DB 조작 등)도 빠짐없이 남는다.
+--
+-- DELETE 분기에서 부모 방 존재를 먼저 확인하는 이유: chat_rooms 를 지우면 cascade 로
+-- room_participants 가 지워지며 이 트리거가 발화하는데, 그때는 부모 행이 이미 사라진
+-- 뒤라 FK 위반으로 방 삭제 자체가 실패한다. 방이 사라지는 중이면 이벤트도 cascade 로
+-- 함께 지워지므로 남길 의미가 없다.
+create or replace function public.log_room_participant_event()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if tg_op = 'INSERT' then
+    insert into public.room_participant_events (room_id, user_id, event_type, occurred_at)
+    values (new.room_id, new.user_id, 'joined', coalesce(new.joined_at, timezone('utc'::text, now())))
+    on conflict do nothing;
+    return new;
+  end if;
+
+  if not exists (select 1 from public.chat_rooms where id = old.room_id) then
+    return old;
+  end if;
+
+  insert into public.room_participant_events (room_id, user_id, event_type, occurred_at)
+  values (old.room_id, old.user_id, 'left', timezone('utc'::text, now()))
+  on conflict do nothing;
+  return old;
+end;
+$$;
+
+drop trigger if exists log_room_participant_join on public.room_participants;
+create trigger log_room_participant_join
+  after insert on public.room_participants
+  for each row execute function public.log_room_participant_event();
+
+drop trigger if exists log_room_participant_leave on public.room_participants;
+create trigger log_room_participant_leave
+  after delete on public.room_participants
+  for each row execute function public.log_room_participant_event();
+
 -- Supabase Realtime publication for live chat and participant membership updates
 alter table public.messages replica identity full;
 alter table public.room_participants replica identity full;

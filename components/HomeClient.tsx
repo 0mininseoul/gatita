@@ -192,6 +192,81 @@ function ServiceSharePrompt({
   )
 }
 
+// 중복 방 안내 토스트 전용 카드. toast.success/error 등 기본 토스트와 같은 시각 언어(좌측
+// 이모지 아이콘, 흰 카드, 중앙 상단에서 아래로 내려오는 모션)를 쓰되 "그 방으로 이동" 액션은
+// 유지한다.
+//
+// react-hot-toast는 toast.custom으로 만든 토스트엔 내부 <ToastBar>를 아예 쓰지 않는다
+// (node_modules/react-hot-toast/src/components/toaster.tsx: `t.type === 'custom' ?
+// resolveValue(t.message, t) : ...`). ToastBar에만 들어있는 enter/exit keyframe 애니메이션도
+// 함께 빠지기 때문에, 커스텀 토스트는 다른 토스트들과 달리 모션 없이 "뚝" 나타나고 사라졌다.
+// 여기서는 mount 다음 프레임에 상태를 뒤집어 CSS transition으로 같은 방향(위에서 아래로
+// 들어오고, 사라질 때는 위로 빠지며 페이드)의 모션을 재현한다.
+//
+// 카드의 배경/테두리/모서리 반경/글자 크기/패딩/그림자는 app/layout.tsx의 <Toaster
+// toastOptions.style>과 값을 맞춰 다른 토스트와 같은 재질처럼 보이게 했다.
+function DuplicateRoomToastCard({
+  toast: t,
+  message,
+  isFull,
+  onDismiss,
+  onMove,
+}: {
+  toast: { id: string; visible: boolean }
+  message: string
+  isFull: boolean
+  onDismiss: () => void
+  onMove: () => void
+}) {
+  const [entered, setEntered] = useState(false)
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setEntered(true))
+    return () => cancelAnimationFrame(frame)
+  }, [])
+
+  const shown = entered && t.visible
+
+  return (
+    <div
+      className="pointer-events-auto flex w-full max-w-[400px] items-start gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3"
+      style={{
+        boxShadow: '0 3px 10px rgba(0,0,0,0.1), 0 3px 3px rgba(0,0,0,0.05)',
+        transform: shown ? 'translateY(0) scale(1)' : 'translateY(-16px) scale(0.96)',
+        opacity: shown ? 1 : 0,
+        transition: 'transform 0.3s cubic-bezier(.21,1.02,.73,1), opacity 0.3s ease',
+      }}
+    >
+      <span className="mt-0.5 text-base leading-none" aria-hidden="true">🚕</span>
+      <div className="flex flex-1 flex-col gap-1.5">
+        <p className="text-sm leading-snug text-gray-800">{message}</p>
+        {!isFull && (
+          <button
+            type="button"
+            onClick={onMove}
+            className="self-start text-sm font-semibold text-primary-600 hover:text-primary-700"
+          >
+            그 방으로 이동
+          </button>
+        )}
+      </div>
+      {/* 아이콘만 있는 닫기 버튼이라 두 가지를 맞춰준다.
+          - gray-400 은 흰 카드 위 2.54:1 로 UI 컴포넌트 식별 기준(3:1) 미달이다. gray-500
+            은 4.83:1 로 통과한다.
+          - h-4 아이콘에 패딩이 없으면 탭 영역이 16px 뿐이다. 음수 마진으로 상쇄한 패딩을
+            줘서 보이는 위치는 그대로 두고 32px 로 넓힌다(이 앱의 다른 버튼은 40px). */}
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="닫기"
+        className="-m-2 shrink-0 p-2 text-gray-500 hover:text-gray-700"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  )
+}
+
 function getGoogleAccountName(email?: string | null, metadata?: Record<string, unknown> | null) {
   const googleProfile = extractGachonProfileFromMetadata(metadata)
 
@@ -1368,10 +1443,9 @@ export default function HomeClient() {
         throw participantError
       }
 
-      // 방장 참여 이력 기록. 클라이언트는 room_participant_events 에 쓸 권한이 없어
-      // (RLS 정책 없음) 서버 라우트를 거쳐야 한다. 이력 기록 전용 호출이므로 실패해도 무시한다.
-      void fetch(`/api/rooms/${room.id}/history`, { method: 'POST' }).catch(() => {})
-
+      // 방장 참여 이력은 위 room_participants insert 를 log_room_participant_join
+      // 트리거가 직접 잡아 기록한다. 예전에는 이력 기록용 서버 라우트를 따로 호출했는데,
+      // 트리거와 중복이었고 그 라우트 자체가 인가 공백을 만들어 함께 제거했다.
       toast.success('채팅방이 생성되었습니다!')
       trackEvent('room_created', {
         room_id: room.id,
@@ -1657,33 +1731,20 @@ export default function HomeClient() {
     // 메시지로 막다른 길이 된다. 가득 찬 경우 이동 버튼 자체를 없애고 다른 시각으로
     // 새로 만들라고 안내한다.
     const isFull = isDuplicateRoomFull(room)
+    const message = getDuplicateRoomMessage(isFull)
 
     toast.custom(
       (t) => (
-        <div className="pointer-events-auto flex w-full max-w-sm flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-lg">
-          <p className="text-sm text-gray-900">{getDuplicateRoomMessage(isFull)}</p>
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => toast.dismiss(t.id)}
-              className="rounded-lg px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100"
-            >
-              닫기
-            </button>
-            {!isFull && (
-              <button
-                type="button"
-                onClick={() => {
-                  toast.dismiss(t.id)
-                  void joinExistingRoom(room, 'duplicate_room_prompt')
-                }}
-                className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-700"
-              >
-                그 방으로 이동
-              </button>
-            )}
-          </div>
-        </div>
+        <DuplicateRoomToastCard
+          toast={t}
+          message={message}
+          isFull={isFull}
+          onDismiss={() => toast.dismiss(t.id)}
+          onMove={() => {
+            toast.dismiss(t.id)
+            void joinExistingRoom(room, 'duplicate_room_prompt')
+          }}
+        />
       ),
       { duration: 6000 },
     )

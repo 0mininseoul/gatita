@@ -120,15 +120,9 @@ async function leaveRoom(
     return NextResponse.json({ error: '채팅방을 나가지 못했습니다' }, { status: 500 })
   }
 
-  // 나갔다는 사실을 이력에 남긴다. room_participants 행은 위에서 삭제되었다.
-  // 이벤트 로그이므로 갱신이 아니라 새 'left' 행을 추가한다.
-  const { error: historyError } = await admin
-    .from('room_participant_events')
-    .insert({ room_id: roomId, user_id: user.id, event_type: 'left' })
-
-  if (historyError) {
-    console.error('participation history leave error:', historyError)
-  }
+  // 이탈 이력(room_participant_events)은 여기서 남기지 않는다. 위 room_participants
+  // 삭제를 log_room_participant_leave 트리거가 직접 잡아 기록한다 — 앱에서 또 넣으면
+  // 같은 이벤트가 두 벌 쌓인다(프로덕션에서 22ms 간격 중복 확인됨).
 
   // 마지막 한 명이 나가면 방을 닫는다. 이 순간을 노려 띄우던 구독 유도 프롬프트는
   // 성가시다는 피드백으로 제거됐다(followup 스펙 11번) — 지금은 상태 전환만 한다.

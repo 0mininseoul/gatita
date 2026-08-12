@@ -336,37 +336,45 @@ test('room joins go through a server route that verifies the session and uses th
   assert.doesNotMatch(schema, /create policy "Users can update their participation" on public\.room_participants/)
 })
 
-test('room history route only records participation for verified room_participants rows', () => {
-  const homeSource = readProjectFile('components/HomeClient.tsx')
-  const routeSource = readProjectFile('app/api/rooms/[id]/history/route.ts')
+// 참여 이력은 앱이 아니라 DB 트리거가 남긴다. 예전에는 방 생성 시 이력을 남기려고
+// /api/rooms/[id]/history 전용 라우트를 뒀는데, room_participants 의 트리거와 중복이었고
+// (프로덕션에서 22ms 간격 중복 확인) 그 라우트 자체가 인가 공백을 만들어 제거했다.
+// 앱 코드를 지운 뒤 트리거까지 누가 지우면 이력이 통째로 사라지므로 여기서 고정한다.
+test('participation history is recorded by DB triggers, not by application code', () => {
+  const migration = readProjectFile('supabase/migrations/20260812090000_fix_participant_event_on_room_delete.sql')
+  const schema = readProjectFile('supabase_schema.sql')
 
-  assert.match(homeSource, /fetch\(`\/api\/rooms\/\$\{room\.id\}\/history`,\s*\{\s*method:\s*'POST'/, 'room creation should record history via the server route')
-  assert.match(routeSource, /createAdminSupabase/)
-  assert.match(routeSource, /auth\.getUser\(\)/)
+  for (const source of [migration, schema]) {
+    assert.match(source, /create trigger log_room_participant_join\s+after insert on public\.room_participants/)
+    assert.match(source, /create trigger log_room_participant_leave\s+after delete on public\.room_participants/)
+    assert.match(source, /insert into public\.room_participant_events[\s\S]*'joined'/)
+    assert.match(source, /insert into public\.room_participant_events[\s\S]*'left'/)
+    // 방 삭제(cascade) 중에는 부모 행이 이미 사라져 FK 위반이 나므로, 존재 확인이 있어야
+    // 참여자가 있는 방을 지울 수 있다.
+    assert.match(
+      source,
+      /if not exists \(select 1 from public\.chat_rooms where id = old\.room_id\)/,
+      'the delete branch must skip logging while the parent room is being deleted',
+    )
+  }
 
-  // roomId 는 참여자라면 누구나 관찰 가능하므로, 세션 인증만으로는 실제 참여를
-  // 증명하지 못한다. room_participants 에 실제 행이 있는지 먼저 확인해야 한다.
-  assert.match(
-    routeSource,
-    /\.from\('room_participants'\)[\s\S]*\.eq\('room_id', roomId\)[\s\S]*\.eq\('user_id', authUser\.id\)/,
-    'history route must verify the caller is an actual room participant before recording',
-  )
-  assert.match(routeSource, /if \(!participant\)/, 'history route must reject callers with no room_participants row')
-  assert.match(routeSource, /status: 403/, 'non-participants must be rejected, not silently recorded')
+  // 앱 코드는 더 이상 이 테이블에 쓰지 않는다 — 쓰면 트리거와 중복된다.
+  for (const path of [
+    'app/api/rooms/[id]/join/route.ts',
+    'app/api/rooms/[id]/leave/route.ts',
+    'components/HomeClient.tsx',
+  ]) {
+    assert.doesNotMatch(
+      readProjectFile(path),
+      /\.from\('room_participant_events'\)/,
+      `${path} must not write participation events — the DB trigger owns that`,
+    )
+  }
 
-  // room_participant_events 는 멤버십 상태 1행이 아니라 append-only 이벤트 로그이므로
-  // upsert 가 아니라 insert 로 'joined' 이벤트를 추가해야 한다.
-  assert.match(routeSource, /event_type:\s*'joined'/, 'history route must insert a joined event')
-  assert.doesNotMatch(routeSource, /\.upsert\(/, 'room_participant_events is an event log, not an upsert target')
-
-  const participantCheckIndex = routeSource.indexOf(".from('room_participants')")
-  const historyInsertIndex = routeSource.indexOf(".from('room_participant_events')")
-
-  assert.ok(participantCheckIndex >= 0, 'room_participants guard query must exist')
-  assert.ok(historyInsertIndex >= 0, 'room_participant_events insert must exist')
-  assert.ok(
-    participantCheckIndex < historyInsertIndex,
-    'the participant guard must run before the room_participant_events insert, not after',
+  assert.equal(
+    existsSync(join(process.cwd(), 'app/api/rooms/[id]/history/route.ts')),
+    false,
+    'the history route was removed as redundant with the trigger',
   )
 })
 

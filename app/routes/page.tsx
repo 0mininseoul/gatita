@@ -694,91 +694,79 @@ function RoutesPageContent() {
                   // 들어가야 .settings-row:first-child 구분선 규칙이 깨지지 않는다 — 감싸는
                   // div를 두면 매 행이 "자기 부모의 첫째 자식"이 되어 구분선이 전부 사라진다.
                   <Fragment key={route.id}>
-                    {/* 경로 이름이 컨트롤과 같은 행이면 아이콘 3개에 밀려 375px 에서
-                        48개 조합 중 20개가 잘린다. 이름에 한 행을 통째로 준다. */}
-                    <div className="settings-row flex-col items-stretch gap-1">
-                      <p className="flex items-center gap-1 truncate text-[0.82rem] font-extrabold text-gray-950">
-                        <span className="truncate">{LOCATIONS[route.from_location]}</span>
-                        <ArrowRight className="h-3 w-3 shrink-0 text-gray-400" aria-hidden="true" />
-                        <span className="truncate">{LOCATIONS[route.to_location]}</span>
-                      </p>
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-[0.72rem] font-semibold text-gray-500">
-                            {summarizeWindow(route.notify_from, route.notify_to)} · {summarizeWeekdays(route.notify_weekdays)}
-                            {/* "알림 꺼짐"이라고만 하면 이 경로 전체를 안 본다는 뜻으로 읽힌다.
-                                실제로는 푸시만 꺼지고 이 목록/앱 내 폴백은 계속 보이므로(I-5,
-                                사용자 결정) 범위를 "푸시"로 명시한다. */}
-                            {!route.notify_enabled && ' · 푸시 꺼짐'}
-                          </p>
-                          {roomsForRoute.length > 0 && (
-                            // 색상만으로 정보를 주지 않도록(PRODUCT.md 접근성) 숫자를 텍스트로
-                            // 함께 표기한다. 방이 1개면 고를 게 없어 바로 열고, 여러 개면
-                            // 펼쳐서 출발 시각·인원을 보고 고르게 한다.
-                            <button
-                              type="button"
-                              onClick={() => handleRouteRoomsBadgeClick(route, roomsForRoute)}
-                              aria-expanded={hasMultipleRooms ? expanded : undefined}
-                              aria-label={
-                                hasMultipleRooms
-                                  ? `${label} 열린 방 ${roomsForRoute.length}개 ${expanded ? '목록 접기' : '목록 보기'}`
-                                  : `${label} 열린 방으로 이동`
-                              }
-                              className="mt-1.5 inline-flex min-h-6 items-center gap-1 rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-[0.68rem] font-black text-primary-700 transition hover:bg-primary-100"
-                            >
-                              <Users className="h-3 w-3" aria-hidden="true" />
-                              열린 방 {roomsForRoute.length}개
-                            </button>
-                          )}
-                        </div>
-                        <div className="flex shrink-0 items-center gap-1">
+                    {/* 아이콘이 2개(수정·토글)면 경로 이름이 같은 행에 들어가도 375px 에서
+                        잘리지 않는다 — 삭제 아이콘을 뺀 덕에 한 줄로 되돌려 높이를 줄였다.
+                        삭제는 수정 모드 폼 하단에 있다. */}
+                    <div className="settings-row items-center">
+                      <div className="min-w-0 flex-1">
+                        <p className="flex items-center gap-1 truncate text-[0.82rem] font-extrabold text-gray-950">
+                          <span className="truncate">{LOCATIONS[route.from_location]}</span>
+                          <ArrowRight className="h-3 w-3 shrink-0 text-gray-400" aria-hidden="true" />
+                          <span className="truncate">{LOCATIONS[route.to_location]}</span>
+                        </p>
+                        <p className="truncate text-[0.72rem] font-semibold text-gray-500">
+                          {summarizeWindow(route.notify_from, route.notify_to)} · {summarizeWeekdays(route.notify_weekdays)}
+                          {/* "알림 꺼짐"이라고만 하면 이 경로 전체를 안 본다는 뜻으로 읽힌다.
+                              실제로는 푸시만 꺼지고 이 목록/앱 내 폴백은 계속 보이므로(I-5,
+                              사용자 결정) 범위를 "푸시"로 명시한다. */}
+                          {!route.notify_enabled && ' · 푸시 꺼짐'}
+                        </p>
+                        {roomsForRoute.length > 0 && (
+                          // 색상만으로 정보를 주지 않도록(PRODUCT.md 접근성) 숫자를 텍스트로
+                          // 함께 표기한다. 방이 1개면 고를 게 없어 바로 열고, 여러 개면
+                          // 펼쳐서 출발 시각·인원을 보고 고르게 한다.
                           <button
                             type="button"
-                            role="switch"
-                            aria-checked={route.notify_enabled}
-                            aria-label={`${label} 푸시 알림 ${route.notify_enabled ? '끄기' : '켜기'}`}
-                            onClick={() => handleToggleNotify(route)}
-                            disabled={busy}
-                            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg disabled:opacity-50"
+                            onClick={() => handleRouteRoomsBadgeClick(route, roomsForRoute)}
+                            aria-expanded={hasMultipleRooms ? expanded : undefined}
+                            aria-label={
+                              hasMultipleRooms
+                                ? `${label} 열린 방 ${roomsForRoute.length}개 ${expanded ? '목록 접기' : '목록 보기'}`
+                                : `${label} 열린 방으로 이동`
+                            }
+                            className="mt-1 inline-flex min-h-6 items-center gap-1 rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-[0.68rem] font-black text-primary-700 transition hover:bg-primary-100"
                           >
-                            <span
-                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-                                route.notify_enabled ? 'bg-primary-600' : 'bg-gray-300'
-                              }`}
-                            >
-                              <span
-                                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
-                                  route.notify_enabled ? 'translate-x-6' : 'translate-x-1'
-                                }`}
-                              />
-                            </span>
+                            <Users className="h-3 w-3" aria-hidden="true" />
+                            열린 방 {roomsForRoute.length}개
                           </button>
-                          {/* 삭제는 남겨두고 수정만 추가한다(사용자 요청). 수정 중인 경로는
-                              아래 폼과 짝이 맞는다는 걸 알 수 있게 아이콘을 강조해둔다. */}
-                          <button
-                            type="button"
-                            aria-label={`${label} 알림 설정 수정`}
-                            aria-pressed={editingRouteId === route.id}
-                            onClick={() => handleStartEditRoute(route)}
-                            disabled={busy}
-                            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition disabled:opacity-50 ${
-                              editingRouteId === route.id
-                                ? 'bg-primary-50 text-primary-700'
-                                : 'text-gray-400 hover:bg-primary-50 hover:text-primary-700'
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        <button
+                          type="button"
+                          aria-label={`${label} 알림 설정 수정`}
+                          aria-pressed={editingRouteId === route.id}
+                          onClick={() => handleStartEditRoute(route)}
+                          disabled={busy}
+                          className={`inline-flex h-10 w-9 shrink-0 items-center justify-center rounded-lg transition disabled:opacity-50 ${
+                            editingRouteId === route.id
+                              ? 'bg-primary-50 text-primary-700'
+                              : 'text-gray-400 hover:bg-primary-50 hover:text-primary-700'
+                          }`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={route.notify_enabled}
+                          aria-label={`${label} 푸시 알림 ${route.notify_enabled ? '끄기' : '켜기'}`}
+                          onClick={() => handleToggleNotify(route)}
+                          disabled={busy}
+                          className="inline-flex h-10 w-11 shrink-0 items-center justify-center rounded-lg disabled:opacity-50"
+                        >
+                          <span
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                              route.notify_enabled ? 'bg-primary-600' : 'bg-gray-300'
                             }`}
                           >
-                            <Pencil className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            aria-label={`${label} 경로 삭제`}
-                            onClick={() => handleDeleteRoute(route)}
-                            disabled={busy}
-                            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
+                            <span
+                              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                                route.notify_enabled ? 'translate-x-6' : 'translate-x-1'
+                              }`}
+                            />
+                          </span>
+                        </button>
                       </div>
                     </div>
 
@@ -904,25 +892,27 @@ function RoutesPageContent() {
               {!formAllDay && (
                 // "시작"/"종료" 라벨 없이도 사이의 ~ 하나로 범위임이 바로 읽힌다(사용자 피드백).
                 // 시각 라벨을 없애더라도 스크린리더에는 각 input의 aria-label로 계속 안내한다.
-                // 1fr 은 minmax(auto,1fr) 이라 <input type="time"> 의 고유 폭 아래로 트랙이
-                // 줄지 않아 오른쪽으로 삐져나갔다. minmax(0,1fr) + min-w-0 으로 풀어준다.
-                <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5">
+                // 폭은 flex 로만 정한다. grid + width:100% 조합은 iOS Safari 에서 트랙을
+                // 벗어나 카드 밖으로 삐져나갔다(minmax(0,1fr) + min-w-0 을 줘도 그랬다).
+                // flex-1 basis-0 + min-w-0 은 콘텐츠 고유 폭을 계산에 넣지 않아 그 경로를
+                // 아예 없앤다. 입력 자체의 네이티브 고유 폭은 globals.css 에서 끈다.
+                <div className="mt-2 flex items-center gap-1.5">
                   <input
                     id="routes-form-time-from"
                     type="time"
                     aria-label="알림 시작 시각"
                     value={formWindow.from}
                     onChange={(e) => handleWindowChange('from', e.target.value)}
-                    className="input-field settings-input w-full min-w-0"
+                    className="input-field settings-input w-0 min-w-0 flex-1 basis-0"
                   />
-                  <span aria-hidden="true" className="text-sm font-bold text-gray-400">~</span>
+                  <span aria-hidden="true" className="shrink-0 text-sm font-bold text-gray-400">~</span>
                   <input
                     id="routes-form-time-to"
                     type="time"
                     aria-label="알림 종료 시각"
                     value={formWindow.to}
                     onChange={(e) => handleWindowChange('to', e.target.value)}
-                    className="input-field settings-input w-full min-w-0"
+                    className="input-field settings-input w-0 min-w-0 flex-1 basis-0"
                   />
                 </div>
               )}

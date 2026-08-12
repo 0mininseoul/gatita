@@ -21,19 +21,25 @@ test('구독 유도 시트 헤드라인은 한 줄로 유지되고 글자 크기
   assert.match(headline[0], /calc\(\(100vw - 56px\) \/ 19\)/)
 })
 
-test('알림 시간대 그리드는 트랙과 입력이 0까지 줄어들 수 있다', () => {
-  const source = read('app/routes/page.tsx')
+test('알림 시간대 입력은 폭을 flex 로만 정하고 네이티브 고유 폭을 끈다', () => {
+  const page = read('app/routes/page.tsx')
+  const css = read('app/globals.css')
 
-  // 1fr(= minmax(auto,1fr))이면 <input type="time">의 고유 폭 아래로 트랙이 줄지 않아
-  // 카드 오른쪽으로 삐져나간다 — 240px 컨테이너에서 314.8px 로 넘치는 걸 실측했다.
-  assert.match(source, /grid-cols-\[minmax\(0,1fr\)_auto_minmax\(0,1fr\)\]/)
-  assert.doesNotMatch(source, /grid-cols-\[1fr_auto_1fr\]/)
+  // grid + width:100% 로는 iOS Safari 에서 트랙을 벗어났다. flex-1 basis-0 + min-w-0 은
+  // 콘텐츠 고유 폭을 폭 계산에 넣지 않아 그 경로 자체가 없다.
+  assert.equal((page.match(/w-0 min-w-0 flex-1 basis-0/g) ?? []).length, 2)
+  assert.doesNotMatch(page, /grid-cols-\[minmax\(0,1fr\)_auto_minmax\(0,1fr\)\]/)
+
+  // appearance 를 끄지 않으면 iOS 가 컨트롤 고유 폭을 계속 강제한다.
+  assert.match(css, /input\[type="time"\][\s\S]{0,200}?-webkit-appearance:\s*none/)
 })
 
-test('구독 경로 카드는 경로 이름에 한 행을 통째로 준다', () => {
+test('구독 경로 카드는 한 줄이고 컨트롤은 수정·토글 둘뿐이다', () => {
   const source = read('app/routes/page.tsx')
 
-  // 이름과 컨트롤이 같은 행이면 아이콘 3개에 밀려 375px 에서 가능한 48개 조합 중
-  // 20개가 말줄임된다(실측). 행을 나눈 뒤에는 320px 에서도 0개다.
-  assert.match(source, /className="settings-row flex-col items-stretch/)
+  // 삭제 아이콘을 뺐기 때문에 한 줄로 되돌릴 수 있었다(아이콘 3개면 375px 에서 잘렸다).
+  // 삭제는 수정 모드 폼 하단에만 있다.
+  assert.doesNotMatch(source, /aria-label=\{`\$\{label\} 경로 삭제`\}/)
+  assert.match(source, /이 경로 알림 삭제/)
+  assert.doesNotMatch(source, /className="settings-row flex-col/)
 })

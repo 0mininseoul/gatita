@@ -968,6 +968,24 @@
     font-size: 0.9rem;
   }
 
+  /* iOS Safari 는 <input type="time"> 에 네이티브 컨트롤 크기를 부여해서, 컨테이너가
+     좁아도 그 폭 아래로 줄지 않고 카드 밖으로 삐져나간다(min-width:0 만으로는 안 잡힌다).
+     appearance 를 꺼야 폭이 CSS 통제로 넘어온다. max-width 는 그래도 넘칠 경우의 마지막
+     방어선이다. 데스크톱 WebKit 은 이 컨트롤을 다르게 그려서 재현이 안 되므로, 실기기
+     확인 전에는 이 규칙을 지우지 말 것. */
+  .settings-section input[type="time"] {
+    -webkit-appearance: none;
+    appearance: none;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  /* appearance 를 끄면 iOS 가 값 텍스트를 가운데로 밀어버려 다른 입력과 어긋난다. */
+  .settings-section input[type="time"]::-webkit-date-and-time-value {
+    margin: 0;
+    text-align: left;
+  }
+
   /* Gradient floating action button */
   .fab {
     @apply text-white rounded-full flex items-center justify-center transition-transform duration-200;

@@ -22,12 +22,12 @@ export function createWelcomeEmail(name: string) {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
   </head>
-  <body style="margin:0;padding:0;background:#f4f8fb;color:#344054;font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sans KR',Arial,sans-serif;word-break:keep-all;">
+  <body style="margin:0;padding:0;background:#f4f8fb;color:#344054;font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sans KR',Arial,sans-serif;word-break:keep-all;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;text-size-adjust:100%;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f4f8fb;">
       <tr><td align="center" style="padding:24px 0;">
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:680px;background:#ffffff;">
           <tr><td style="padding:32px 20px 12px;">
-            <h1 style="margin:0;color:#111827;font-size:30px;line-height:1.32;letter-spacing:-1.3px;font-weight:800;">같이타에 오신 걸 환영합니다!</h1>
+            <h1 style="margin:0;color:#111827;font-size:26px;line-height:1.3;letter-spacing:-1px;font-weight:800;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;text-size-adjust:100%;">같이타에 오신 걸 환영합니다!</h1>
           </td></tr>
           <tr><td style="padding:20px 20px 28px;">
             <img src="${SITE_URL}/og-image.png" alt="같이타 - 가천대학생들을 위한 택시 동승 플랫폼" width="552" style="display:block;width:100%;max-width:552px;height:auto;border:1px solid #edf1f5;border-radius:16px;" />

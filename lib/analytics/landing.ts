@@ -2,6 +2,7 @@ export const LANDING_VIEW_DEDUPE_MS = 30 * 60 * 1000
 
 type AnonymousLandingState = {
   loading: boolean
+  hasResolvedAuthSession: boolean
   hasAuthenticatedSession: boolean
   hasEnteredApp: boolean
   authMode: string | null
@@ -12,6 +13,7 @@ type AnonymousLandingState = {
 export function shouldTrackAnonymousLanding(state: AnonymousLandingState) {
   if (
     state.loading
+    || !state.hasResolvedAuthSession
     || state.hasAuthenticatedSession
     || state.hasEnteredApp
     || state.authMode === 'signup'

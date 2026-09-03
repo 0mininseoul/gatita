@@ -25,6 +25,7 @@ test('anonymous landing is eligible only after auth resolution', () => {
   const { shouldTrackAnonymousLanding } = loadLandingAnalyticsExports()
   const base = {
     loading: false,
+    hasResolvedAuthSession: true,
     hasAuthenticatedSession: false,
     hasEnteredApp: false,
     authMode: null,
@@ -34,6 +35,7 @@ test('anonymous landing is eligible only after auth resolution', () => {
 
   assert.equal(shouldTrackAnonymousLanding(base), true)
   assert.equal(shouldTrackAnonymousLanding({ ...base, loading: true }), false)
+  assert.equal(shouldTrackAnonymousLanding({ ...base, hasResolvedAuthSession: false }), false)
   assert.equal(shouldTrackAnonymousLanding({ ...base, hasAuthenticatedSession: true }), false)
   assert.equal(shouldTrackAnonymousLanding({ ...base, hasEnteredApp: true }), false)
   assert.equal(shouldTrackAnonymousLanding({ ...base, authMode: 'signup' }), false)
@@ -43,6 +45,7 @@ test('anonymous landing is deduplicated for thirty minutes', () => {
   const { LANDING_VIEW_DEDUPE_MS, shouldTrackAnonymousLanding } = loadLandingAnalyticsExports()
   const base = {
     loading: false,
+    hasResolvedAuthSession: true,
     hasAuthenticatedSession: false,
     hasEnteredApp: false,
     authMode: null,
@@ -70,6 +73,9 @@ test('home emits one anonymous landing event through the eligibility helper', ()
   const source = readFileSync(join(process.cwd(), 'components/HomeClient.tsx'), 'utf8')
 
   assert.match(source, /shouldTrackAnonymousLanding/)
+  assert.match(source, /setHasResolvedAuthSession\(false\)/)
+  assert.match(source, /setHasResolvedAuthSession\(true\)/)
+  assert.match(source, /shouldTrackAnonymousLanding\(\{\s*loading,\s*hasResolvedAuthSession,/)
   assert.match(source, /LANDING_VIEW_LAST_TRACKED_AT_KEY/)
   assert.match(source, /landingViewLastTrackedAtFallbackRef/)
   assert.match(source, /window\.sessionStorage\.getItem\(LANDING_VIEW_LAST_TRACKED_AT_KEY\)/)

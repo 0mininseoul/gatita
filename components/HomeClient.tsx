@@ -305,6 +305,7 @@ export default function HomeClient() {
   const [pendingProfileName, setPendingProfileName] = useState('')
   const [showProfileRequiredModal, setShowProfileRequiredModal] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [hasResolvedAuthSession, setHasResolvedAuthSession] = useState(false)
   const [authMode, setAuthMode] = useState<AuthMode>(null)
   const [fromLocation, setFromLocation] = useState<LocationType | ''>('')
   const [mapRooms, setMapRooms] = useState<CampusMapRoom[]>([])
@@ -659,6 +660,8 @@ export default function HomeClient() {
   }, [supabase, user])
 
   const checkAuth = useCallback(async (enterApp = false) => {
+    setHasResolvedAuthSession(false)
+
     if (!supabase) {
       setLoading(false)
       return
@@ -689,6 +692,8 @@ export default function HomeClient() {
       if (sessionError) {
         throw sessionError
       }
+
+      setHasResolvedAuthSession(true)
 
       if (session?.user) {
         const email = session.user.email
@@ -991,6 +996,7 @@ export default function HomeClient() {
 
     if (!shouldTrackAnonymousLanding({
       loading,
+      hasResolvedAuthSession,
       hasAuthenticatedSession,
       hasEnteredApp,
       authMode,
@@ -1006,7 +1012,7 @@ export default function HomeClient() {
     }
 
     trackEvent('landing_viewed', { auth_state: 'anonymous' })
-  }, [authMode, hasAuthenticatedSession, hasEnteredApp, loading])
+  }, [authMode, hasAuthenticatedSession, hasEnteredApp, hasResolvedAuthSession, loading])
 
   useEffect(() => {
     if (!requiresProfile) {

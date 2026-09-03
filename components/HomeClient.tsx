@@ -32,6 +32,7 @@ import { getNotificationPermission, isPushSupported, isSubscribedToPush, subscri
 import { PREVIEW_TEST_ACCOUNTS, isPreviewTestLoginEnabled } from '@/lib/previewTestAccounts'
 import { hasServiceShareIntent, removeServiceShareIntent, shareService } from '@/lib/serviceShare'
 import { identifyAnalyticsUser, shouldSuppressAnalyticsForUser, suppressAnalyticsForCurrentDevice, trackEvent } from '@/lib/analytics/client'
+import { shouldTrackAnonymousLanding } from '@/lib/analytics/landing'
 import { ROUTES_SEEN_STORAGE_KEY } from '@/lib/routeSummary'
 import { buildRepeatRoutePromptDismissKey, shouldPromptRepeatRouteSubscription } from '@/lib/repeatRoutePrompt'
 import { AlertTriangle, ArrowRight, Ban, Bell, BellRing, Clock, MessageSquareText, Share2, Star, Settings, Users, X } from 'lucide-react'
@@ -96,6 +97,7 @@ const getLocalDateKey = () => new Date().toLocaleDateString('en-CA')
 const PWA_INSTALLED_DETECTED_STORAGE_KEY = 'gatita:pwa-installed-detected'
 const PUSH_PROMPT_DISMISSED_KEY = 'gatita:push-prompt-dismissed'
 const ANALYTICS_PENDING_LOGIN_KEY = 'gatita:analytics-pending-login'
+const LANDING_VIEW_LAST_TRACKED_AT_KEY = 'gatita:analytics-landing-view-last-tracked-at'
 
 function rememberPendingLogin(method: string) {
   if (typeof window === 'undefined') return
@@ -303,6 +305,7 @@ export default function HomeClient() {
   const [pendingProfileName, setPendingProfileName] = useState('')
   const [showProfileRequiredModal, setShowProfileRequiredModal] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [hasResolvedAuthSession, setHasResolvedAuthSession] = useState(false)
   const [authMode, setAuthMode] = useState<AuthMode>(null)
   const [fromLocation, setFromLocation] = useState<LocationType | ''>('')
   const [mapRooms, setMapRooms] = useState<CampusMapRoom[]>([])
@@ -333,6 +336,7 @@ export default function HomeClient() {
   const [isSubscribingRepeatRoute, setIsSubscribingRepeatRoute] = useState(false)
   const lastAuthErrorAtRef = useRef(0)
   const hasShownProfileRequiredPromptRef = useRef(false)
+  const landingViewLastTrackedAtFallbackRef = useRef<number | null>(null)
   const mapHeaderRef = useRef<HTMLElement>(null)
   const pwaInstallSyncInFlightRef = useRef(false)
   const pwaInstallSyncCompletedRef = useRef(false)
@@ -656,6 +660,8 @@ export default function HomeClient() {
   }, [supabase, user])
 
   const checkAuth = useCallback(async (enterApp = false) => {
+    setHasResolvedAuthSession(false)
+
     if (!supabase) {
       setLoading(false)
       return
@@ -686,6 +692,8 @@ export default function HomeClient() {
       if (sessionError) {
         throw sessionError
       }
+
+      setHasResolvedAuthSession(true)
 
       if (session?.user) {
         const email = session.user.email
@@ -972,6 +980,39 @@ export default function HomeClient() {
   const isCurrentlySuspended = moderationStatus?.status === 'suspended' || user?.status === 'suspended'
   const activeSuspendedUntil = moderationStatus?.suspendedUntil ?? user?.suspended_until ?? null
   const activeSuspensionReason = moderationStatus?.suspensionReason ?? user?.suspension_reason ?? null
+
+  useEffect(() => {
+    const now = Date.now()
+    let lastTrackedAt = landingViewLastTrackedAtFallbackRef.current
+
+    try {
+      const storedAt = Number(window.sessionStorage.getItem(LANDING_VIEW_LAST_TRACKED_AT_KEY))
+      if (Number.isFinite(storedAt) && storedAt > 0 && (lastTrackedAt === null || storedAt > lastTrackedAt)) {
+        lastTrackedAt = storedAt
+      }
+    } catch {
+      // The in-memory fallback still prevents repeats during this page lifecycle.
+    }
+
+    if (!shouldTrackAnonymousLanding({
+      loading,
+      hasResolvedAuthSession,
+      hasAuthenticatedSession,
+      hasEnteredApp,
+      authMode,
+      lastTrackedAt,
+      now,
+    })) return
+
+    landingViewLastTrackedAtFallbackRef.current = now
+    try {
+      window.sessionStorage.setItem(LANDING_VIEW_LAST_TRACKED_AT_KEY, String(now))
+    } catch {
+      // Analytics must not block the landing page when storage is unavailable.
+    }
+
+    trackEvent('landing_viewed', { auth_state: 'anonymous' })
+  }, [authMode, hasAuthenticatedSession, hasEnteredApp, hasResolvedAuthSession, loading])
 
   useEffect(() => {
     if (!requiresProfile) {

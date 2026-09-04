@@ -167,6 +167,25 @@ test('unrelated origins never show the dormitory request banner', () => {
   assert.equal(getDormitoryRequestAvailability([], '중앙도서관').showBanner, false)
 })
 
+test('dormitory request banner requires an explicitly resident user', () => {
+  const { shouldShowDormitoryRequestBanner } = loadDormitoryExports()
+  const available = { showBanner: true }
+
+  assert.equal(shouldShowDormitoryRequestBanner(true, available), true)
+  assert.equal(shouldShowDormitoryRequestBanner(false, available), false)
+  assert.equal(shouldShowDormitoryRequestBanner(null, available), false)
+  assert.equal(shouldShowDormitoryRequestBanner(undefined, available), false)
+  assert.equal(shouldShowDormitoryRequestBanner(true, { showBanner: false }), false)
+})
+
+test('dormitory request banner copy follows the travel direction', () => {
+  const { getDormitoryRequestBannerTitle } = loadDormitoryExports()
+
+  assert.equal(getDormitoryRequestBannerTitle('가천대역_1번출구'), '혹시 기숙사 가시나요?')
+  assert.equal(getDormitoryRequestBannerTitle('가천대학교_정문'), '혹시 기숙사 가시나요?')
+  assert.equal(getDormitoryRequestBannerTitle('제2기숙사'), '혹시 역으로 가시나요?')
+})
+
 test('recipient merge filters consent and global push, excludes creator, and deduplicates', () => {
   const { mergeDormitoryRequestRecipientIds } = loadDormitoryExports()
 
@@ -233,12 +252,19 @@ test('settings update is authenticated, tri-state, owner-scoped, and analytics-b
   assert.match(settingsPage, /source: 'settings'/)
 })
 
-test('map renders the dormitory request banner only from shared availability rules', () => {
+test('map renders and tracks the dormitory request banner from one resident-aware rule', () => {
   const map = readProjectFile('components/CampusRouteMap.tsx')
+  const home = readProjectFile('components/HomeClient.tsx')
 
   assert.match(map, /getDormitoryRequestAvailability/)
-  assert.match(map, /dormitoryRequestAvailability\.showBanner/)
-  assert.match(map, /혹시 기숙사 가시나요\?/)
+  assert.match(
+    map,
+    /shouldShowDormitoryRequestBanner\(\s*isDormitoryResident,\s*dormitoryRequestAvailability,?\s*\)/,
+  )
+  assert.match(map, /if \(!selectedFrom \|\| isLoading \|\| !showDormitoryRequestBanner\) return/)
+  assert.match(map, /!isCreateMode && !isLoading && showDormitoryRequestBanner &&/)
+  assert.match(map, /getDormitoryRequestBannerTitle\(selectedFrom\)/)
+  assert.match(home, /isDormitoryResident=\{user\?\.is_dormitory_resident === true\}/)
   assert.match(map, /dormitory_request_banner_viewed/)
   assert.match(map, /dormitory_request_banner_clicked/)
   assert.match(map, /destination_mode: dormitoryRequestAvailability\.destinationMode/)

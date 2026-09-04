@@ -19,7 +19,9 @@ import { getOriginRoomInventory } from '@/lib/roomInventory'
 import {
   DORMITORY_REQUEST_DESTINATION,
   getDormitoryRequestAvailability,
+  getDormitoryRequestBannerTitle,
   getDormitoryRequestDestinationOptions,
+  shouldShowDormitoryRequestBanner,
 } from '@/lib/dormitoryRideRequest'
 
 export type CampusMapRoom = {
@@ -48,6 +50,7 @@ type CampusRouteMapProps = {
   rooms: CampusMapRoom[]
   onlineCount: number
   currentUserId?: string
+  isDormitoryResident?: boolean
   selectedFrom: LocationType | ''
   isCreatingRoom?: boolean
   isLoading?: boolean
@@ -197,6 +200,7 @@ export default function CampusRouteMap({
   rooms,
   onlineCount,
   currentUserId,
+  isDormitoryResident = false,
   selectedFrom,
   isCreatingRoom = false,
   isLoading = false,
@@ -304,6 +308,10 @@ export default function CampusRouteMap({
       ? getDormitoryRequestAvailability(rooms, selectedFrom, inventoryNow)
       : { showBanner: false, destinationMode: 'fixed' as const, fixedDestination: null },
     [inventoryNow, rooms, selectedFrom],
+  )
+  const showDormitoryRequestBanner = shouldShowDormitoryRequestBanner(
+    isDormitoryResident,
+    dormitoryRequestAvailability,
   )
   const isDormitoryDestinationSelectable = creationSource === 'dormitory_request'
     && dormitoryRequestAvailability.destinationMode === 'selectable'
@@ -568,7 +576,7 @@ export default function CampusRouteMap({
   ])
 
   useEffect(() => {
-    if (!selectedFrom || isLoading || !dormitoryRequestAvailability.showBanner) return
+    if (!selectedFrom || isLoading || !showDormitoryRequestBanner) return
     if (dormitoryBannerOriginsRef.current.has(selectedFrom)) return
 
     dormitoryBannerOriginsRef.current.add(selectedFrom)
@@ -579,9 +587,9 @@ export default function CampusRouteMap({
     })
   }, [
     dormitoryRequestAvailability.destinationMode,
-    dormitoryRequestAvailability.showBanner,
     isLoading,
     selectedFrom,
+    showDormitoryRequestBanner,
   ])
 
   useEffect(() => {
@@ -909,7 +917,7 @@ export default function CampusRouteMap({
                 </div>
               ) : null}
 
-              {!isCreateMode && !isLoading && dormitoryRequestAvailability.showBanner && (
+              {!isCreateMode && !isLoading && showDormitoryRequestBanner && (
                 <button
                   type="button"
                   onClick={() => {
@@ -935,7 +943,9 @@ export default function CampusRouteMap({
                     <Megaphone className="h-4 w-4" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-black text-gray-950">혹시 기숙사 가시나요?</span>
+                    <span className="block text-sm font-black text-gray-950">
+                      {getDormitoryRequestBannerTitle(selectedFrom)}
+                    </span>
                     <span className="mt-0.5 block text-xs font-semibold text-gray-600">
                       기숙사생들에게 동행을 요청해보세요
                     </span>

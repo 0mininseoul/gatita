@@ -107,3 +107,30 @@ test('fixed point selection records resolved actionable inventory', () => {
   assert.match(source, /has_joinable_room: inventory\.hasJoinableRoom/)
   assert.match(source, /inventory_state: isLoadingMapRooms \? 'loading' : 'ready'/)
 })
+
+test('map sheet records actionable empty state once per opening', () => {
+  const source = readProjectFile('components/CampusRouteMap.tsx')
+
+  assert.match(source, /const emptyStateOriginsRef = useRef\(new Set<LocationType>\(\)\)/)
+  assert.match(source, /emptyStateOriginsRef\.current\.clear\(\)/)
+  assert.match(source, /emptyStateOriginsRef\.current\.has\(selectedFrom\)/)
+  assert.match(source, /emptyStateOriginsRef\.current\.add\(selectedFrom\)/)
+  assert.match(source, /trackEvent\('room_empty_state_viewed'/)
+  assert.match(source, /visible_room_count: selectedOriginInventory\.visibleRoomCount/)
+  assert.match(source, /joinable_room_count: 0/)
+  assert.match(source, /source: 'map_bottom_sheet'/)
+})
+
+test('create form records close and origin-change abandonment only before submit', () => {
+  const source = readProjectFile('components/CampusRouteMap.tsx')
+
+  assert.match(source, /const createAttemptRef = useRef</)
+  assert.match(source, /reason: 'sheet_closed' \| 'origin_changed'/)
+  assert.match(source, /trackEvent\('room_create_form_abandoned'/)
+  assert.match(source, /has_destination: Boolean\(draftDestination\)/)
+  assert.match(source, /has_departure_time: Boolean\(draftDepartureTime\)/)
+  assert.match(source, /trackCreateFormAbandonment\('sheet_closed'\)/)
+  assert.match(source, /trackCreateFormAbandonment\('origin_changed'\)/)
+  assert.match(source, /if \(!attempt \|\| attempt\.submitted \|\| attempt\.abandoned\) return/)
+  assert.match(source, /createAttemptRef\.current\.submitted = true/)
+})

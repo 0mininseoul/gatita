@@ -15,6 +15,7 @@ import {
 } from '@/lib/supabase'
 import { shouldShowMarkerNames } from '@/lib/mapMarkerDisplay'
 import { trackEvent } from '@/lib/analytics/client'
+import { getOriginRoomInventory } from '@/lib/roomInventory'
 
 export type CampusMapRoom = {
   id: string
@@ -222,6 +223,12 @@ export default function CampusRouteMap({
   // form opened can quietly go stale and (post-midnight rollover) create a room
   // far beyond the 01:00 cutoff.
   const [departureOptionsNonce, setDepartureOptionsNonce] = useState(0)
+  const emptyStateOriginsRef = useRef(new Set<LocationType>())
+  const createAttemptRef = useRef<{
+    fromLocation: LocationType
+    submitted: boolean
+    abandoned: boolean
+  } | null>(null)
 
   const { originStats } = useMemo(() => buildStats(rooms, currentUserId), [currentUserId, rooms])
   // 축소 상태(레벨 5~6)에서는 이름을 숨기고 핀+개수만 보여준다 — 근거는 lib/mapMarkerDisplay.
@@ -261,20 +268,44 @@ export default function CampusRouteMap({
       : [],
     [rooms, selectedFrom]
   )
+  const selectedOriginInventory = useMemo(
+    () => selectedFrom
+      ? getOriginRoomInventory(rooms, selectedFrom)
+      : { visibleRoomCount: 0, joinableRoomCount: 0, hasJoinableRoom: false },
+    [rooms, selectedFrom],
+  )
+
+  const trackCreateFormAbandonment = useCallback((reason: 'sheet_closed' | 'origin_changed') => {
+    const attempt = createAttemptRef.current
+    if (!attempt || attempt.submitted || attempt.abandoned) return
+
+    attempt.abandoned = true
+    trackEvent('room_create_form_abandoned', {
+      from_location: attempt.fromLocation,
+      has_destination: Boolean(draftDestination),
+      has_departure_time: Boolean(draftDepartureTime),
+      reason,
+      source: 'map_bottom_sheet',
+    })
+  }, [draftDepartureTime, draftDestination])
 
   const handleLocationSelect = useCallback((location: LocationType) => {
+    if (selectedFrom && selectedFrom !== location) {
+      trackCreateFormAbandonment('origin_changed')
+    }
     setFocusedLocation(location)
     onSelectFrom(location)
-  }, [onSelectFrom])
+  }, [onSelectFrom, selectedFrom, trackCreateFormAbandonment])
 
   const closeSheet = useCallback(() => {
+    trackCreateFormAbandonment('sheet_closed')
     onSelectFrom('')
     setFocusedLocation(null)
     setIsCreateMode(false)
     setDraftDestination('')
     setDraftDepartureHour('')
     setDraftDepartureMinute('')
-  }, [onSelectFrom])
+  }, [onSelectFrom, trackCreateFormAbandonment])
 
   // The close button sits above the momentum-scrolling sheet body (-webkit-overflow-
   // scrolling: touch). On iOS that scroller can swallow the first synthetic click, so
@@ -435,6 +466,8 @@ export default function CampusRouteMap({
 
   useEffect(() => {
     if (!selectedFrom) {
+      emptyStateOriginsRef.current.clear()
+      createAttemptRef.current = null
       setFocusedLocation(null)
       setIsCreateMode(false)
       setDraftDestination('')
@@ -446,11 +479,30 @@ export default function CampusRouteMap({
   useEffect(() => {
     if (!selectedFrom) return
 
+    createAttemptRef.current = null
     setIsCreateMode(false)
     setDraftDestination('')
     setDraftDepartureHour('')
     setDraftDepartureMinute('')
   }, [selectedFrom])
+
+  useEffect(() => {
+    if (!selectedFrom || isLoading || selectedOriginInventory.hasJoinableRoom) return
+    if (emptyStateOriginsRef.current.has(selectedFrom)) return
+
+    emptyStateOriginsRef.current.add(selectedFrom)
+    trackEvent('room_empty_state_viewed', {
+      from_location: selectedFrom,
+      visible_room_count: selectedOriginInventory.visibleRoomCount,
+      joinable_room_count: 0,
+      source: 'map_bottom_sheet',
+    })
+  }, [
+    isLoading,
+    selectedFrom,
+    selectedOriginInventory.hasJoinableRoom,
+    selectedOriginInventory.visibleRoomCount,
+  ])
 
   useEffect(() => {
     if (draftDestination && !destinationOptions.includes(draftDestination)) {
@@ -781,6 +833,11 @@ export default function CampusRouteMap({
                 type="button"
                 onClick={() => {
                   setIsCreateMode(true)
+                  createAttemptRef.current = {
+                    fromLocation: selectedFrom,
+                    submitted: false,
+                    abandoned: false,
+                  }
                   trackEvent('room_create_form_opened', {
                     from_location: selectedFrom,
                     source: 'map_bottom_sheet',
@@ -861,6 +918,9 @@ export default function CampusRouteMap({
                     type="button"
                     onClick={() => {
                       if (!draftDestination || !draftDepartureTime) return
+                      if (createAttemptRef.current) {
+                        createAttemptRef.current.submitted = true
+                      }
                       onCreateRoom({
                         fromLocation: selectedFrom,
                         toLocation: draftDestination,

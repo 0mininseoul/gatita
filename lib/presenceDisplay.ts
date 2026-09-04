@@ -27,3 +27,24 @@ export function getRandomPresenceOffset(
   const { min, max } = getPresenceOffsetRange(now)
   return min + Math.floor(random() * (max - min + 1))
 }
+
+export function getMillisecondsUntilNextPresenceOffsetChange(now = new Date()) {
+  const kst = new Date(now.getTime() + KST_OFFSET_MS)
+  const nextBoundary = new Date(kst.getTime())
+  const day = kst.getUTCDay()
+  const hour = kst.getUTCHours()
+  const isWeekday = day >= 1 && day <= 5
+
+  if (hour < 8) {
+    nextBoundary.setUTCHours(8, 0, 0, 0)
+  } else if (isWeekday && hour < 9) {
+    nextBoundary.setUTCHours(9, 0, 0, 0)
+  } else if (isWeekday && hour < 18) {
+    nextBoundary.setUTCHours(18, 0, 0, 0)
+  } else {
+    nextBoundary.setUTCDate(nextBoundary.getUTCDate() + 1)
+    nextBoundary.setUTCHours(0, 0, 0, 0)
+  }
+
+  return nextBoundary.getTime() - kst.getTime()
+}

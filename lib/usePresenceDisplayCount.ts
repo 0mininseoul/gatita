@@ -1,7 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { getRandomPresenceOffset } from '@/lib/presenceDisplay'
+import {
+  getMillisecondsUntilNextPresenceOffsetChange,
+  getRandomPresenceOffset,
+} from '@/lib/presenceDisplay'
 
 type PresenceUser = {
   id: string
@@ -14,7 +17,26 @@ export function usePresenceDisplayCount(
   user: PresenceUser | null
 ) {
   const [peerCount, setPeerCount] = useState(0)
-  const [displayOffset] = useState(() => getRandomPresenceOffset())
+  const [displayOffset, setDisplayOffset] = useState(() => getRandomPresenceOffset())
+
+  useEffect(() => {
+    let timeoutId: number
+
+    const refreshOffset = () => {
+      setDisplayOffset(getRandomPresenceOffset())
+      timeoutId = window.setTimeout(
+        refreshOffset,
+        getMillisecondsUntilNextPresenceOffsetChange(),
+      )
+    }
+
+    timeoutId = window.setTimeout(
+      refreshOffset,
+      getMillisecondsUntilNextPresenceOffsetChange(),
+    )
+
+    return () => window.clearTimeout(timeoutId)
+  }, [])
 
   useEffect(() => {
     if (!supabase || !channelName || !user?.id) {
@@ -73,6 +95,6 @@ export function usePresenceDisplayCount(
     }
   }, [channelName, supabase, user?.id, user?.nickname])
 
-  // 본인은 항상 포함(+1)하고, KST 시간표에 따른 보정값은 마운트 시 한 번만 생성한다.
+  // 본인은 항상 포함(+1)하고, 보정값은 KST 시간표 구간이 바뀐 때만 갱신한다.
   return peerCount + 1 + displayOffset
 }

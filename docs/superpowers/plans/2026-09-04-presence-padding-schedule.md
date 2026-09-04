@@ -4,7 +4,7 @@
 
 **Goal:** 지도 접속 인원의 무작위 보정값을 KST 기준 심야·평일 일과·기타 구간으로 나눈다.
 
-**Architecture:** React 훅에서 시간 판정과 무작위 범위 생성을 분리한 `lib/presenceDisplay.ts`를 추가한다. `usePresenceDisplayCount`는 마운트 시 헬퍼로 보정값을 한 번 생성하고, 기존 Supabase Presence 실제 인원 수집은 그대로 유지한다.
+**Architecture:** React 훅에서 시간 판정과 무작위 범위 생성을 분리한 `lib/presenceDisplay.ts`를 추가한다. `usePresenceDisplayCount`는 마운트 시 보정값을 생성하고 다음 KST 범위 변경 경계에서만 갱신하며, 기존 Supabase Presence 실제 인원 수집은 그대로 유지한다.
 
 **Tech Stack:** React, TypeScript, Supabase Presence, Node test runner
 
@@ -16,7 +16,7 @@
 - Create: `lib/presenceDisplay.ts`
 - Modify: `test/location-points.test.mjs`
 
-- [ ] **Step 1: TypeScript 헬퍼 로더와 실패하는 경계 테스트 작성**
+- [x] **Step 1: TypeScript 헬퍼 로더와 실패하는 경계 테스트 작성**
 
 `test/location-points.test.mjs`에 다음 로더와 테스트를 추가한다.
 
@@ -61,7 +61,7 @@ test('presence offset generation includes each scheduled minimum and maximum', (
 })
 ```
 
-- [ ] **Step 2: 새 헬퍼가 없어 테스트가 실패하는지 확인**
+- [x] **Step 2: 새 헬퍼가 없어 테스트가 실패하는지 확인**
 
 Run:
 
@@ -71,7 +71,7 @@ node --test test/location-points.test.mjs
 
 Expected: `lib/presenceDisplay.ts`가 없어 신규 테스트가 실패한다.
 
-- [ ] **Step 3: KST 범위와 무작위 정수 헬퍼 구현**
+- [x] **Step 3: KST 범위와 무작위 정수 헬퍼 구현**
 
 `lib/presenceDisplay.ts`를 다음과 같이 생성한다.
 
@@ -107,7 +107,7 @@ export function getRandomPresenceOffset(
 }
 ```
 
-- [ ] **Step 4: 순수 헬퍼 테스트 통과 확인**
+- [x] **Step 4: 순수 헬퍼 테스트 통과 확인**
 
 Run:
 
@@ -123,23 +123,25 @@ Expected: 추가한 시간대·무작위 범위 테스트가 통과한다.
 - Modify: `lib/usePresenceDisplayCount.ts`
 - Modify: `test/location-points.test.mjs`
 
-- [ ] **Step 1: 훅 연결 계약을 테스트에 추가**
+- [x] **Step 1: 훅 연결 계약을 테스트에 추가**
 
 기존 접속 인원 테스트를 다음으로 교체한다.
 
 ```js
-test('map presence display uses one scheduled KST offset per mount', () => {
+test('map presence display keeps one offset within each scheduled KST window', () => {
   const source = readProjectFile('lib/usePresenceDisplayCount.ts')
 
-  assert.match(source, /import \{ getRandomPresenceOffset \} from '@\/lib\/presenceDisplay'/)
+  assert.match(source, /getMillisecondsUntilNextPresenceOffsetChange/)
+  assert.match(source, /getRandomPresenceOffset/)
   assert.match(source, /useState\(\(\) => getRandomPresenceOffset\(\)\)/)
   assert.doesNotMatch(source, /Math\.random/)
-  assert.doesNotMatch(source, /setInterval\(applyOffset/)
+  assert.match(source, /window\.setTimeout\(/)
+  assert.doesNotMatch(source, /window\.setInterval/)
   assert.match(source, /return peerCount \+ 1 \+ displayOffset/)
 })
 ```
 
-- [ ] **Step 2: 기존 훅이 새 계약을 만족하지 못해 실패하는지 확인**
+- [x] **Step 2: 기존 훅이 새 계약을 만족하지 못해 실패하는지 확인**
 
 Run:
 
@@ -149,15 +151,15 @@ node --test test/location-points.test.mjs
 
 Expected: 훅이 여전히 로컬 함수와 20초 주기 재생성을 사용해 테스트가 실패한다.
 
-- [ ] **Step 3: 훅에서 새 헬퍼로 보정값을 한 번 생성**
+- [x] **Step 3: 훅에서 새 헬퍼로 보정값을 구간별로 생성**
 
-`lib/usePresenceDisplayCount.ts`에 `getRandomPresenceOffset`을 import하고 로컬 헬퍼, `isRealCountWindow`, 20초 보정 갱신 effect를 제거한다. 상태 초기화는 다음으로 바꾼다.
+`lib/usePresenceDisplayCount.ts`에 `getRandomPresenceOffset`과 `getMillisecondsUntilNextPresenceOffsetChange`를 import하고 로컬 헬퍼, `isRealCountWindow`, 20초 주기 갱신을 제거한다. 상태를 마운트 시 초기화한 뒤 `window.setTimeout`으로 다음 범위 변경 경계에서만 새 값을 생성한다.
 
 ```ts
-const [displayOffset] = useState(() => getRandomPresenceOffset())
+const [displayOffset, setDisplayOffset] = useState(() => getRandomPresenceOffset())
 ```
 
-- [ ] **Step 4: 집중 테스트와 정적 검사 통과 확인**
+- [x] **Step 4: 집중 테스트와 정적 검사 통과 확인**
 
 Run:
 
@@ -169,7 +171,7 @@ npx tsc --noEmit
 
 Expected: 접속 인원 테스트, ESLint, TypeScript 검사가 모두 통과한다.
 
-- [ ] **Step 5: 접속 인원 변경 커밋**
+- [x] **Step 5: 접속 인원 변경 커밋**
 
 ```bash
 git add lib/presenceDisplay.ts lib/usePresenceDisplayCount.ts test/location-points.test.mjs

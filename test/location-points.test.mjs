@@ -303,13 +303,35 @@ test('presence offset generation includes each scheduled minimum and maximum', (
   assert.equal(getRandomPresenceOffset(overnight, () => 0.999999), 0)
 })
 
-test('map presence display uses one scheduled KST offset per mount', () => {
+test('presence offset reschedules only at the next KST range boundary', () => {
+  const { getMillisecondsUntilNextPresenceOffsetChange } = loadPresenceDisplayExports()
+
+  assert.equal(getMillisecondsUntilNextPresenceOffsetChange(
+    new Date('2026-09-07T07:59:00+09:00'),
+  ), 60 * 1000)
+  assert.equal(getMillisecondsUntilNextPresenceOffsetChange(
+    new Date('2026-09-07T08:00:00+09:00'),
+  ), 60 * 60 * 1000)
+  assert.equal(getMillisecondsUntilNextPresenceOffsetChange(
+    new Date('2026-09-07T09:00:00+09:00'),
+  ), 9 * 60 * 60 * 1000)
+  assert.equal(getMillisecondsUntilNextPresenceOffsetChange(
+    new Date('2026-09-07T18:00:00+09:00'),
+  ), 6 * 60 * 60 * 1000)
+  assert.equal(getMillisecondsUntilNextPresenceOffsetChange(
+    new Date('2026-09-05T08:00:00+09:00'),
+  ), 16 * 60 * 60 * 1000)
+})
+
+test('map presence display keeps one offset within each scheduled KST window', () => {
   const source = readProjectFile('lib/usePresenceDisplayCount.ts')
 
-  assert.match(source, /import \{ getRandomPresenceOffset \} from '@\/lib\/presenceDisplay'/)
+  assert.match(source, /getMillisecondsUntilNextPresenceOffsetChange/)
+  assert.match(source, /getRandomPresenceOffset/)
   assert.match(source, /useState\(\(\) => getRandomPresenceOffset\(\)\)/)
   assert.doesNotMatch(source, /Math\.random/)
-  assert.doesNotMatch(source, /setInterval\(applyOffset/)
+  assert.match(source, /window\.setTimeout\(/)
+  assert.doesNotMatch(source, /window\.setInterval/)
   assert.match(source, /return peerCount \+ 1 \+ displayOffset/)
 })
 

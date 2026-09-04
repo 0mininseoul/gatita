@@ -2,6 +2,7 @@ import { isRoomJoinable, type LocationType } from '@/lib/supabase'
 
 export type InventoryRoom = {
   from_location: LocationType
+  to_location: LocationType
   departure_date: string
   departure_time: string
   max_participants: number

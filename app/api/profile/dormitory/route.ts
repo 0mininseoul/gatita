@@ -21,7 +21,7 @@ async function updateDormitoryProfile(request: Request) {
   const payload = await request.json().catch(() => null) as DormitoryProfilePayload | null
   const value = payload?.is_dormitory_resident
 
-  if (!(value === null || typeof value === 'boolean')) {
+  if (!payload || !(value === null || typeof value === 'boolean')) {
     return NextResponse.json({ error: '기숙사생 여부 값이 올바르지 않습니다' }, { status: 400 })
   }
 

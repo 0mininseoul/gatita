@@ -268,7 +268,7 @@ git commit -m "feat: collect optional dormitory preference"
 - Modify: `components/HomeClient.tsx`
 - Modify: `test/dormitory-ride-request.test.mjs`
 
-- [ ] **Step 1: Write failing map and analytics contract tests**
+- [x] **Step 1: Write failing map and analytics contract tests**
 
 Require the map to derive availability from the pure helper, deduplicate banner views per sheet opening, show `혹시 기숙사 가시나요?`, open a request mode, render `다른 기숙사생들에게 동행 요청을 보내드릴게요`, fix station/main-gate destination to Dormitory 2, and use all `getDestinationOptions('제2기숙사')` destinations for Dormitory 2. Require view, click, cancel, submit, and failure event names.
 
@@ -281,33 +281,33 @@ creation_source: creationSource ?? 'standard'
 
 and require `room_created` to include the source.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run: `node --test test/dormitory-ride-request.test.mjs`
 
 Expected: FAIL because the map only has standard room creation.
 
-- [ ] **Step 3: Replace the boolean form mode with an explicit creation mode**
+- [x] **Step 3: Replace the boolean form mode with an explicit creation mode**
 
 Use `type RoomCreationMode = 'standard' | 'dormitory_request' | null`. Preserve standard form behavior and abandonment analytics. Reset the destination and time on origin changes and cancellations. For fixed-mode requests set `draftDestination` to `제2기숙사`; for Dormitory 2 leave it selectable and use the existing global destination options unchanged.
 
-- [ ] **Step 4: Render and instrument the banner and request sheet**
+- [x] **Step 4: Render and instrument the banner and request sheet**
 
 Show the compact banner only after inventory loading completes and `availability.showBanner` is true. Track one `dormitory_request_banner_viewed` per eligible origin per bottom-sheet opening. On click, track `dormitory_request_banner_clicked` and switch modes. On cancel or sheet dismissal, emit `dormitory_request_cancelled` once with `from_location`, `has_destination`, and `has_departure_time`.
 
 The request panel must contain the exact approved promise copy and `요청하기`/`취소` actions. It must not contain `알림을 켠 기숙사생들에게 동행 요청을 알려드려요`.
 
-- [ ] **Step 5: Reuse room creation with a source discriminator**
+- [x] **Step 5: Reuse room creation with a source discriminator**
 
 Pass `creationSource` to `HomeClient`. Keep the existing route validation, departure validation, duplicate lookup, insert, participant insert, rollback, and duplicate toast. Add `creation_source` to the insert and `creation_source` to `room_created`. Emit `dormitory_request_submitted` only after both room and participant are created; emit `dormitory_request_failed` with a stable `failure_stage` and `reason_code` for validation, duplicate, insert, and participant failures.
 
-- [ ] **Step 6: Run the focused and existing activation tests**
+- [x] **Step 6: Run the focused and existing activation tests**
 
 Run: `node --test test/dormitory-ride-request.test.mjs test/activation-measurement.test.mjs`
 
 Expected: PASS, with standard room analytics and empty-state measurement preserved.
 
-- [ ] **Step 7: Commit the request experience**
+- [x] **Step 7: Commit the request experience**
 
 ```bash
 git add components/CampusRouteMap.tsx components/HomeClient.tsx test/dormitory-ride-request.test.mjs

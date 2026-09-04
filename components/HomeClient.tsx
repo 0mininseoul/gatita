@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase'
 import {
   ChatRoom,
   getDepartureDateForTime,
+  getRoomDepartureDateTime,
   getMapRoomDateRange,
   LOCATIONS,
   LocationType,
@@ -1344,14 +1345,27 @@ export default function HomeClient() {
     fromLocation: roomFromLocation,
     toLocation: roomToLocation,
     departureTime,
+    creationSource,
   }: {
     fromLocation: LocationType
     toLocation: LocationType
     departureTime: string
+    creationSource?: 'standard' | 'dormitory_request'
   }) => {
+    const isDormitoryRequest = creationSource === 'dormitory_request'
+    const trackDormitoryRequestFailure = (failureStage: string, reasonCode: string) => {
+      if (!isDormitoryRequest) return
+      trackEvent('dormitory_request_failed', {
+        from_location: roomFromLocation,
+        failure_stage: failureStage,
+        reason_code: reasonCode,
+      })
+    }
+
     if (isResolvingMapSession) return
 
     if (!user || !supabase) {
+      trackDormitoryRequestFailure('authentication', 'profile_or_session_missing')
       if (requiresProfile) {
         openProfileRequiredModal('room_create')
       } else {
@@ -1360,14 +1374,19 @@ export default function HomeClient() {
       return
     }
 
-    if (!validateRouteSelection(roomFromLocation, roomToLocation)) return
+    if (!validateRouteSelection(roomFromLocation, roomToLocation)) {
+      trackDormitoryRequestFailure('validation', 'invalid_route')
+      return
+    }
 
     if (isCurrentlySuspended) {
+      trackDormitoryRequestFailure('authorization', 'account_suspended')
       setModerationModal('suspension')
       return
     }
 
     if (!departureTime) {
+      trackDormitoryRequestFailure('validation', 'departure_time_missing')
       toast.error('출발예정시간을 선택해주세요')
       return
     }
@@ -1377,6 +1396,7 @@ export default function HomeClient() {
       to_location: roomToLocation,
       departure_time: departureTime,
       source: 'map_bottom_sheet',
+      creation_source: creationSource ?? 'standard',
     })
     const departureDate = getDepartureDateForTime(new Date(), departureTime)
     if (!departureDate) {
@@ -1386,7 +1406,9 @@ export default function HomeClient() {
         to_location: roomToLocation,
         departure_time: departureTime,
         reason: 'departure_time_out_of_window',
+        creation_source: creationSource ?? 'standard',
       })
+      trackDormitoryRequestFailure('validation', 'departure_time_out_of_window')
       return
     }
 
@@ -1409,12 +1431,15 @@ export default function HomeClient() {
         to_location: roomToLocation,
         departure_time: departureTime,
         reason: 'duplicate_active_room',
+        creation_source: creationSource ?? 'standard',
       })
+      trackDormitoryRequestFailure('duplicate_check', 'duplicate_active_room')
       promptDuplicateRoom(duplicate)
       return
     }
 
     setIsCreatingMapRoom(true)
+    let failureStage = 'room_insert'
 
     try {
       const title = `${departureTime} ${LOCATIONS[roomFromLocation]}→${LOCATIONS[roomToLocation]}`
@@ -1429,6 +1454,7 @@ export default function HomeClient() {
           departure_time: departureTime,
           max_participants: 4,
           created_by: user.id,
+          creation_source: creationSource ?? 'standard',
         })
         .select()
         .single()
@@ -1442,7 +1468,9 @@ export default function HomeClient() {
             to_location: roomToLocation,
             departure_time: departureTime,
             reason: 'duplicate_active_room',
+            creation_source: creationSource ?? 'standard',
           })
+          trackDormitoryRequestFailure('room_insert', 'duplicate_active_room')
 
           const { data: existingRoom } = await supabase
             .from('chat_rooms')
@@ -1473,6 +1501,7 @@ export default function HomeClient() {
         throw error
       }
 
+      failureStage = 'participant_insert'
       const { error: participantError } = await supabase
         .from('room_participants')
         .insert({
@@ -1502,13 +1531,31 @@ export default function HomeClient() {
         departure_date: departureDate,
         departure_time: departureTime,
         source: 'map_bottom_sheet',
+        creation_source: creationSource ?? 'standard',
       })
+
+      if (isDormitoryRequest) {
+        const departureLeadMinutes = Math.max(
+          0,
+          Math.round((getRoomDepartureDateTime(departureDate, departureTime).getTime() - Date.now()) / 60_000),
+        )
+        trackEvent('dormitory_request_submitted', {
+          from_location: roomFromLocation,
+          to_location: roomToLocation,
+          departure_lead_minutes: departureLeadMinutes,
+        })
+      }
 
       // 8-2: 같은 경로로 2번째(+) 방을 만든 순간이 구독 유도 최적 시점이라는 근거(46일
       // 실측: 방을 2개 이상 만든 9명 중 7명이 단일 경로 반복). 이 조회는 부가 기능이라
       // 실패해도 방 생성 흐름(입장 이동)을 막지 않는다 — 전체를 try/catch로 감싸고
       // 실패 시 조용히 기존 흐름(즉시 이동)으로 넘어간다.
       try {
+        if (isDormitoryRequest) {
+          router.push(`/rooms/${room.id}`)
+          return
+        }
+
         const { count: routeRoomCount, error: countError } = await supabase
           .from('chat_rooms')
           .select('id', { count: 'exact', head: true })
@@ -1564,7 +1611,14 @@ export default function HomeClient() {
         from_location: roomFromLocation,
         to_location: roomToLocation,
         departure_time: departureTime,
+        creation_source: creationSource ?? 'standard',
       })
+      trackDormitoryRequestFailure(
+        failureStage,
+        error && typeof error === 'object' && 'code' in error
+          ? String(error.code)
+          : 'unknown_error',
+      )
       toast.error('채팅방 생성 중 오류가 발생했습니다')
     } finally {
       setIsCreatingMapRoom(false)

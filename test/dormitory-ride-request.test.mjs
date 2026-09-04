@@ -222,3 +222,52 @@ test('settings update is authenticated, tri-state, owner-scoped, and analytics-b
   assert.match(settingsPage, /dormitory_profile_answered/)
   assert.match(settingsPage, /source: 'settings'/)
 })
+
+test('map renders the dormitory request banner only from shared availability rules', () => {
+  const map = readProjectFile('components/CampusRouteMap.tsx')
+
+  assert.match(map, /getDormitoryRequestAvailability/)
+  assert.match(map, /dormitoryRequestAvailability\.showBanner/)
+  assert.match(map, /혹시 기숙사 가시나요\?/)
+  assert.match(map, /dormitory_request_banner_viewed/)
+  assert.match(map, /dormitory_request_banner_clicked/)
+  assert.match(map, /destination_mode: dormitoryRequestAvailability\.destinationMode/)
+  assert.match(map, /joinable_room_count: 0/)
+  assert.match(map, /dormitoryBannerOriginsRef\.current\.clear\(\)/)
+})
+
+test('request sheet uses approved copy, fixes station destinations, and keeps Dormitory 2 selectable', () => {
+  const map = readProjectFile('components/CampusRouteMap.tsx')
+
+  assert.match(map, /다른 기숙사생들에게 동행 요청을 보내드릴게요/)
+  assert.doesNotMatch(map, /알림을 켠 기숙사생들에게 동행 요청을 알려드려요/)
+  assert.match(map, /DORMITORY_REQUEST_DESTINATION/)
+  assert.match(map, /getDormitoryRequestDestinationOptions\(selectedFrom\)/)
+  assert.match(map, /dormitoryRequestAvailability\.destinationMode === 'selectable'/)
+  assert.match(map, /'요청하기'/)
+  assert.match(map, />취소<\/button>/)
+})
+
+test('request lifecycle records cancellation and submits a dormitory-sourced room', () => {
+  const map = readProjectFile('components/CampusRouteMap.tsx')
+  const home = readProjectFile('components/HomeClient.tsx')
+
+  assert.match(map, /dormitory_request_cancelled/)
+  assert.match(map, /has_destination: Boolean\(draftDestination\)/)
+  assert.match(map, /has_departure_time: Boolean\(draftDepartureTime\)/)
+  assert.match(map, /creationSource,/)
+  assert.match(map, /setCreationSource\('dormitory_request'\)/)
+  assert.match(home, /creationSource\?: 'standard' \| 'dormitory_request'/)
+  assert.match(home, /creation_source: creationSource \?\? 'standard'/)
+  assert.match(home, /creation_source: creationSource \?\? 'standard'/)
+  assert.match(home, /dormitory_request_submitted/)
+  assert.match(home, /dormitory_request_failed/)
+  assert.match(home, /failure_stage/)
+  assert.match(home, /reason_code/)
+})
+
+test('room_created analytics identifies standard and dormitory request creation', () => {
+  const home = readProjectFile('components/HomeClient.tsx')
+
+  assert.match(home, /trackEvent\('room_created',[\s\S]*creation_source: creationSource \?\? 'standard'/)
+})

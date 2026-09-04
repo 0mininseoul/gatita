@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { Bell, BellRing, Clock, Compass, MapPin, Minus, Plus, Sparkles, Users, X } from 'lucide-react'
+import { Bell, BellRing, Clock, Compass, MapPin, Megaphone, Minus, Plus, Sparkles, Users, X } from 'lucide-react'
 import {
   getDepartureTimeOptions,
   getDestinationOptions,
@@ -16,6 +16,11 @@ import {
 import { shouldShowMarkerNames } from '@/lib/mapMarkerDisplay'
 import { trackEvent } from '@/lib/analytics/client'
 import { getOriginRoomInventory } from '@/lib/roomInventory'
+import {
+  DORMITORY_REQUEST_DESTINATION,
+  getDormitoryRequestAvailability,
+  getDormitoryRequestDestinationOptions,
+} from '@/lib/dormitoryRideRequest'
 
 export type CampusMapRoom = {
   id: string
@@ -51,6 +56,7 @@ type CampusRouteMapProps = {
     fromLocation: LocationType
     toLocation: LocationType
     departureTime: string
+    creationSource?: 'standard' | 'dormitory_request'
   }) => void | Promise<void>
   onJoinRoom: (roomId: string) => void
   routeHintStep?: 'hidden' | 'select' | 'action'
@@ -215,6 +221,7 @@ export default function CampusRouteMap({
   const [mapLevel, setMapLevel] = useState(INITIAL_MAP_LEVEL)
   const [focusedLocation, setFocusedLocation] = useState<LocationType | null>(selectedFrom || null)
   const [isCreateMode, setIsCreateMode] = useState(false)
+  const [creationSource, setCreationSource] = useState<'standard' | 'dormitory_request'>('standard')
   const [draftDestination, setDraftDestination] = useState<LocationType | ''>('')
   const [draftDepartureHour, setDraftDepartureHour] = useState('')
   const [draftDepartureMinute, setDraftDepartureMinute] = useState('')
@@ -224,6 +231,11 @@ export default function CampusRouteMap({
   // far beyond the 01:00 cutoff.
   const [departureOptionsNonce, setDepartureOptionsNonce] = useState(0)
   const emptyStateOriginsRef = useRef(new Set<LocationType>())
+  const dormitoryBannerOriginsRef = useRef(new Set<LocationType>())
+  const dormitoryRequestAttemptRef = useRef<{
+    submitted: boolean
+    cancelled: boolean
+  } | null>(null)
   const createAttemptRef = useRef<{
     fromLocation: LocationType
     submitted: boolean
@@ -233,7 +245,12 @@ export default function CampusRouteMap({
   const { originStats } = useMemo(() => buildStats(rooms, currentUserId), [currentUserId, rooms])
   // 축소 상태(레벨 5~6)에서는 이름을 숨기고 핀+개수만 보여준다 — 근거는 lib/mapMarkerDisplay.
   const showMarkerNames = shouldShowMarkerNames(mapLevel)
-  const destinationOptions = useMemo(() => getDestinationOptions(selectedFrom), [selectedFrom])
+  const destinationOptions = useMemo(
+    () => creationSource === 'dormitory_request' && selectedFrom
+      ? getDormitoryRequestDestinationOptions(selectedFrom)
+      : getDestinationOptions(selectedFrom),
+    [creationSource, selectedFrom],
+  )
   const departureTimeOptions = useMemo(
     // departureOptionsNonce intentionally drives recomputation; new Date() is read fresh.
     () => isCreateMode ? getDepartureTimeOptions(new Date(), 1) : [],
@@ -274,6 +291,26 @@ export default function CampusRouteMap({
       : { visibleRoomCount: 0, joinableRoomCount: 0, hasJoinableRoom: false },
     [rooms, selectedFrom],
   )
+  const dormitoryRequestAvailability = useMemo(
+    () => selectedFrom
+      ? getDormitoryRequestAvailability(rooms, selectedFrom)
+      : { showBanner: false, destinationMode: 'fixed' as const, fixedDestination: null },
+    [rooms, selectedFrom],
+  )
+  const isDormitoryDestinationSelectable = creationSource === 'dormitory_request'
+    && dormitoryRequestAvailability.destinationMode === 'selectable'
+
+  const trackDormitoryRequestCancellation = useCallback(() => {
+    const attempt = dormitoryRequestAttemptRef.current
+    if (!attempt || attempt.submitted || attempt.cancelled || !selectedFrom) return
+
+    attempt.cancelled = true
+    trackEvent('dormitory_request_cancelled', {
+      from_location: selectedFrom,
+      has_destination: Boolean(draftDestination),
+      has_departure_time: Boolean(draftDepartureTime),
+    })
+  }, [draftDepartureTime, draftDestination, selectedFrom])
 
   const trackCreateFormAbandonment = useCallback((reason: 'sheet_closed' | 'origin_changed') => {
     const attempt = createAttemptRef.current
@@ -292,20 +329,23 @@ export default function CampusRouteMap({
   const handleLocationSelect = useCallback((location: LocationType) => {
     if (selectedFrom && selectedFrom !== location) {
       trackCreateFormAbandonment('origin_changed')
+      trackDormitoryRequestCancellation()
     }
     setFocusedLocation(location)
     onSelectFrom(location)
-  }, [onSelectFrom, selectedFrom, trackCreateFormAbandonment])
+  }, [onSelectFrom, selectedFrom, trackCreateFormAbandonment, trackDormitoryRequestCancellation])
 
   const closeSheet = useCallback(() => {
     trackCreateFormAbandonment('sheet_closed')
+    trackDormitoryRequestCancellation()
     onSelectFrom('')
     setFocusedLocation(null)
     setIsCreateMode(false)
+    setCreationSource('standard')
     setDraftDestination('')
     setDraftDepartureHour('')
     setDraftDepartureMinute('')
-  }, [onSelectFrom, trackCreateFormAbandonment])
+  }, [onSelectFrom, trackCreateFormAbandonment, trackDormitoryRequestCancellation])
 
   // The close button sits above the momentum-scrolling sheet body (-webkit-overflow-
   // scrolling: touch). On iOS that scroller can swallow the first synthetic click, so
@@ -467,9 +507,12 @@ export default function CampusRouteMap({
   useEffect(() => {
     if (!selectedFrom) {
       emptyStateOriginsRef.current.clear()
+      dormitoryBannerOriginsRef.current.clear()
       createAttemptRef.current = null
+      dormitoryRequestAttemptRef.current = null
       setFocusedLocation(null)
       setIsCreateMode(false)
+      setCreationSource('standard')
       setDraftDestination('')
       setDraftDepartureHour('')
       setDraftDepartureMinute('')
@@ -480,7 +523,9 @@ export default function CampusRouteMap({
     if (!selectedFrom) return
 
     createAttemptRef.current = null
+    dormitoryRequestAttemptRef.current = null
     setIsCreateMode(false)
+    setCreationSource('standard')
     setDraftDestination('')
     setDraftDepartureHour('')
     setDraftDepartureMinute('')
@@ -502,6 +547,23 @@ export default function CampusRouteMap({
     selectedFrom,
     selectedOriginInventory.hasJoinableRoom,
     selectedOriginInventory.visibleRoomCount,
+  ])
+
+  useEffect(() => {
+    if (!selectedFrom || isLoading || !dormitoryRequestAvailability.showBanner) return
+    if (dormitoryBannerOriginsRef.current.has(selectedFrom)) return
+
+    dormitoryBannerOriginsRef.current.add(selectedFrom)
+    trackEvent('dormitory_request_banner_viewed', {
+      from_location: selectedFrom,
+      destination_mode: dormitoryRequestAvailability.destinationMode,
+      joinable_room_count: 0,
+    })
+  }, [
+    dormitoryRequestAvailability.destinationMode,
+    dormitoryRequestAvailability.showBanner,
+    isLoading,
+    selectedFrom,
   ])
 
   useEffect(() => {
@@ -829,10 +891,46 @@ export default function CampusRouteMap({
                 </div>
               ) : null}
 
+              {!isCreateMode && !isLoading && dormitoryRequestAvailability.showBanner && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const fixedDestination = dormitoryRequestAvailability.fixedDestination
+                    setCreationSource('dormitory_request')
+                    setIsCreateMode(true)
+                    setDraftDestination(fixedDestination ?? '')
+                    setDraftDepartureHour('')
+                    setDraftDepartureMinute('')
+                    createAttemptRef.current = null
+                    dormitoryRequestAttemptRef.current = {
+                      submitted: false,
+                      cancelled: false,
+                    }
+                    trackEvent('dormitory_request_banner_clicked', {
+                      from_location: selectedFrom,
+                      destination_mode: dormitoryRequestAvailability.destinationMode,
+                    })
+                  }}
+                  className="mt-3 flex w-full items-center gap-3 rounded-lg border border-primary-200 bg-primary-50 px-3 py-3 text-left transition hover:border-primary-300 hover:bg-primary-100"
+                >
+                  <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-primary-600 shadow-sm">
+                    <Megaphone className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-black text-gray-950">혹시 기숙사 가시나요?</span>
+                    <span className="mt-0.5 block text-xs font-semibold text-gray-600">
+                      기숙사생들에게 동행을 요청해보세요
+                    </span>
+                  </span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => {
+                  setCreationSource('standard')
                   setIsCreateMode(true)
+                  dormitoryRequestAttemptRef.current = null
                   createAttemptRef.current = {
                     fromLocation: selectedFrom,
                     submitted: false,
@@ -851,21 +949,38 @@ export default function CampusRouteMap({
 
               {isCreateMode && (
                 <div className="mt-3 rounded-lg border border-primary-100 bg-primary-50/70 p-3">
+                  {creationSource === 'dormitory_request' && (
+                    <div className="mb-3 rounded-lg border border-primary-100 bg-white px-3 py-3">
+                      <p className="text-sm font-black text-gray-950">
+                        다른 기숙사생들에게 동행 요청을 보내드릴게요
+                      </p>
+                      <p className="mt-1 text-xs font-semibold leading-5 text-gray-500">
+                        요청하면 같은 시간과 경로의 채팅방이 바로 만들어져요.
+                      </p>
+                    </div>
+                  )}
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
                       <label className="mb-1.5 block text-xs font-black text-gray-700">도착지</label>
-                      <select
-                        value={draftDestination}
-                        onChange={(event) => setDraftDestination(event.target.value as LocationType | '')}
-                        className="input-field bg-white py-2.5 text-base font-bold"
-                      >
-                        <option value="">도착지 선택</option>
-                        {destinationOptions.map((location) => (
-                          <option key={location} value={location}>
-                            {LOCATIONS[location]}
-                          </option>
-                        ))}
-                      </select>
+                      {creationSource === 'dormitory_request'
+                        && !isDormitoryDestinationSelectable ? (
+                          <div className="input-field flex items-center bg-gray-50 py-2.5 text-base font-bold text-gray-900">
+                            {LOCATIONS[DORMITORY_REQUEST_DESTINATION]}
+                          </div>
+                        ) : (
+                          <select
+                            value={draftDestination}
+                            onChange={(event) => setDraftDestination(event.target.value as LocationType | '')}
+                            className="input-field bg-white py-2.5 text-base font-bold"
+                          >
+                            <option value="">도착지 선택</option>
+                            {destinationOptions.map((location) => (
+                              <option key={location} value={location}>
+                                {LOCATIONS[location]}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                     </div>
                     <div>
                       <label className="mb-1.5 block text-xs font-black text-gray-700">출발예정시간</label>
@@ -921,17 +1036,39 @@ export default function CampusRouteMap({
                       if (createAttemptRef.current) {
                         createAttemptRef.current.submitted = true
                       }
+                      if (dormitoryRequestAttemptRef.current) {
+                        dormitoryRequestAttemptRef.current.submitted = true
+                      }
                       onCreateRoom({
                         fromLocation: selectedFrom,
                         toLocation: draftDestination,
                         departureTime: draftDepartureTime,
+                        creationSource,
                       })
                     }}
                     disabled={!draftDestination || !draftDepartureTime || isCreatingRoom}
                     className="mt-3 inline-flex w-full items-center justify-center rounded-lg bg-gray-950 px-4 py-2.5 text-sm font-black text-white transition hover:bg-gray-800 disabled:bg-gray-300"
                   >
-                    {isCreatingRoom ? '만드는 중...' : '만들기'}
+                    {isCreatingRoom
+                      ? '만드는 중...'
+                      : creationSource === 'dormitory_request' ? '요청하기' : '만들기'}
                   </button>
+                  {creationSource === 'dormitory_request' && (
+                    <button
+                      type="button"
+                      disabled={isCreatingRoom}
+                      onClick={() => {
+                        trackDormitoryRequestCancellation()
+                        dormitoryRequestAttemptRef.current = null
+                        setCreationSource('standard')
+                        setIsCreateMode(false)
+                        setDraftDestination('')
+                        setDraftDepartureHour('')
+                        setDraftDepartureMinute('')
+                      }}
+                      className="mt-2 inline-flex w-full items-center justify-center rounded-lg px-4 py-2 text-sm font-black text-gray-500 transition hover:bg-white hover:text-gray-800 disabled:opacity-50"
+                    >취소</button>
+                  )}
                 </div>
               )}
             </div>

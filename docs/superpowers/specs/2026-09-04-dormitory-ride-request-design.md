@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-04
 
-**Status:** Awaiting product review
+**Status:** Approved and implemented
 
 **Scope:** Optional dormitory profile signal, empty-supply ride request UI, and dormitory-targeted PWA push delivery
 

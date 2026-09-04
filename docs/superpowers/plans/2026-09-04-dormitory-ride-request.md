@@ -366,21 +366,21 @@ git commit -m "feat: notify dormitory residents of ride requests"
 - Modify: `docs/superpowers/specs/2026-09-04-dormitory-ride-request-design.md`
 - Modify: `docs/superpowers/plans/2026-09-04-dormitory-ride-request.md`
 
-- [ ] **Step 1: Write the failing privacy contract test**
+- [x] **Step 1: Write the failing privacy contract test**
 
 Require the privacy policy to disclose the optional dormitory-resident signal, its use for selecting ride-request notification recipients, and reversibility in settings.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run: `node --test test/dormitory-ride-request.test.mjs`
 
 Expected: FAIL because the policy predates this data use.
 
-- [ ] **Step 3: Update the privacy policy and design status**
+- [x] **Step 3: Update the privacy policy and design status**
 
 Add the optional signal to the processed-information table and explain that it is used only to select recipients for dormitory ride-request notifications, is not exposed to other users, and can be changed in settings. Change the design status from `Awaiting product review` to `Approved and implemented` only after the feature tests pass.
 
-- [ ] **Step 4: Run all automated verification**
+- [x] **Step 4: Run all automated verification**
 
 Run:
 
@@ -393,7 +393,7 @@ git diff --check
 
 Expected: all tests pass with zero failures, lint exits 0, all Next.js routes build, and no whitespace errors appear. Existing dependency/browser-data warnings may remain if they are unchanged from baseline.
 
-- [ ] **Step 5: Validate Supabase artifacts**
+- [x] **Step 5: Validate Supabase artifacts**
 
 Run:
 
@@ -403,6 +403,8 @@ supabase db lint --local
 ```
 
 Expected: the generated migration appears in the local list and schema lint reports no new errors. If the repository has no running local Supabase stack, record the unavailable command as an environment limitation and verify the SQL with a temporary local Postgres/Supabase stack before deployment.
+
+Execution note: Docker was unavailable, so local list/lint could not connect. A remote, non-mutating `db push --dry-run` confirmed that only `20260904035539_add_dormitory_ride_requests.sql` is pending, and linked-project `db lint --level error --fail-on error` returned no schema errors.
 
 - [ ] **Step 6: Manually verify mobile-width behavior**
 

@@ -271,3 +271,12 @@ test('room_created analytics identifies standard and dormitory request creation'
 
   assert.match(home, /trackEvent\('room_created',[\s\S]*creation_source: creationSource \?\? 'standard'/)
 })
+
+test('privacy policy discloses optional dormitory preference use and user control', () => {
+  const privacy = readProjectFile('app/privacy/page.tsx')
+
+  assert.match(privacy, /선택 입력한 기숙사생 여부/)
+  assert.match(privacy, /기숙사 동행 요청 알림 수신자 선정/)
+  assert.match(privacy, /다른 이용자에게 공개되지\s*않/)
+  assert.match(privacy, /설정 화면에서 언제든지 변경/)
+})

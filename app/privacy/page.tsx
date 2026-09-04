@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   },
 }
 
-const updatedAt = '2026년 6월 20일'
+const updatedAt = '2026년 9월 4일'
 
 export default function PrivacyPage() {
   return (
@@ -43,6 +43,12 @@ export default function PrivacyPage() {
               '회원 탈퇴 또는 서비스 종료 시까지',
             ],
             [
+              '기숙사 동행 요청',
+              '선택 입력한 기숙사생 여부',
+              '기숙사 동행 요청 알림 수신자 선정',
+              '회원 탈퇴, 설정 변경 또는 서비스 종료 시까지',
+            ],
+            [
               '정산 계좌',
               '계좌은행명, 계좌번호, 계좌주 이름',
               '동행 정산 편의 제공, 방장 계좌 안내',
@@ -71,6 +77,10 @@ export default function PrivacyPage() {
         <p>
           같이타는 GPS 기반의 실시간 위치정보를 수집하지 않습니다. 앱에서 사용하는 위치는 이용자가 직접 선택한
           고정 출발지와 도착지입니다.
+        </p>
+        <p>
+          기숙사생 여부는 선택 정보이며 기숙사 동행 요청 알림 수신자 선정에만 사용합니다. 다른 이용자에게 공개되지
+          않으며, 설정 화면에서 언제든지 변경할 수 있습니다.
         </p>
       </LegalSection>
 

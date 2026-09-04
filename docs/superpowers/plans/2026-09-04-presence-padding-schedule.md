@@ -59,6 +59,26 @@ test('presence offset generation includes each scheduled minimum and maximum', (
   assert.equal(getRandomPresenceOffset(weekend, () => 0.999999), 3)
   assert.equal(getRandomPresenceOffset(overnight, () => 0.999999), 0)
 })
+
+test('presence offset reschedules only at the next KST range boundary', () => {
+  const { getMillisecondsUntilNextPresenceOffsetChange } = loadPresenceDisplayExports()
+
+  assert.equal(getMillisecondsUntilNextPresenceOffsetChange(
+    new Date('2026-09-07T07:59:00+09:00'),
+  ), 60 * 1000)
+  assert.equal(getMillisecondsUntilNextPresenceOffsetChange(
+    new Date('2026-09-07T08:00:00+09:00'),
+  ), 60 * 60 * 1000)
+  assert.equal(getMillisecondsUntilNextPresenceOffsetChange(
+    new Date('2026-09-07T09:00:00+09:00'),
+  ), 9 * 60 * 60 * 1000)
+  assert.equal(getMillisecondsUntilNextPresenceOffsetChange(
+    new Date('2026-09-07T18:00:00+09:00'),
+  ), 6 * 60 * 60 * 1000)
+  assert.equal(getMillisecondsUntilNextPresenceOffsetChange(
+    new Date('2026-09-05T08:00:00+09:00'),
+  ), 16 * 60 * 60 * 1000)
+})
 ```
 
 - [x] **Step 2: 새 헬퍼가 없어 테스트가 실패하는지 확인**
@@ -104,6 +124,27 @@ export function getRandomPresenceOffset(
 ) {
   const { min, max } = getPresenceOffsetRange(now)
   return min + Math.floor(random() * (max - min + 1))
+}
+
+export function getMillisecondsUntilNextPresenceOffsetChange(now = new Date()) {
+  const kst = new Date(now.getTime() + KST_OFFSET_MS)
+  const nextBoundary = new Date(kst.getTime())
+  const day = kst.getUTCDay()
+  const hour = kst.getUTCHours()
+  const isWeekday = day >= 1 && day <= 5
+
+  if (hour < 8) {
+    nextBoundary.setUTCHours(8, 0, 0, 0)
+  } else if (isWeekday && hour < 9) {
+    nextBoundary.setUTCHours(9, 0, 0, 0)
+  } else if (isWeekday && hour < 18) {
+    nextBoundary.setUTCHours(18, 0, 0, 0)
+  } else {
+    nextBoundary.setUTCDate(nextBoundary.getUTCDate() + 1)
+    nextBoundary.setUTCHours(0, 0, 0, 0)
+  }
+
+  return nextBoundary.getTime() - kst.getTime()
 }
 ```
 
@@ -184,7 +225,7 @@ git commit -m "fix: schedule map presence padding by KST"
 - Modify: `docs/superpowers/plans/2026-09-04-settings-copy-simplification.md`
 - Modify: `docs/superpowers/plans/2026-09-04-presence-padding-schedule.md`
 
-- [ ] **Step 1: 전체 자동 검증 실행**
+- [x] **Step 1: 전체 자동 검증 실행**
 
 Run:
 
@@ -201,7 +242,7 @@ git diff --check
 
 Expected: 전체 테스트 실패 0건, ESLint·TypeScript 오류 0건, Next.js 프로덕션 빌드 성공, 공백 오류 0건.
 
-- [ ] **Step 2: 변경 범위 리뷰**
+- [x] **Step 2: 변경 범위 리뷰**
 
 Run:
 

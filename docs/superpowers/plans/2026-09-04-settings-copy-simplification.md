@@ -16,7 +16,7 @@
 - Modify: `test/account-and-legal.test.mjs`
 - Modify: `app/settings/page.tsx`
 
-- [ ] **Step 1: 실패하는 문구·동작 계약 테스트 작성**
+- [x] **Step 1: 실패하는 문구·동작 계약 테스트 작성**
 
 `test/account-and-legal.test.mjs`에 다음 테스트를 추가한다.
 
@@ -38,7 +38,7 @@ test('settings keeps only the requested dormitory and push notification copy', (
 })
 ```
 
-- [ ] **Step 2: 집중 테스트가 현재 문구 차이로 실패하는지 확인**
+- [x] **Step 2: 집중 테스트가 현재 문구 차이로 실패하는지 확인**
 
 Run:
 
@@ -48,7 +48,7 @@ node --test test/account-and-legal.test.mjs
 
 Expected: 새 푸시 문구가 없고 제거 대상 문구가 남아 있어 신규 테스트가 실패한다.
 
-- [ ] **Step 3: 기숙사 버튼 아래 안내 문구 제거**
+- [x] **Step 3: 기숙사 버튼 아래 안내 문구 제거**
 
 `app/settings/page.tsx`에서 다음 블록을 제거한다.
 
@@ -58,7 +58,7 @@ Expected: 새 푸시 문구가 없고 제거 대상 문구가 남아 있어 신�
 </p>
 ```
 
-- [ ] **Step 4: 알림 행을 한 줄 문구와 토글로 통합**
+- [x] **Step 4: 알림 행을 한 줄 문구와 토글로 통합**
 
 `Bell`, `isInstalled`, `pushInstalled` 상태와 기존 `pushSupported` 분기를 제거하고 알림 섹션 본문을 다음으로 바꾼다.
 
@@ -85,7 +85,7 @@ Expected: 새 푸시 문구가 없고 제거 대상 문구가 남아 있어 신�
 </div>
 ```
 
-- [ ] **Step 5: 집중 테스트와 정적 검사 통과 확인**
+- [x] **Step 5: 집중 테스트와 정적 검사 통과 확인**
 
 Run:
 
@@ -97,7 +97,7 @@ npx tsc --noEmit
 
 Expected: 설정 테스트, ESLint, TypeScript 검사가 모두 통과한다.
 
-- [ ] **Step 6: 설정 문구 변경 커밋**
+- [x] **Step 6: 설정 문구 변경 커밋**
 
 ```bash
 git add app/settings/page.tsx test/account-and-legal.test.mjs

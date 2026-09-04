@@ -96,7 +96,7 @@ git commit -m "feat: store dormitory ride request preferences"
 - Modify: `lib/roomInventory.ts`
 - Modify: `test/dormitory-ride-request.test.mjs`
 
-- [ ] **Step 1: Write failing pure behavior tests**
+- [x] **Step 1: Write failing pure behavior tests**
 
 Add tests for these concrete cases:
 
@@ -135,13 +135,13 @@ test('recipient merge filters consent and global push, excludes creator, and ded
 })
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run: `node --test test/dormitory-ride-request.test.mjs`
 
 Expected: FAIL because `lib/dormitoryRideRequest.ts`, `getRouteRoomInventory`, and the recipient helper do not exist.
 
-- [ ] **Step 3: Implement minimal pure helpers**
+- [x] **Step 3: Implement minimal pure helpers**
 
 Add `getRouteRoomInventory` beside the origin helper, using the same joinable definition. In `lib/dormitoryRideRequest.ts`, export these stable contracts:
 
@@ -174,13 +174,13 @@ export function getDormitoryRequestAvailability(
 
 `getDormitoryRequestDestinationOptions` returns `getDestinationOptions(fromLocation)` without a dormitory-only filter. `mergeDormitoryRequestRecipientIds` unions eligible route and resident IDs in a `Set`, then excludes the creator.
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
 Run: `node --test test/dormitory-ride-request.test.mjs`
 
 Expected: PASS for station, main-gate, Dormitory 2, past/full room, and recipient cases.
 
-- [ ] **Step 5: Commit the domain rules**
+- [x] **Step 5: Commit the domain rules**
 
 ```bash
 git add lib/dormitoryRideRequest.ts lib/roomInventory.ts test/dormitory-ride-request.test.mjs

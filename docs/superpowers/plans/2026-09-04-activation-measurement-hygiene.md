@@ -16,7 +16,7 @@
 - Create: `lib/roomInventory.ts`
 - Create: `test/activation-measurement.test.mjs`
 
-- [ ] **Step 1: Write the failing inventory tests**
+- [x] **Step 1: Write the failing inventory tests**
 
 Create a TypeScript-loading test that imports `getOriginRoomInventory` and covers past, full, joinable, and other-origin rooms:
 
@@ -38,13 +38,13 @@ test('origin inventory separates visible rooms from rooms that can still be join
 })
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run: `node --test test/activation-measurement.test.mjs`
 
 Expected: FAIL because `lib/roomInventory.ts` or `getOriginRoomInventory` does not exist.
 
-- [ ] **Step 3: Implement the minimal helper**
+- [x] **Step 3: Implement the minimal helper**
 
 Create `lib/roomInventory.ts` with a small structural room type and the shared `isRoomJoinable` rule:
 
@@ -78,13 +78,13 @@ export function getOriginRoomInventory(
 }
 ```
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
 Run: `node --test test/activation-measurement.test.mjs`
 
 Expected: PASS for past, full, joinable, empty, and other-origin cases.
 
-- [ ] **Step 5: Commit the helper**
+- [x] **Step 5: Commit the helper**
 
 ```bash
 git add lib/roomInventory.ts test/activation-measurement.test.mjs
@@ -97,7 +97,7 @@ git commit -m "feat: define actionable room inventory"
 - Modify: `components/HomeClient.tsx:1305-1333`
 - Modify: `test/activation-measurement.test.mjs`
 
-- [ ] **Step 1: Write the failing event-contract test**
+- [x] **Step 1: Write the failing event-contract test**
 
 Add a source contract requiring `fixed_point_selected` to use the pure helper and include all inventory properties:
 
@@ -113,13 +113,13 @@ test('fixed point selection records resolved actionable inventory', () => {
 })
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run: `node --test test/activation-measurement.test.mjs`
 
 Expected: FAIL because `fixed_point_selected` has only `from_location`.
 
-- [ ] **Step 3: Add inventory properties to the event**
+- [x] **Step 3: Add inventory properties to the event**
 
 Import the helper, calculate it inside the non-empty location branch, and keep the existing event name:
 
@@ -134,13 +134,13 @@ trackEvent('fixed_point_selected', {
 })
 ```
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
 Run: `node --test test/activation-measurement.test.mjs`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit the fixed-point event change**
+- [x] **Step 5: Commit the fixed-point event change**
 
 ```bash
 git add components/HomeClient.tsx test/activation-measurement.test.mjs
@@ -155,7 +155,7 @@ git commit -m "feat: measure supply on fixed point selection"
 - Modify: `components/CampusRouteMap.tsx:774-875`
 - Modify: `test/activation-measurement.test.mjs`
 
-- [ ] **Step 1: Write the failing bottom-sheet lifecycle tests**
+- [x] **Step 1: Write the failing bottom-sheet lifecycle tests**
 
 Require the new event contracts, a per-opening empty-state set, and a form-attempt ref whose close/origin-change emission is suppressed after submission:
 
@@ -178,13 +178,13 @@ test('create form records close and origin-change abandonment only before submit
 })
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run: `node --test test/activation-measurement.test.mjs`
 
 Expected: FAIL because neither lifecycle event exists.
 
-- [ ] **Step 3: Add refs and derived inventory**
+- [x] **Step 3: Add refs and derived inventory**
 
 Import `getOriginRoomInventory`, compute the selected origin inventory, and add refs:
 
@@ -201,7 +201,7 @@ const selectedOriginInventory = selectedFrom
   : { visibleRoomCount: 0, joinableRoomCount: 0, hasJoinableRoom: false }
 ```
 
-- [ ] **Step 4: Emit the empty-supply event after loading**
+- [x] **Step 4: Emit the empty-supply event after loading**
 
 Add an effect that resets only when the sheet fully closes and deduplicates each origin during that opening:
 
@@ -224,7 +224,7 @@ useEffect(() => {
 }, [isLoading, selectedFrom, selectedOriginInventory.hasJoinableRoom, selectedOriginInventory.visibleRoomCount])
 ```
 
-- [ ] **Step 5: Add a single abandonment emitter**
+- [x] **Step 5: Add a single abandonment emitter**
 
 Use current draft values without including raw destination or time values:
 
@@ -246,13 +246,13 @@ const trackCreateFormAbandonment = useCallback((reason: 'sheet_closed' | 'origin
 
 Call it with `origin_changed` before selecting a different origin, call it with `sheet_closed` before closing the sheet, initialize the ref when the form opens, and set `submitted = true` immediately before a valid `onCreateRoom` call.
 
-- [ ] **Step 6: Run the focused tests and verify GREEN**
+- [x] **Step 6: Run the focused tests and verify GREEN**
 
 Run: `node --test test/activation-measurement.test.mjs`
 
 Expected: PASS with one empty-state contract and both abandonment reasons protected by deduplication/submission state.
 
-- [ ] **Step 7: Commit the lifecycle analytics**
+- [x] **Step 7: Commit the lifecycle analytics**
 
 ```bash
 git add components/CampusRouteMap.tsx test/activation-measurement.test.mjs
@@ -264,13 +264,13 @@ git commit -m "feat: track empty room supply and form abandonment"
 **Files:**
 - No repository files
 
-- [ ] **Step 1: Start Aside Browser and inspect available Amplitude skill support**
+- [x] **Step 1: Start Aside Browser and inspect available Amplitude skill support**
 
 Run: `aside -h` followed by `aside skills list` after the browser is running.
 
 Expected: Aside reports an authenticated browser session and any matching Amplitude skill.
 
-- [ ] **Step 2: Create the custom event and saved funnels**
+- [x] **Step 2: Create the custom event and saved funnels**
 
 Run Aside with this exact task:
 
@@ -278,7 +278,7 @@ Run Aside with this exact task:
 Open the Gatita Amplitude project. Create a custom event named “[Activation] Room Activated” that is the union of room_created and room_joined. Do not edit or delete existing charts. Create a new ordered unique-user funnel named “[Activation v2] Core Activation” with a seven-day conversion window: login_succeeded (method=google) → profile_completed → map_opened (profile_completed=true) → fixed_point_selected → [Activation] Room Activated → chat_message_sent. Create another ordered unique-user funnel named “[Activation] New User Profile Completion” with a 24-hour conversion window: login_succeeded (method=google, profile_completed=false) → profile_setup_started → profile_completed. For both charts use Asia/Seoul, start 2026-06-22, environment=production, and exclude the same four internal Supabase user IDs used by the existing core activation chart. Save both charts and return their URLs and owner account. Reopen each saved chart and verify every step, filter, exclusion, window, and timezone.
 ```
 
-- [ ] **Step 3: Verify saved definitions by reopening them**
+- [x] **Step 3: Verify saved definitions by reopening them**
 
 Expected: Both saved URLs load without errors, existing charts are unchanged, and Aside reports the exact saved configuration and owner.
 
@@ -287,31 +287,31 @@ Expected: Both saved URLs load without errors, existing charts are unchanged, an
 **Files:**
 - Modify: `docs/superpowers/plans/2026-09-04-activation-measurement-hygiene.md`
 
-- [ ] **Step 1: Run all automated tests**
+- [x] **Step 1: Run all automated tests**
 
 Run: `npm test`
 
 Expected: exit code 0 and zero failed tests.
 
-- [ ] **Step 2: Run lint**
+- [x] **Step 2: Run lint**
 
 Run: `npm run lint`
 
 Expected: exit code 0 and zero lint errors.
 
-- [ ] **Step 3: Run the production build**
+- [x] **Step 3: Run the production build**
 
 Run: `npm run build`
 
 Expected: exit code 0 and all Next.js routes compile successfully.
 
-- [ ] **Step 4: Check the final diff and spec coverage**
+- [x] **Step 4: Check the final diff and spec coverage**
 
 Run: `git diff --check && git status --short`
 
 Expected: no whitespace errors; only the planned measurement files are changed.
 
-- [ ] **Step 5: Commit the verified implementation**
+- [x] **Step 5: Commit the verified implementation**
 
 ```bash
 git add docs/superpowers/plans/2026-09-04-activation-measurement-hygiene.md

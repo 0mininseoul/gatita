@@ -59,6 +59,7 @@ export type PrivateProfile = {
   suspension_reason?: string | null
   moderation_updated_at?: string | null
   is_admin: boolean
+  is_dormitory_resident?: boolean | null
   created_at: string
   updated_at: string
 }
@@ -84,6 +85,7 @@ export type ChatRoom = {
   max_participants: number
   created_by: string
   status: 'active' | 'closed'
+  creation_source: 'standard' | 'dormitory_request'
   created_at: string
   participants?: RoomParticipant[]
   creator?: User

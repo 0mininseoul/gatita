@@ -18,7 +18,7 @@
 - Modify: `supabase_schema.sql`
 - Modify: `lib/supabase.ts`
 
-- [ ] **Step 1: Write the failing schema contract tests**
+- [x] **Step 1: Write the failing schema contract tests**
 
 Create `test/dormitory-ride-request.test.mjs` with assertions that both the migration and canonical schema contain a nullable `is_dormitory_resident` private field, a defaulted `creation_source`, an allowed-value constraint, and a route constraint that permits any currently valid destination from Dormitory 2 while allowing only Dormitory 2 for station/main-gate requests:
 
@@ -34,13 +34,13 @@ test('schema stores private dormitory consent and a constrained room source', ()
 })
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run: `node --test test/dormitory-ride-request.test.mjs`
 
 Expected: FAIL because the generated migration is empty and the schema/types do not have the new fields.
 
-- [ ] **Step 3: Add the migration and canonical schema fields**
+- [x] **Step 3: Add the migration and canonical schema fields**
 
 Fill the generated migration with the two columns, a partial recipient index, an allowed-source constraint, and a dormitory-request route constraint:
 
@@ -76,13 +76,13 @@ alter table public.chat_rooms
 
 Mirror the same columns, constraints, and index in `supabase_schema.sql`. Extend `PrivateProfile` with `is_dormitory_resident?: boolean | null` and `ChatRoom` with `creation_source: 'standard' | 'dormitory_request'`.
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
 Run: `node --test test/dormitory-ride-request.test.mjs`
 
 Expected: PASS for the schema and type contracts.
 
-- [ ] **Step 5: Commit the data model**
+- [x] **Step 5: Commit the data model**
 
 ```bash
 git add test/dormitory-ride-request.test.mjs supabase/migrations/20260904035539_add_dormitory_ride_requests.sql supabase_schema.sql lib/supabase.ts

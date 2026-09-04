@@ -50,6 +50,7 @@ create table public.user_private_profiles (
   pwa_installed boolean not null default false,
   pwa_installed_at timestamp with time zone,
   push_enabled boolean not null default false,
+  is_dormitory_resident boolean,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -65,9 +66,26 @@ create table public.chat_rooms (
   max_participants integer default 4 check (max_participants >= 2 and max_participants <= 4),
   created_by uuid references public.users(id) on delete cascade not null,
   status varchar(20) default 'active' check (status in ('active', 'closed')),
+  creation_source text not null default 'standard'
+    check (creation_source in ('standard', 'dormitory_request')),
   payout_revealed_at timestamp with time zone,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  constraint chat_rooms_dormitory_request_route_valid check (
+    creation_source = 'standard'
+    or (
+      from_location in ('가천대역_1번출구', '가천대학교_정문')
+      and to_location = '제2기숙사'
+    )
+    or (
+      from_location = '제2기숙사'
+      and to_location in ('가천대역_1번출구', '가천대학교_정문', '교육대학원', '중앙도서관', '학생회관')
+    )
+  )
 );
+
+create index user_private_profiles_dormitory_push_idx
+  on public.user_private_profiles (user_id)
+  where is_dormitory_resident is true and push_enabled is true;
 
 -- Room participants table
 create table public.room_participants (

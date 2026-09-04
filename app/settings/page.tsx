@@ -16,8 +16,7 @@ import {
   subscribeToPush,
   unsubscribeFromPush,
 } from '@/lib/push'
-import { isInstalled } from '@/lib/pwa'
-import { ArrowLeft, User as UserIcon, AlertCircle, Bell, Bug, Camera, Check, Mail, Trash2, X } from 'lucide-react'
+import { ArrowLeft, User as UserIcon, AlertCircle, Bug, Camera, Check, Mail, Trash2, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 type DeleteStep = 'idle' | 'overview' | 'confirm'
@@ -159,7 +158,6 @@ export default function SettingsPage() {
   const [pushSupported, setPushSupported] = useState(false)
   const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>('default')
   const [pushSubscribed, setPushSubscribed] = useState(false)
-  const [pushInstalled, setPushInstalled] = useState(false)
   const [pushBusy, setPushBusy] = useState(false)
   const [dormitoryResident, setDormitoryResident] = useState<boolean | null>(null)
   const [isSavingDormitory, setIsSavingDormitory] = useState(false)
@@ -243,7 +241,6 @@ export default function SettingsPage() {
   const refreshPushStatus = useCallback(async () => {
     const supported = isPushSupported()
     setPushSupported(supported)
-    setPushInstalled(isInstalled())
     setPushPermission(getNotificationPermission())
     if (supported) {
       setPushSubscribed(await isSubscribedToPush())
@@ -914,9 +911,6 @@ export default function SettingsPage() {
               )
             })}
           </div>
-          <p className="mt-2 text-[0.72rem] font-semibold leading-4 text-gray-500">
-            ‘네’를 선택하면 기숙사 동행 요청 푸시 수신에도 동의하게 됩니다. 언제든 다시 변경할 수 있어요.
-          </p>
         </section>
 
         <section className="settings-section settings-section-tight" aria-labelledby="settings-notifications">
@@ -924,51 +918,26 @@ export default function SettingsPage() {
             <h3 id="settings-notifications">알림</h3>
           </div>
 
-          {pushSupported ? (
-            <>
-              <div className="settings-row settings-row-standalone">
-                <div className="min-w-0">
-                  <p className="settings-row-label">채팅 새 메시지 알림</p>
-                  <span className="mt-0.5 block text-[0.72rem] font-semibold leading-4 text-gray-500">
-                    참여 중인 채팅방에 새 메시지가 오면 푸시로 알려드려요.
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={pushSubscribed}
-                  aria-label="채팅 새 메시지 알림"
-                  onClick={handleTogglePush}
-                  disabled={pushBusy || pushPermission === 'denied'}
-                  className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition disabled:opacity-50 ${
-                    pushSubscribed ? 'bg-primary-600' : 'bg-gray-300'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
-                      pushSubscribed ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-              {pushPermission === 'denied' && (
-                <p className="mt-2 text-[0.72rem] font-semibold leading-4 text-red-500">
-                  기기 설정에서 이 사이트의 알림이 차단되어 있어요. 알림을 허용한 뒤 다시 시도해주세요.
-                </p>
-              )}
-            </>
-          ) : (
-            <div className="settings-row settings-row-standalone">
-              <div className="flex items-start gap-2">
-                <Bell className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
-                <p className="text-[0.72rem] font-bold leading-5 text-gray-600">
-                  {pushInstalled
-                    ? '이 브라우저에서는 알림을 사용할 수 없어요.'
-                    : '홈 화면에 추가하면 채팅 새 메시지 알림을 받을 수 있어요.'}
-                </p>
-              </div>
-            </div>
-          )}
+          <div className="settings-row settings-row-standalone">
+            <p className="settings-row-label">푸시 알림 (채팅, 경로 알림 등)</p>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={pushSubscribed}
+              aria-label="푸시 알림 (채팅, 경로 알림 등)"
+              onClick={handleTogglePush}
+              disabled={!pushSupported || pushBusy || pushPermission === 'denied'}
+              className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition disabled:opacity-50 ${
+                pushSubscribed ? 'bg-primary-600' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+                  pushSubscribed ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
         </section>
 
         <section className="settings-section settings-section-tight" aria-labelledby="settings-contact">

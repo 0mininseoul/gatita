@@ -57,7 +57,7 @@ type CampusRouteMapProps = {
     toLocation: LocationType
     departureTime: string
     creationSource?: 'standard' | 'dormitory_request'
-  }) => void | Promise<void>
+  }) => boolean | Promise<boolean>
   onJoinRoom: (roomId: string) => void
   routeHintStep?: 'hidden' | 'select' | 'action'
   onCloseRouteHint?: (action: 'select-close' | 'action-close') => void
@@ -152,7 +152,7 @@ function clampMapToCampus(map: any, kakao: any) {
   }
 }
 
-function buildStats(rooms: CampusMapRoom[], currentUserId?: string) {
+function buildStats(rooms: CampusMapRoom[], currentUserId?: string, now = new Date()) {
   const originStats = new Map<LocationType, Stat>()
 
   LOCATION_ORDER.forEach((location) => {
@@ -172,7 +172,7 @@ function buildStats(rooms: CampusMapRoom[], currentUserId?: string) {
     // 출발 시각이 지나도 지도에 계속 남아있으므로(Task 3), 지난 방까지 후보에 넣으면
     // 밤에 "다음 출발 08:30"처럼 이미 지나간 시각이 뜬다. roomCount는 지난 방을 그대로
     // 포함한다 — "오늘 이 지점에서 사람들이 움직였다"는 설계 의도라 건드리지 않는다.
-    if (isRoomJoinable(room.departure_date, room.departure_time)) {
+    if (isRoomJoinable(room.departure_date, room.departure_time, now)) {
       currentOriginStat.nextTime =
         !currentOriginStat.nextSortKey || roomSortKey < currentOriginStat.nextSortKey
           ? room.departure_time
@@ -230,6 +230,7 @@ export default function CampusRouteMap({
   // form opened can quietly go stale and (post-midnight rollover) create a room
   // far beyond the 01:00 cutoff.
   const [departureOptionsNonce, setDepartureOptionsNonce] = useState(0)
+  const [inventoryRefreshNonce, setInventoryRefreshNonce] = useState(0)
   const emptyStateOriginsRef = useRef(new Set<LocationType>())
   const dormitoryBannerOriginsRef = useRef(new Set<LocationType>())
   const dormitoryRequestAttemptRef = useRef<{
@@ -242,7 +243,14 @@ export default function CampusRouteMap({
     abandoned: boolean
   } | null>(null)
 
-  const { originStats } = useMemo(() => buildStats(rooms, currentUserId), [currentUserId, rooms])
+  const inventoryNow = useMemo(() => {
+    void inventoryRefreshNonce
+    return new Date()
+  }, [inventoryRefreshNonce])
+  const { originStats } = useMemo(
+    () => buildStats(rooms, currentUserId, inventoryNow),
+    [currentUserId, inventoryNow, rooms],
+  )
   // 축소 상태(레벨 5~6)에서는 이름을 숨기고 핀+개수만 보여준다 — 근거는 lib/mapMarkerDisplay.
   const showMarkerNames = shouldShowMarkerNames(mapLevel)
   const destinationOptions = useMemo(
@@ -277,25 +285,25 @@ export default function CampusRouteMap({
           .slice()
           // 지난 방은 목록에서 계속 보이되(Task 3), 항상 뒤로 밀어 눈에 덜 띄게 한다.
           .sort((a, b) => {
-            const aPast = !isRoomJoinable(a.departure_date, a.departure_time)
-            const bPast = !isRoomJoinable(b.departure_date, b.departure_time)
+            const aPast = !isRoomJoinable(a.departure_date, a.departure_time, inventoryNow)
+            const bPast = !isRoomJoinable(b.departure_date, b.departure_time, inventoryNow)
             if (aPast !== bPast) return aPast ? 1 : -1
             return getRoomSortKey(a).localeCompare(getRoomSortKey(b))
           })
       : [],
-    [rooms, selectedFrom]
+    [inventoryNow, rooms, selectedFrom]
   )
   const selectedOriginInventory = useMemo(
     () => selectedFrom
-      ? getOriginRoomInventory(rooms, selectedFrom)
+      ? getOriginRoomInventory(rooms, selectedFrom, inventoryNow)
       : { visibleRoomCount: 0, joinableRoomCount: 0, hasJoinableRoom: false },
-    [rooms, selectedFrom],
+    [inventoryNow, rooms, selectedFrom],
   )
   const dormitoryRequestAvailability = useMemo(
     () => selectedFrom
-      ? getDormitoryRequestAvailability(rooms, selectedFrom)
+      ? getDormitoryRequestAvailability(rooms, selectedFrom, inventoryNow)
       : { showBanner: false, destinationMode: 'fixed' as const, fixedDestination: null },
-    [rooms, selectedFrom],
+    [inventoryNow, rooms, selectedFrom],
   )
   const isDormitoryDestinationSelectable = creationSource === 'dormitory_request'
     && dormitoryRequestAvailability.destinationMode === 'selectable'
@@ -529,6 +537,16 @@ export default function CampusRouteMap({
     setDraftDestination('')
     setDraftDepartureHour('')
     setDraftDepartureMinute('')
+  }, [selectedFrom])
+
+  useEffect(() => {
+    if (!selectedFrom) return
+
+    const intervalId = window.setInterval(() => {
+      setInventoryRefreshNonce((nonce) => nonce + 1)
+    }, 30000)
+
+    return () => window.clearInterval(intervalId)
   }, [selectedFrom])
 
   useEffect(() => {
@@ -1031,20 +1049,21 @@ export default function CampusRouteMap({
                   </div>
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
                       if (!draftDestination || !draftDepartureTime) return
+                      const succeeded = await onCreateRoom({
+                        fromLocation: selectedFrom,
+                        toLocation: draftDestination,
+                        departureTime: draftDepartureTime,
+                        creationSource,
+                      })
+                      if (!succeeded) return
                       if (createAttemptRef.current) {
                         createAttemptRef.current.submitted = true
                       }
                       if (dormitoryRequestAttemptRef.current) {
                         dormitoryRequestAttemptRef.current.submitted = true
                       }
-                      onCreateRoom({
-                        fromLocation: selectedFrom,
-                        toLocation: draftDestination,
-                        departureTime: draftDepartureTime,
-                        creationSource,
-                      })
                     }}
                     disabled={!draftDestination || !draftDepartureTime || isCreatingRoom}
                     className="mt-3 inline-flex w-full items-center justify-center rounded-lg bg-gray-950 px-4 py-2.5 text-sm font-black text-white transition hover:bg-gray-800 disabled:bg-gray-300"

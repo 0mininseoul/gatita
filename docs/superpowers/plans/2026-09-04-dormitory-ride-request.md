@@ -404,19 +404,21 @@ supabase db lint --local
 
 Expected: the generated migration appears in the local list and schema lint reports no new errors. If the repository has no running local Supabase stack, record the unavailable command as an environment limitation and verify the SQL with a temporary local Postgres/Supabase stack before deployment.
 
-Execution note: Docker was unavailable, so local list/lint could not connect. A remote, non-mutating `db push --dry-run` confirmed that only `20260904035539_add_dormitory_ride_requests.sql` is pending, and linked-project `db lint --level error --fail-on error` returned no schema errors.
+Execution note: Docker was unavailable, so local list/lint could not connect. Production contains the feature and security migrations through `20260904054900_order_legacy_duplicate_guard_first.sql`. Review identified a migration-before-app rollout gap, so `20260904053000_restore_legacy_room_creation_during_rollout.sql` temporarily restores standard-room writes for old clients. The capacity trigger runs its narrow room lock as `security definer` without restoring browser UPDATE access, every room insert takes the same origin advisory lock, and a legacy room insert creates the owner participant atomically before deferred push. Its harmless follow-up duplicate is discarded before the capacity trigger, including if the room filled in between. The upgraded service worker reloads previous app-shell clients once. `20260904055000_finalize_rpc_room_creation.sql` remains intentionally pending until Supabase direct-insert logs and Amplitude room events show no legacy creation for seven consecutive days. Linked-project lint reports no schema errors.
 
-- [ ] **Step 6: Manually verify mobile-width behavior**
+- [x] **Step 6: Manually verify mobile-width behavior**
 
-At a 390px viewport, verify optional onboarding selection/unselection, settings persistence, station fixed destination, Dormitory 2 unrestricted existing destination list, banner suppression by a joinable relevant room, past/full room behavior, cancellation, successful room creation, and absence of overflow or obscured controls.
+At 390x844, Playwright verified onboarding optionality and approved copy, station fixed destination, Dormitory 2's full globally valid destination list, cancellation, settings persistence after reload, and control visibility. Banner suppression and past/full behavior are covered by focused tests. A successful dormitory request was intentionally not submitted against production because that would send a real push; atomic creation and rejection cases were verified at the database/API boundary without creating a room.
 
-- [ ] **Step 7: Commit the final verified state**
+- [x] **Step 7: Commit the final verified state**
 
 ```bash
 git add app/privacy/page.tsx test/dormitory-ride-request.test.mjs docs/superpowers/specs/2026-09-04-dormitory-ride-request-design.md docs/superpowers/plans/2026-09-04-dormitory-ride-request.md
 git commit -m "docs: disclose and verify dormitory requests"
 ```
 
+Execution note: the feature commits were followed by a review-fix commit covering atomic server room creation, rollout compatibility, deferred notification, stale-inventory refresh, and expired-session recovery. The final branch passed 262 tests, ESLint, TypeScript, production build, remote database lint, and whitespace checks; independent review reported no remaining actionable findings.
+
 - [ ] **Step 8: Review, push, open the PR, and merge**
 
-Run the repository review workflow against the full branch diff, fix any findings with focused regression tests, push `0mininseoul/amplitude-user-funnel-chart`, open or update its pull request, wait for required checks, and merge only after the review is clean.
+Run the repository review workflow against the full branch diff, fix any findings with focused regression tests, push `0mininseoul/dormitory-ride-requests`, open or update its pull request, wait for required checks, and merge only after the review is clean.

@@ -1,4 +1,5 @@
-const CACHE_NAME = 'gatita-v1.0.3'
+const CACHE_NAME = 'gatita-v1.0.4'
+const APP_CACHE_PREFIX = 'gatita-'
 const urlsToCache = [
   '/',
   '/map',
@@ -23,18 +24,42 @@ self.addEventListener('install', (event) => {
 // Service Worker 활성화
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys()
-      .then((cacheNames) => {
-        return Promise.all(
-          cacheNames.map((cacheName) => {
-            if (cacheName !== CACHE_NAME) {
-              console.log('Deleting old cache:', cacheName)
-              return caches.delete(cacheName)
+    (async () => {
+      const cacheNames = await caches.keys()
+      const hasPreviousAppCache = cacheNames.some(
+        (cacheName) => cacheName.startsWith(APP_CACHE_PREFIX) && cacheName !== CACHE_NAME
+      )
+
+      await Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            console.log('Deleting old cache:', cacheName)
+            return caches.delete(cacheName)
+          }
+        })
+      )
+
+      await self.clients.claim()
+
+      // This release moves room creation from two browser-side inserts to one
+      // authenticated RPC. Reload every controlled app window once on upgrade
+      // so an already-open PWA cannot keep calling the retired write path.
+      if (hasPreviousAppCache) {
+        const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+        await Promise.all(
+          windows.map(async (client) => {
+            if (!('navigate' in client)) return
+            if (new URL(client.url).origin !== self.location.origin) return
+
+            try {
+              await client.navigate(client.url)
+            } catch (error) {
+              console.warn('Unable to refresh an upgraded app window:', error)
             }
           })
         )
-      })
-      .then(() => self.clients.claim())
+      }
+    })()
   )
 })
 

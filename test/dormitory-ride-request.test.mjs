@@ -151,6 +151,16 @@ test('past and full rooms do not suppress a dormitory request banner', () => {
   assert.equal(getDormitoryRequestAvailability(rooms, '제2기숙사', now).showBanner, true)
 })
 
+test('an open sheet refreshes availability as a room departure time passes', () => {
+  const map = readProjectFile('components/CampusRouteMap.tsx')
+
+  assert.match(map, /const \[inventoryRefreshNonce, setInventoryRefreshNonce\] = useState\(0\)/)
+  assert.match(map, /if \(!selectedFrom\) return[\s\S]*setInventoryRefreshNonce\(\(nonce\) => nonce \+ 1\)/)
+  assert.match(map, /void inventoryRefreshNonce/)
+  assert.match(map, /getOriginRoomInventory\(rooms, selectedFrom, inventoryNow\)/)
+  assert.match(map, /getDormitoryRequestAvailability\(rooms, selectedFrom, inventoryNow\)/)
+})
+
 test('unrelated origins never show the dormitory request banner', () => {
   const { getDormitoryRequestAvailability } = loadDormitoryExports()
 
@@ -264,6 +274,103 @@ test('request lifecycle records cancellation and submits a dormitory-sourced roo
   assert.match(home, /dormitory_request_failed/)
   assert.match(home, /failure_stage/)
   assert.match(home, /reason_code/)
+})
+
+test('room creation is an authenticated atomic server operation', () => {
+  const routePath = join(root, 'app/api/rooms/route.ts')
+  assert.equal(existsSync(routePath), true, 'the authenticated room creation route should exist')
+
+  const route = readFileSync(routePath, 'utf8')
+  const home = readProjectFile('components/HomeClient.tsx')
+  const legacyRooms = readProjectFile('app/rooms/page.tsx')
+  const schema = readProjectFile('supabase_schema.sql')
+
+  assert.match(route, /auth\.getUser\(\)/)
+  assert.match(route, /\.rpc\('create_room_with_participant'/)
+  assert.match(home, /fetch\('\/api\/rooms'/)
+  assert.doesNotMatch(home, /\.from\('chat_rooms'\)[\s\S]{0,200}\.insert\(/)
+  assert.doesNotMatch(home, /\.from\('room_participants'\)[\s\S]{0,200}\.insert\(/)
+  assert.match(legacyRooms, /fetch\('\/api\/rooms'/)
+  assert.doesNotMatch(legacyRooms, /\.from\('chat_rooms'\)[\s\S]{0,200}\.insert\(/)
+  assert.doesNotMatch(legacyRooms, /\.from\('room_participants'\)[\s\S]{0,200}\.insert\(/)
+
+  assert.match(schema, /create or replace function public\.create_room_with_participant/)
+  assert.match(schema, /security definer/)
+  assert.match(schema, /insert into public\.chat_rooms[\s\S]*insert into public\.room_participants/)
+  assert.match(schema, /drop policy if exists "Authenticated active users can create chat rooms"/)
+  assert.match(schema, /revoke insert, update, delete on table public\.chat_rooms from authenticated/)
+  assert.match(schema, /drop policy if exists "Room creators can add themselves as participant"/)
+  assert.match(schema, /revoke insert on table public\.room_participants from authenticated/)
+})
+
+test('the room creation transaction validates privileged dormitory requests', () => {
+  const schema = readProjectFile('supabase_schema.sql')
+
+  assert.match(schema, /private_profile\.onboarded_at is null/)
+  assert.match(schema, /private_profile\.status <> 'active'/)
+  assert.match(schema, /v_earliest_departure := date_trunc\('minute', v_now_kst\) \+ interval '1 minute'/)
+  assert.match(schema, /departure_timestamp < v_earliest_departure/)
+  assert.match(schema, /pg_advisory_xact_lock[\s\S]*dormitory-request-origin:[\s\S]*if p_creation_source = 'dormitory_request'/)
+  assert.match(schema, /dormitory_request_supply_available/)
+  assert.match(schema, /dormitory_request_rate_limited/)
+  assert.match(schema, /dormitory_request_rate_limits/)
+  assert.match(schema, /where chat_rooms\.status = 'active'/)
+  assert.match(schema, /count\(room_participants\.id\)[\s\S]*< chat_rooms\.max_participants/)
+})
+
+test('new-room push waits for a valid creator participant in the transaction', () => {
+  const schema = readProjectFile('supabase_schema.sql')
+
+  assert.match(
+    schema,
+    /if not exists \([\s\S]*room_participants\.room_id = new\.id[\s\S]*room_participants\.user_id = new\.created_by[\s\S]*then[\s\S]*return new/,
+  )
+  assert.match(schema, /create constraint trigger notify_new_room_trigger/)
+  assert.match(schema, /deferrable initially deferred/)
+})
+
+test('room creation rollout restores legacy standard writes before the final RPC-only cutover', () => {
+  const bridge = readProjectFile(
+    'supabase/migrations/20260904053000_restore_legacy_room_creation_during_rollout.sql',
+  )
+  const cutover = readProjectFile(
+    'supabase/migrations/20260904055000_finalize_rpc_room_creation.sql',
+  )
+
+  assert.match(bridge, /grant insert, delete on table public\.chat_rooms to authenticated/)
+  assert.match(bridge, /creation_source = 'standard'/)
+  assert.match(bridge, /grant insert on table public\.room_participants to authenticated/)
+  assert.match(readProjectFile('supabase_schema.sql'), /function public\.enforce_room_capacity\(\)[\s\S]*security definer/)
+  assert.match(readProjectFile('supabase_schema.sql'), /create trigger lock_room_creation_origin_before_insert/)
+  assert.match(readProjectFile('supabase_schema.sql'), /create trigger ensure_room_creator_participant_after_insert/)
+  const schema = readProjectFile('supabase_schema.sql')
+  assert.match(schema, /create trigger a_ignore_existing_creator_participant_before_insert/)
+  assert.ok('a_ignore_existing_creator_participant_before_insert' < 'enforce_room_capacity_before_insert')
+  assert.match(readProjectFile('supabase_schema.sql'), /values \(created_room\.id, v_user_id, true\)[\s\S]*on conflict \(room_id, user_id\) do nothing/)
+  assert.match(cutover, /revoke insert, update, delete on table public\.chat_rooms from authenticated/)
+  assert.match(cutover, /revoke insert on table public\.room_participants from authenticated/)
+  assert.match(cutover, /create constraint trigger notify_new_room_trigger/)
+  assert.match(cutover, /deferrable initially deferred/)
+})
+
+test('room creation 401 follows the existing expired-session recovery path', () => {
+  const home = readProjectFile('components/HomeClient.tsx')
+  const legacyRooms = readProjectFile('app/rooms/page.tsx')
+
+  assert.match(home, /response\.status === 401[\s\S]*trackDormitoryRequestFailure\('authentication', 'session_expired'\)/)
+  assert.match(home, /로그인이 만료되었습니다\. 다시 로그인해주세요/)
+  assert.match(home, /router\.replace\('\/'\)/)
+  assert.match(legacyRooms, /response\.status === 401[\s\S]*로그인이 만료되었습니다\. 다시 로그인해주세요/)
+  assert.match(legacyRooms, /response\.status === 401[\s\S]*router\.replace\('\/'\)/)
+})
+
+test('failed room requests remain cancellable until creation succeeds', () => {
+  const map = readProjectFile('components/CampusRouteMap.tsx')
+
+  assert.match(map, /const succeeded = await onCreateRoom/)
+  assert.match(map, /if \(!succeeded\) return/)
+  assert.match(map, /if \(createAttemptRef\.current\)[\s\S]*submitted = true/)
+  assert.match(map, /if \(dormitoryRequestAttemptRef\.current\)[\s\S]*submitted = true/)
 })
 
 test('room_created analytics identifies standard and dormitory request creation', () => {

@@ -101,6 +101,22 @@ test('settings uses a compact row-based product layout', () => {
   assert.match(css, /\.settings-avatar-button/)
 })
 
+test('settings keeps only the requested dormitory and push notification copy', () => {
+  const source = readProjectFile('app/settings/page.tsx')
+
+  assert.match(source, /기숙사생이신가요\?/)
+  assert.match(source, /같이타에 가입한 다른 기숙사생들과 동행 요청을 주고 받을 수 있어요/)
+  assert.doesNotMatch(source, /‘네’를 선택하면 기숙사 동행 요청 푸시 수신에도 동의/)
+  assert.match(source, /푸시 알림 \(채팅, 경로 알림 등\)/)
+  assert.doesNotMatch(source, /채팅 새 메시지 알림/)
+  assert.doesNotMatch(source, /참여 중인 채팅방에 새 메시지가 오면/)
+  assert.doesNotMatch(source, /기기 설정에서 이 사이트의 알림이 차단/)
+  assert.doesNotMatch(source, /홈 화면에 추가하면 채팅 새 메시지 알림/)
+  assert.match(source, /aria-label="푸시 알림 \(채팅, 경로 알림 등\)"/)
+  assert.match(source, /onClick=\{handleTogglePush\}/)
+  assert.match(source, /disabled=\{!pushSupported \|\| pushBusy \|\| pushPermission === 'denied'\}/)
+})
+
 test('account deletion API verifies the session and deletes the auth user with the service role key', () => {
   const routePath = 'app/api/account/delete/route.ts'
 

@@ -30,6 +30,22 @@ function loadSupabaseExports() {
   return module.exports
 }
 
+function loadPresenceDisplayExports() {
+  const path = join(process.cwd(), 'lib/presenceDisplay.ts')
+  assert.equal(existsSync(path), true, 'presence display helper should exist')
+
+  const source = readFileSync(path, 'utf8')
+  const { outputText } = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+    },
+  })
+  const module = { exports: {} }
+  new Function('module', 'exports', outputText)(module, module.exports)
+  return module.exports
+}
+
 const {
   getDepartureDateForTime,
   getDepartureTimeOptions,
@@ -260,14 +276,63 @@ test('campus map room times are displayed without seconds', () => {
   assert.doesNotMatch(source, /<span>\{room\.departure_time\}<\/span>/)
 })
 
-test('map presence display count pads by zero to five outside the late night window', () => {
+test('presence offset ranges follow KST weekday and weekend boundaries', () => {
+  const { getPresenceOffsetRange } = loadPresenceDisplayExports()
+
+  assert.deepEqual(getPresenceOffsetRange(new Date('2026-09-07T07:59:00+09:00')), { min: 0, max: 0 })
+  assert.deepEqual(getPresenceOffsetRange(new Date('2026-09-07T08:00:00+09:00')), { min: 0, max: 3 })
+  assert.deepEqual(getPresenceOffsetRange(new Date('2026-09-07T09:00:00+09:00')), { min: 1, max: 5 })
+  assert.deepEqual(getPresenceOffsetRange(new Date('2026-09-07T17:59:00+09:00')), { min: 1, max: 5 })
+  assert.deepEqual(getPresenceOffsetRange(new Date('2026-09-07T18:00:00+09:00')), { min: 0, max: 3 })
+  assert.deepEqual(getPresenceOffsetRange(new Date('2026-09-05T07:59:00+09:00')), { min: 0, max: 0 })
+  assert.deepEqual(getPresenceOffsetRange(new Date('2026-09-05T08:00:00+09:00')), { min: 0, max: 3 })
+  assert.deepEqual(getPresenceOffsetRange(new Date('2026-09-05T12:00:00+09:00')), { min: 0, max: 3 })
+  assert.deepEqual(getPresenceOffsetRange(new Date('2026-09-07T00:00:00Z')), { min: 1, max: 5 })
+})
+
+test('presence offset generation includes each scheduled minimum and maximum', () => {
+  const { getRandomPresenceOffset } = loadPresenceDisplayExports()
+  const weekday = new Date('2026-09-07T12:00:00+09:00')
+  const weekend = new Date('2026-09-05T12:00:00+09:00')
+  const overnight = new Date('2026-09-07T00:00:00+09:00')
+
+  assert.equal(getRandomPresenceOffset(weekday, () => 0), 1)
+  assert.equal(getRandomPresenceOffset(weekday, () => 0.999999), 5)
+  assert.equal(getRandomPresenceOffset(weekend, () => 0), 0)
+  assert.equal(getRandomPresenceOffset(weekend, () => 0.999999), 3)
+  assert.equal(getRandomPresenceOffset(overnight, () => 0.999999), 0)
+})
+
+test('presence offset reschedules only at the next KST range boundary', () => {
+  const { getMillisecondsUntilNextPresenceOffsetChange } = loadPresenceDisplayExports()
+
+  assert.equal(getMillisecondsUntilNextPresenceOffsetChange(
+    new Date('2026-09-07T07:59:00+09:00'),
+  ), 60 * 1000)
+  assert.equal(getMillisecondsUntilNextPresenceOffsetChange(
+    new Date('2026-09-07T08:00:00+09:00'),
+  ), 60 * 60 * 1000)
+  assert.equal(getMillisecondsUntilNextPresenceOffsetChange(
+    new Date('2026-09-07T09:00:00+09:00'),
+  ), 9 * 60 * 60 * 1000)
+  assert.equal(getMillisecondsUntilNextPresenceOffsetChange(
+    new Date('2026-09-07T18:00:00+09:00'),
+  ), 6 * 60 * 60 * 1000)
+  assert.equal(getMillisecondsUntilNextPresenceOffsetChange(
+    new Date('2026-09-05T08:00:00+09:00'),
+  ), 16 * 60 * 60 * 1000)
+})
+
+test('map presence display keeps one offset within each scheduled KST window', () => {
   const source = readProjectFile('lib/usePresenceDisplayCount.ts')
 
-  assert.match(source, /function getRandomPresenceOffset/)
-  assert.match(source, /Math\.floor\(Math\.random\(\) \* 6\)/)
-  assert.match(source, /function isRealCountWindow/, 'late night should report the real count')
-  assert.match(source, /isRealCountWindow\(\) \? 0 : getRandomPresenceOffset\(\)/)
-  assert.doesNotMatch(source, /current === 1 \? 2 : 1/, 'presence offset should no longer alternate only between +1 and +2')
+  assert.match(source, /getMillisecondsUntilNextPresenceOffsetChange/)
+  assert.match(source, /getRandomPresenceOffset/)
+  assert.match(source, /useState\(\(\) => getRandomPresenceOffset\(\)\)/)
+  assert.doesNotMatch(source, /Math\.random/)
+  assert.match(source, /window\.setTimeout\(/)
+  assert.doesNotMatch(source, /window\.setInterval/)
+  assert.match(source, /return peerCount \+ 1 \+ displayOffset/)
 })
 
 test('map bottom sheet room cards show destination only beside departure time', () => {

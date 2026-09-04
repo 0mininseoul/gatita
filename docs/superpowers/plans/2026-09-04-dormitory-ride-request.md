@@ -419,6 +419,8 @@ git commit -m "docs: disclose and verify dormitory requests"
 
 Execution note: the feature commits were followed by a review-fix commit covering atomic server room creation, rollout compatibility, deferred notification, stale-inventory refresh, and expired-session recovery. The final branch passed 262 tests, ESLint, TypeScript, production build, remote database lint, and whitespace checks; independent review reported no remaining actionable findings.
 
-- [ ] **Step 8: Review, push, open the PR, and merge**
+- [x] **Step 8: Review, push, open the PR, and merge**
 
 Run the repository review workflow against the full branch diff, fix any findings with focused regression tests, push `0mininseoul/dormitory-ride-requests`, open or update its pull request, wait for required checks, and merge only after the review is clean.
+
+Execution note: independent review is clean with no actionable findings. PR #34 was opened from the feature branch, and both Vercel checks passed before merge.

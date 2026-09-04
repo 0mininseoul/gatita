@@ -97,3 +97,13 @@ test('origin inventory reports no actionable supply for an empty origin', () => 
     hasJoinableRoom: false,
   })
 })
+
+test('fixed point selection records resolved actionable inventory', () => {
+  const source = readProjectFile('components/HomeClient.tsx')
+
+  assert.match(source, /getOriginRoomInventory\(mapRooms, location\)/)
+  assert.match(source, /visible_room_count: inventory\.visibleRoomCount/)
+  assert.match(source, /joinable_room_count: inventory\.joinableRoomCount/)
+  assert.match(source, /has_joinable_room: inventory\.hasJoinableRoom/)
+  assert.match(source, /inventory_state: isLoadingMapRooms \? 'loading' : 'ready'/)
+})

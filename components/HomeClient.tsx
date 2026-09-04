@@ -35,6 +35,7 @@ import { identifyAnalyticsUser, shouldSuppressAnalyticsForUser, suppressAnalytic
 import { shouldTrackAnonymousLanding } from '@/lib/analytics/landing'
 import { ROUTES_SEEN_STORAGE_KEY } from '@/lib/routeSummary'
 import { buildRepeatRoutePromptDismissKey, shouldPromptRepeatRouteSubscription } from '@/lib/repeatRoutePrompt'
+import { getOriginRoomInventory } from '@/lib/roomInventory'
 import { AlertTriangle, ArrowRight, Ban, Bell, BellRing, Clock, MessageSquareText, Share2, Star, Settings, Users, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -1317,6 +1318,8 @@ export default function HomeClient() {
 
     setFromLocation(location)
     if (location) {
+      const inventory = getOriginRoomInventory(mapRooms, location)
+
       void fetch('/api/analytics/location-sheet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1329,6 +1332,10 @@ export default function HomeClient() {
       advanceRouteCoachmark()
       trackEvent('fixed_point_selected', {
         from_location: location,
+        visible_room_count: inventory.visibleRoomCount,
+        joinable_room_count: inventory.joinableRoomCount,
+        has_joinable_room: inventory.hasJoinableRoom,
+        inventory_state: isLoadingMapRooms ? 'loading' : 'ready',
       })
     }
   }

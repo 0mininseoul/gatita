@@ -321,17 +321,17 @@ git commit -m "feat: create rooms from dormitory requests"
 - Modify: `test/push-dispatch-route.test.mjs`
 - Modify: `test/dormitory-ride-request.test.mjs`
 
-- [ ] **Step 1: Write failing dispatcher contract tests**
+- [x] **Step 1: Write failing dispatcher contract tests**
 
 Require the room query to select `creation_source`. Require the resident query to run only for `dormitory_request`, select `user_id, is_dormitory_resident, push_enabled`, filter both booleans to true at the database boundary, merge through `mergeDormitoryRequestRecipientIds`, and call `sendToSubscriptions` once with the deduplicated union. Require standard rooms to use only existing exact-route subscribers.
 
-- [ ] **Step 2: Run the dispatcher tests and verify RED**
+- [x] **Step 2: Run the dispatcher tests and verify RED**
 
 Run: `node --test test/push-dispatch-route.test.mjs test/dormitory-ride-request.test.mjs`
 
 Expected: FAIL because the dispatcher does not read `creation_source` or resident preferences.
 
-- [ ] **Step 3: Extend the protected room dispatcher**
+- [x] **Step 3: Extend the protected room dispatcher**
 
 Select `creation_source` with the room. Keep exact-route `shouldNotify` filtering as-is. For a dormitory request, load only service-role private-profile rows matching both booleans:
 
@@ -345,13 +345,13 @@ admin
 
 Merge with the pure helper so the creator is excluded and users present in both audiences receive one notification per push endpoint. Use a dormitory-request title/body while preserving room URL and tag semantics. A failed resident lookup logs the database error and falls back to exact-route recipients without failing room creation.
 
-- [ ] **Step 4: Run the dispatcher tests and verify GREEN**
+- [x] **Step 4: Run the dispatcher tests and verify GREEN**
 
 Run: `node --test test/push-dispatch-route.test.mjs test/dormitory-ride-request.test.mjs`
 
 Expected: PASS for secret protection, standard alerts, dormitory fanout, filtering, exclusion, and deduplication.
 
-- [ ] **Step 5: Commit the push fanout**
+- [x] **Step 5: Commit the push fanout**
 
 ```bash
 git add app/api/push/dispatch/route.ts test/push-dispatch-route.test.mjs test/dormitory-ride-request.test.mjs

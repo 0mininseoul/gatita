@@ -89,5 +89,26 @@ test('room_id 없이 room-not-found 스켈레톤 응답 형식을 유지한다',
   const source = readRouteSource()
 
   assert.match(source, /ok: true, skipped: 'room-not-found'/)
-  assert.match(source, /\.from\('chat_rooms'\)\s*\n\s*\.select\('id, from_location, to_location, created_by, departure_date, departure_time'\)/)
+  assert.match(source, /\.from\('chat_rooms'\)\s*\n\s*\.select\('id, from_location, to_location, created_by, departure_date, departure_time, creation_source'\)/)
+})
+
+test('기숙사 요청 방만 동의한 기숙사생 수신자를 기존 경로 수신자와 합친다', () => {
+  const source = readRouteSource()
+
+  assert.match(source, /mergeDormitoryRequestRecipientIds/)
+  assert.match(source, /creation_source/)
+  assert.match(source, /room\.creation_source === 'dormitory_request'/)
+  assert.match(source, /\.from\('user_private_profiles'\)/)
+  assert.match(source, /\.select\('user_id, is_dormitory_resident, push_enabled'\)/)
+  assert.match(source, /\.eq\('is_dormitory_resident', true\)/)
+  assert.match(source, /\.eq\('push_enabled', true\)/)
+  assert.match(source, /mergeDormitoryRequestRecipientIds\([\s\S]*routeRecipientIds[\s\S]*residentProfiles[\s\S]*room\.created_by/)
+})
+
+test('기숙사 수신자 조회 실패는 경로 알림을 막지 않고 개인정보를 로그에 남기지 않는다', () => {
+  const source = readRouteSource()
+
+  assert.match(source, /Fetch dormitory request recipients error:/)
+  assert.doesNotMatch(source, /console\.error\([^\n]*residentProfiles/)
+  assert.match(source, /residentProfiles[^=]*= \[\]/)
 })

@@ -4,6 +4,10 @@ import { withAxiomRoute } from '@/lib/axiom/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { LOCATIONS, type LocationType } from '@/lib/supabase'
 import { shouldNotify } from '@/lib/routeAlerts'
+import {
+  mergeDormitoryRequestRecipientIds,
+  type DormitoryRecipientProfile,
+} from '@/lib/dormitoryRideRequest'
 
 // web-push 는 Node crypto 를 쓰므로 Edge 가 아닌 Node 런타임에서 실행.
 export const runtime = 'nodejs'
@@ -151,7 +155,7 @@ async function dispatchRoomAlert(
 ) {
   const { data: room } = await admin
     .from('chat_rooms')
-    .select('id, from_location, to_location, created_by, departure_date, departure_time')
+    .select('id, from_location, to_location, created_by, departure_date, departure_time, creation_source')
     .eq('id', roomId)
     .maybeSingle()
 
@@ -174,7 +178,7 @@ async function dispatchRoomAlert(
   }
 
   const now = new Date()
-  const recipientIds = (subscriptions ?? [])
+  const routeRecipientIds = (subscriptions ?? [])
     .filter((sub) => sub.user_id !== room.created_by)   // 방을 만든 본인은 제외
     .filter((sub) => shouldNotify(
       { departure_date: room.departure_date, departure_time: room.departure_time },
@@ -183,16 +187,45 @@ async function dispatchRoomAlert(
     ))
     .map((sub) => sub.user_id)
 
+  let residentProfiles: DormitoryRecipientProfile[] = []
+  if (room.creation_source === 'dormitory_request') {
+    const { data: residents, error: residentsError } = await admin
+      .from('user_private_profiles')
+      .select('user_id, is_dormitory_resident, push_enabled')
+      .eq('is_dormitory_resident', true)
+      .eq('push_enabled', true)
+
+    if (residentsError) {
+      // 개인정보 행 자체는 기록하지 않고 DB 오류만 남긴다. 기존 정확 경로 수신자는
+      // 그대로 발송해 부가 수신자 조회 실패가 알림 전체를 막지 않게 한다.
+      console.error('Fetch dormitory request recipients error:', residentsError)
+    } else {
+      residentProfiles = residents ?? []
+    }
+  }
+
+  const recipientIds = room.creation_source === 'dormitory_request'
+    ? mergeDormitoryRequestRecipientIds(
+        routeRecipientIds,
+        residentProfiles,
+        room.created_by,
+      )
+    : routeRecipientIds
+
   if (recipientIds.length === 0) {
     return NextResponse.json({ ok: true, recipients: 0 })
   }
 
+  const label = routeLabel(room.from_location, room.to_location)
+  const isDormitoryRequest = room.creation_source === 'dormitory_request'
   const payload = JSON.stringify({
-    title: routeLabel(room.from_location, room.to_location),
-    body: `${room.departure_time.slice(0, 5)} 출발 방이 열렸어요`,
+    title: isDormitoryRequest ? '기숙사 동행 요청' : label,
+    body: isDormitoryRequest
+      ? `${label} · ${room.departure_time.slice(0, 5)} 출발 동행 요청이 도착했어요`
+      : `${room.departure_time.slice(0, 5)} 출발 방이 열렸어요`,
     url: `/rooms/${room.id}`,
     roomId: room.id,
-    tag: `route-${room.id}`,
+    tag: isDormitoryRequest ? `dormitory-request-${room.id}` : `route-${room.id}`,
   })
 
   const result = await sendToSubscriptions(admin, recipientIds, payload)

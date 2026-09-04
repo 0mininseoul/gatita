@@ -18,7 +18,7 @@
 - Modify: `components/CampusRouteMap.tsx`
 - Modify: `components/HomeClient.tsx`
 
-- [ ] **Step 1: 실패하는 순수 동작 테스트 작성**
+- [x] **Step 1: 실패하는 순수 동작 테스트 작성**
 
 `test/dormitory-ride-request.test.mjs`에서 `loadDormitoryExports()`로 아래 헬퍼를 불러와 자격과 문구를 검증한다.
 
@@ -50,7 +50,7 @@ assert.match(home, /isDormitoryResident=\{user\?\.is_dormitory_resident === true
 assert.match(map, /shouldShowDormitoryRequestBanner\(isDormitoryResident, dormitoryRequestAvailability\)/)
 ```
 
-- [ ] **Step 2: 테스트가 요구사항 누락으로 실패하는지 확인**
+- [x] **Step 2: 테스트가 요구사항 누락으로 실패하는지 확인**
 
 Run:
 
@@ -60,7 +60,7 @@ node --test test/dormitory-ride-request.test.mjs
 
 Expected: `shouldShowDormitoryRequestBanner` 또는 `getDormitoryRequestBannerTitle`이 존재하지 않아 새 테스트가 실패한다.
 
-- [ ] **Step 3: 최소 순수 헬퍼 구현**
+- [x] **Step 3: 최소 순수 헬퍼 구현**
 
 `lib/dormitoryRideRequest.ts`에 다음 함수를 추가한다.
 
@@ -79,7 +79,7 @@ export function getDormitoryRequestBannerTitle(fromLocation: LocationType) {
 }
 ```
 
-- [ ] **Step 4: 지도에 자격 값을 전달하고 하나의 판정을 공유**
+- [x] **Step 4: 지도에 자격 값을 전달하고 하나의 판정을 공유**
 
 `components/CampusRouteMap.tsx`의 props에 `isDormitoryResident?: boolean`을 추가하고 기본값을 `false`로 둔다. 기존 availability 계산 직후 다음 값을 만든다.
 
@@ -104,7 +104,7 @@ const showDormitoryRequestBanner = shouldShowDormitoryRequestBanner(
 isDormitoryResident={user?.is_dormitory_resident === true}
 ```
 
-- [ ] **Step 5: 집중 테스트를 다시 실행해 통과 확인**
+- [x] **Step 5: 집중 테스트를 다시 실행해 통과 확인**
 
 Run:
 
@@ -114,7 +114,7 @@ node --test test/dormitory-ride-request.test.mjs
 
 Expected: 모든 기숙사 동행 요청 테스트가 통과한다.
 
-- [ ] **Step 6: 변경 커밋**
+- [x] **Step 6: 변경 커밋**
 
 ```bash
 git add lib/dormitoryRideRequest.ts components/CampusRouteMap.tsx components/HomeClient.tsx test/dormitory-ride-request.test.mjs

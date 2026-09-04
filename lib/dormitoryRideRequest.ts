@@ -21,6 +21,19 @@ export type DormitoryRecipientProfile = {
   push_enabled: boolean
 }
 
+export function shouldShowDormitoryRequestBanner(
+  isDormitoryResident: boolean | null | undefined,
+  availability: Pick<DormitoryRequestAvailability, 'showBanner'>,
+) {
+  return isDormitoryResident === true && availability.showBanner
+}
+
+export function getDormitoryRequestBannerTitle(fromLocation: LocationType) {
+  return fromLocation === DORMITORY_REQUEST_DESTINATION
+    ? '혹시 역으로 가시나요?'
+    : '혹시 기숙사 가시나요?'
+}
+
 export function getDormitoryRequestAvailability(
   rooms: InventoryRoom[],
   fromLocation: LocationType,

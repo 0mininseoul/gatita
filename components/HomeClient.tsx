@@ -2216,6 +2216,7 @@ export default function HomeClient() {
         rooms={mapRooms}
         onlineCount={onlineDisplayCount}
         currentUserId={user?.id}
+        isDormitoryResident={user?.is_dormitory_resident === true}
         selectedFrom={fromLocation}
         isCreatingRoom={isCreatingMapRoom}
         isLoading={isLoadingMapRooms}

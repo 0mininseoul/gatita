@@ -126,7 +126,7 @@ git commit -m "fix: restrict dormitory request banner to residents"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-09-04-dormitory-banner-eligibility.md`
 
-- [ ] **Step 1: 전체 자동 검증 실행**
+- [x] **Step 1: 전체 자동 검증 실행**
 
 Run:
 
@@ -143,9 +143,11 @@ git diff --check
 
 Expected: 테스트 실패 0건, ESLint와 TypeScript 오류 0건, Next.js 프로덕션 빌드 성공, 공백 오류 없음.
 
-- [ ] **Step 2: 변경 범위와 보안 경계 검토**
+- [x] **Step 2: 변경 범위와 보안 경계 검토**
 
 `git diff origin/main...HEAD`로 기숙사생 여부가 분석 이벤트 payload나 공개 프로필에 새로 노출되지 않았는지 확인한다. 이번 변경은 기존 `/api/profile/me` 응답을 사용하므로 Supabase 마이그레이션이 없어야 한다. 2026-09-04 Supabase changelog에는 이 프로필 읽기 경로에 영향을 주는 관련 breaking change가 없음을 기록한다.
+
+검토 결과: 비공개 프로필 값은 `HomeClient`에서 불리언으로 축약되어 렌더 조건에만 사용되며, 공개 프로필과 분석 payload에는 추가되지 않았다. Supabase 스키마/마이그레이션 변경은 없고, 2026-09-04 changelog 기준 관련 breaking change도 없다.
 
 - [ ] **Step 3: 브랜치 푸시와 PR 리뷰**
 

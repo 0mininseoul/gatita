@@ -12,7 +12,7 @@ import {
   User,
   isRestrictedRoutePair,
 } from '@/lib/supabase'
-import { DUPLICATE_ROOM_MESSAGE, findDuplicateActiveRoom, POSTGRES_UNIQUE_VIOLATION_CODE } from '@/lib/duplicateRoom'
+import { DUPLICATE_ROOM_MESSAGE, findDuplicateActiveRoom } from '@/lib/duplicateRoom'
 import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
 import { ArrowLeft, Users, Clock, Plus, Star } from 'lucide-react'
 import { format } from 'date-fns'
@@ -495,7 +495,7 @@ interface CreateRoomModalProps {
 function CreateRoomModal({ fromLocation, toLocation, selectedDate, user, existingRooms, onDuplicate, onClose, onSuccess }: CreateRoomModalProps) {
   const [departureTime, setDepartureTime] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const supabase = createClient()
+  const router = useRouter()
 
   const handleCreateRoom = async () => {
     if (!departureTime || !user) return
@@ -518,24 +518,29 @@ function CreateRoomModal({ fromLocation, toLocation, selectedDate, user, existin
     setIsLoading(true)
 
     try {
-      const title = `${departureTime} ${LOCATIONS[fromLocation]}→${LOCATIONS[toLocation]}`
-
-      const { data: room, error } = await supabase
-        .from('chat_rooms')
-        .insert({
-          title,
+      const response = await fetch('/api/rooms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           from_location: fromLocation,
           to_location: toLocation,
           departure_date: selectedDate,
           departure_time: departureTime,
-          max_participants: 4, // 고정값
-          created_by: user.id
-        })
-        .select()
-        .single()
+          creation_source: 'standard',
+        }),
+      })
+      const result = await response.json().catch(() => null) as
+        | { room?: ChatRoom; error?: string; code?: string }
+        | null
 
-      if (error) {
-        if (error.code === POSTGRES_UNIQUE_VIOLATION_CODE) {
+      if (response.status === 401) {
+        toast.error('로그인이 만료되었습니다. 다시 로그인해주세요', { id: 'rooms-session-expired' })
+        router.replace('/')
+        return
+      }
+
+      if (!response.ok || !result?.room) {
+        if (result?.code === 'duplicate_active_room') {
           // mapRooms 사전 체크를 지나친 경쟁 조건. 부모 목록을 새로고침하면 방금
           // 먼저 들어간 그 방이 보이니, 이용자가 거기서 직접 참여하기를 누르면 된다.
           toast.error(DUPLICATE_ROOM_MESSAGE)
@@ -543,33 +548,14 @@ function CreateRoomModal({ fromLocation, toLocation, selectedDate, user, existin
           onClose()
           return
         }
-        throw error
-      }
-
-      // 자동으로 방장을 참여자로 추가
-      const { error: participantError } = await supabase
-        .from('room_participants')
-        .insert({
-          room_id: room.id,
-          user_id: user.id,
-          confirmed: true
-        })
-
-      if (participantError) {
-        await supabase
-          .from('chat_rooms')
-          .delete()
-          .eq('id', room.id)
-          .eq('created_by', user.id)
-
-        throw participantError
+        throw new Error(result?.error ?? '채팅방을 만들지 못했습니다')
       }
 
       toast.success('채팅방이 생성되었습니다!')
-      onSuccess(room.id)
+      onSuccess(result.room.id)
     } catch (error) {
       console.error('Create room error:', error)
-      toast.error('채팅방 생성 중 오류가 발생했습니다')
+      toast.error(error instanceof Error ? error.message : '채팅방 생성 중 오류가 발생했습니다')
     } finally {
       setIsLoading(false)
     }

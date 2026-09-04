@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase'
 import {
   ChatRoom,
   getDepartureDateForTime,
+  getRoomDepartureDateTime,
   getMapRoomDateRange,
   LOCATIONS,
   LocationType,
@@ -23,7 +24,6 @@ import {
   findDuplicateActiveRoom,
   getDuplicateRoomMessage,
   isDuplicateRoomFull,
-  POSTGRES_UNIQUE_VIOLATION_CODE,
 } from '@/lib/duplicateRoom'
 import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
 import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, detectInAppBrowser, escapeInAppBrowser, extractGachonProfileFromMetadata, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
@@ -35,6 +35,7 @@ import { identifyAnalyticsUser, shouldSuppressAnalyticsForUser, suppressAnalytic
 import { shouldTrackAnonymousLanding } from '@/lib/analytics/landing'
 import { ROUTES_SEEN_STORAGE_KEY } from '@/lib/routeSummary'
 import { buildRepeatRoutePromptDismissKey, shouldPromptRepeatRouteSubscription } from '@/lib/repeatRoutePrompt'
+import { getOriginRoomInventory } from '@/lib/roomInventory'
 import { AlertTriangle, ArrowRight, Ban, Bell, BellRing, Clock, MessageSquareText, Share2, Star, Settings, Users, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -1317,6 +1318,8 @@ export default function HomeClient() {
 
     setFromLocation(location)
     if (location) {
+      const inventory = getOriginRoomInventory(mapRooms, location)
+
       void fetch('/api/analytics/location-sheet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1329,6 +1332,10 @@ export default function HomeClient() {
       advanceRouteCoachmark()
       trackEvent('fixed_point_selected', {
         from_location: location,
+        visible_room_count: inventory.visibleRoomCount,
+        joinable_room_count: inventory.joinableRoomCount,
+        has_joinable_room: inventory.hasJoinableRoom,
+        inventory_state: isLoadingMapRooms ? 'loading' : 'ready',
       })
     }
   }
@@ -1337,32 +1344,50 @@ export default function HomeClient() {
     fromLocation: roomFromLocation,
     toLocation: roomToLocation,
     departureTime,
+    creationSource,
   }: {
     fromLocation: LocationType
     toLocation: LocationType
     departureTime: string
-  }) => {
-    if (isResolvingMapSession) return
+    creationSource?: 'standard' | 'dormitory_request'
+  }): Promise<boolean> => {
+    const isDormitoryRequest = creationSource === 'dormitory_request'
+    const trackDormitoryRequestFailure = (failureStage: string, reasonCode: string) => {
+      if (!isDormitoryRequest) return
+      trackEvent('dormitory_request_failed', {
+        from_location: roomFromLocation,
+        failure_stage: failureStage,
+        reason_code: reasonCode,
+      })
+    }
+
+    if (isResolvingMapSession) return false
 
     if (!user || !supabase) {
+      trackDormitoryRequestFailure('authentication', 'profile_or_session_missing')
       if (requiresProfile) {
         openProfileRequiredModal('room_create')
       } else {
         toast.error('로그인이 필요합니다')
       }
-      return
+      return false
     }
 
-    if (!validateRouteSelection(roomFromLocation, roomToLocation)) return
+    if (!validateRouteSelection(roomFromLocation, roomToLocation)) {
+      trackDormitoryRequestFailure('validation', 'invalid_route')
+      return false
+    }
 
     if (isCurrentlySuspended) {
+      trackDormitoryRequestFailure('authorization', 'account_suspended')
       setModerationModal('suspension')
-      return
+      return false
     }
 
     if (!departureTime) {
+      trackDormitoryRequestFailure('validation', 'departure_time_missing')
       toast.error('출발예정시간을 선택해주세요')
-      return
+      return false
     }
 
     trackEvent('room_create_started', {
@@ -1370,6 +1395,7 @@ export default function HomeClient() {
       to_location: roomToLocation,
       departure_time: departureTime,
       source: 'map_bottom_sheet',
+      creation_source: creationSource ?? 'standard',
     })
     const departureDate = getDepartureDateForTime(new Date(), departureTime)
     if (!departureDate) {
@@ -1379,8 +1405,10 @@ export default function HomeClient() {
         to_location: roomToLocation,
         departure_time: departureTime,
         reason: 'departure_time_out_of_window',
+        creation_source: creationSource ?? 'standard',
       })
-      return
+      trackDormitoryRequestFailure('validation', 'departure_time_out_of_window')
+      return false
     }
 
     // 클라이언트에 이미 로드된 mapRooms로 먼저 중복을 판정한다. 같은 경로·같은 출발일시에
@@ -1402,32 +1430,48 @@ export default function HomeClient() {
         to_location: roomToLocation,
         departure_time: departureTime,
         reason: 'duplicate_active_room',
+        creation_source: creationSource ?? 'standard',
       })
+      trackDormitoryRequestFailure('duplicate_check', 'duplicate_active_room')
       promptDuplicateRoom(duplicate)
-      return
+      return false
     }
 
     setIsCreatingMapRoom(true)
+    let failureStage = 'room_transaction'
 
     try {
-      const title = `${departureTime} ${LOCATIONS[roomFromLocation]}→${LOCATIONS[roomToLocation]}`
-
-      const { data: room, error } = await supabase
-        .from('chat_rooms')
-        .insert({
-          title,
+      const response = await fetch('/api/rooms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           from_location: roomFromLocation,
           to_location: roomToLocation,
           departure_date: departureDate,
           departure_time: departureTime,
-          max_participants: 4,
-          created_by: user.id,
-        })
-        .select()
-        .single()
+          creation_source: creationSource ?? 'standard',
+        }),
+      })
+      const result = await response.json().catch(() => null) as
+        | { room?: ChatRoom; error?: string; code?: string }
+        | null
 
-      if (error) {
-        if (error.code === POSTGRES_UNIQUE_VIOLATION_CODE) {
+      if (response.status === 401) {
+        trackEvent('room_create_failed', {
+          from_location: roomFromLocation,
+          to_location: roomToLocation,
+          departure_time: departureTime,
+          creation_source: creationSource ?? 'standard',
+          error_code: 'session_expired',
+        })
+        trackDormitoryRequestFailure('authentication', 'session_expired')
+        toast.error('로그인이 만료되었습니다. 다시 로그인해주세요', { id: 'map-session-expired' })
+        router.replace('/')
+        return false
+      }
+
+      if (!response.ok || !result?.room) {
+        if (result?.code === 'duplicate_active_room') {
           // 위 mapRooms 체크를 지나친 경쟁 조건(두 사람이 거의 동시에 같은 방을 만듦).
           // 방금 DB에 먼저 들어간 그 방을 다시 조회해 같은 안내로 유도한다.
           trackEvent('room_create_failed', {
@@ -1435,7 +1479,9 @@ export default function HomeClient() {
             to_location: roomToLocation,
             departure_time: departureTime,
             reason: 'duplicate_active_room',
+            creation_source: creationSource ?? 'standard',
           })
+          trackDormitoryRequestFailure('room_insert', 'duplicate_active_room')
 
           const { data: existingRoom } = await supabase
             .from('chat_rooms')
@@ -1460,33 +1506,19 @@ export default function HomeClient() {
           } else {
             toast.error(DUPLICATE_ROOM_MESSAGE)
           }
-          return
+          return false
         }
 
-        throw error
+        const requestError = new Error(result?.error ?? '채팅방을 만들지 못했습니다') as Error & { code?: string }
+        requestError.code = result?.code
+        throw requestError
       }
 
-      const { error: participantError } = await supabase
-        .from('room_participants')
-        .insert({
-          room_id: room.id,
-          user_id: user.id,
-          confirmed: true,
-        })
+      const room = result.room
 
-      if (participantError) {
-        await supabase
-          .from('chat_rooms')
-          .delete()
-          .eq('id', room.id)
-          .eq('created_by', user.id)
-
-        throw participantError
-      }
-
-      // 방장 참여 이력은 위 room_participants insert 를 log_room_participant_join
-      // 트리거가 직접 잡아 기록한다. 예전에는 이력 기록용 서버 라우트를 따로 호출했는데,
-      // 트리거와 중복이었고 그 라우트 자체가 인가 공백을 만들어 함께 제거했다.
+      // 방과 방장 참여 행은 create_room_with_participant RPC에서 하나의
+      // 트랜잭션으로 생성된다. 참여 이력 트리거와 신규 방 푸시도 그
+      // 트랜잭션이 커밋된 방에 대해서만 남게 된다.
       toast.success('채팅방이 생성되었습니다!')
       trackEvent('room_created', {
         room_id: room.id,
@@ -1495,13 +1527,31 @@ export default function HomeClient() {
         departure_date: departureDate,
         departure_time: departureTime,
         source: 'map_bottom_sheet',
+        creation_source: creationSource ?? 'standard',
       })
+
+      if (isDormitoryRequest) {
+        const departureLeadMinutes = Math.max(
+          0,
+          Math.round((getRoomDepartureDateTime(departureDate, departureTime).getTime() - Date.now()) / 60_000),
+        )
+        trackEvent('dormitory_request_submitted', {
+          from_location: roomFromLocation,
+          to_location: roomToLocation,
+          departure_lead_minutes: departureLeadMinutes,
+        })
+      }
 
       // 8-2: 같은 경로로 2번째(+) 방을 만든 순간이 구독 유도 최적 시점이라는 근거(46일
       // 실측: 방을 2개 이상 만든 9명 중 7명이 단일 경로 반복). 이 조회는 부가 기능이라
       // 실패해도 방 생성 흐름(입장 이동)을 막지 않는다 — 전체를 try/catch로 감싸고
       // 실패 시 조용히 기존 흐름(즉시 이동)으로 넘어간다.
       try {
+        if (isDormitoryRequest) {
+          router.push(`/rooms/${room.id}`)
+          return true
+        }
+
         const { count: routeRoomCount, error: countError } = await supabase
           .from('chat_rooms')
           .select('id', { count: 'exact', head: true })
@@ -1544,21 +1594,30 @@ export default function HomeClient() {
             created_room_count: routeRoomCount ?? 0,
           })
           setRepeatRoutePrompt({ from: roomFromLocation, to: roomToLocation, roomId: room.id })
-          return
+          return true
         }
       } catch (error) {
         console.error('Repeat route prompt check error:', error)
       }
 
       router.push(`/rooms/${room.id}`)
+      return true
     } catch (error) {
       console.error('Create map room error:', error)
       trackEvent('room_create_failed', {
         from_location: roomFromLocation,
         to_location: roomToLocation,
         departure_time: departureTime,
+        creation_source: creationSource ?? 'standard',
       })
-      toast.error('채팅방 생성 중 오류가 발생했습니다')
+      trackDormitoryRequestFailure(
+        failureStage,
+        error && typeof error === 'object' && 'code' in error
+          ? String(error.code)
+          : 'unknown_error',
+      )
+      toast.error(error instanceof Error ? error.message : '채팅방 생성 중 오류가 발생했습니다')
+      return false
     } finally {
       setIsCreatingMapRoom(false)
     }

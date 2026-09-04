@@ -186,6 +186,7 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
   const [hasAcceptedRequiredTerms, setHasAcceptedRequiredTerms] = useState(false)
   const [hasAcceptedUsageRules, setHasAcceptedUsageRules] = useState(false)
   const [payoutSkipped, setPayoutSkipped] = useState(false)
+  const [dormitoryResident, setDormitoryResident] = useState<boolean | null>(null)
   const supabase = useMemo(() => createClient(), [])
 
   const currentSection = SIGNUP_SECTIONS[currentStep]
@@ -512,6 +513,7 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
           bank_name: (formData.bank_name ?? '').trim(),
           account_number: (formData.account_number ?? '').trim(),
           account_holder: (formData.account_holder ?? '').trim(),
+          is_dormitory_resident: dormitoryResident,
         }),
       })
       const result = await response.json().catch(() => null)
@@ -536,6 +538,12 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
         payout_skipped: payoutSkipped,
         department: resolvedDepartment,
       })
+      if (dormitoryResident !== null) {
+        trackEvent('dormitory_profile_answered', {
+          is_dormitory_resident: dormitoryResident,
+          source: 'onboarding',
+        })
+      }
       clearProfileSetupSessionId()
       onSuccess()
     } catch (error: any) {
@@ -958,6 +966,8 @@ export default function SignupForm({ onSuccess, onBackToLanding, startWithProfil
             <ReviewPanel
               formData={formData}
               formattedAccountNumber={formattedAccountNumber}
+              dormitoryResident={dormitoryResident}
+              setDormitoryResident={setDormitoryResident}
               hasAcceptedRequiredTerms={hasAcceptedRequiredTerms}
               setHasAcceptedRequiredTerms={setHasAcceptedRequiredTerms}
               hasAcceptedUsageRules={hasAcceptedUsageRules}
@@ -1066,6 +1076,8 @@ function FormField({
 function ReviewPanel({
   formData,
   formattedAccountNumber,
+  dormitoryResident,
+  setDormitoryResident,
   hasAcceptedRequiredTerms,
   setHasAcceptedRequiredTerms,
   hasAcceptedUsageRules,
@@ -1077,6 +1089,8 @@ function ReviewPanel({
 }: {
   formData: Record<string, string>
   formattedAccountNumber: string
+  dormitoryResident: boolean | null
+  setDormitoryResident: (value: boolean | null) => void
   hasAcceptedRequiredTerms: boolean
   setHasAcceptedRequiredTerms: (value: boolean) => void
   hasAcceptedUsageRules: boolean
@@ -1102,6 +1116,39 @@ function ReviewPanel({
       <div className="rounded-xl border border-primary-100 bg-primary-50 px-3 py-3">
         <p className="text-[11px] font-semibold leading-5 text-primary-800">
           정산 계좌는 방을 개설한 경우 같은 방 참여자에게만 표시됩니다.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-gray-200 bg-white px-3 py-3">
+        <p className="text-sm font-extrabold text-gray-950">기숙사생이신가요?</p>
+        <p className="mt-1 text-xs font-semibold leading-5 text-gray-500">
+          같이타에 가입한 다른 기숙사생들과 동행 요청을 주고 받을 수 있어요
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {([
+            { label: '네', value: true },
+            { label: '아니요', value: false },
+          ] as const).map((option) => {
+            const isSelected = dormitoryResident === option.value
+            return (
+              <button
+                key={option.label}
+                type="button"
+                aria-pressed={isSelected}
+                onClick={() => setDormitoryResident(isSelected ? null : option.value)}
+                className={`rounded-lg border px-3 py-2.5 text-sm font-extrabold transition ${
+                  isSelected
+                    ? 'border-primary-600 bg-primary-50 text-primary-700'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-primary-200'
+                }`}
+              >
+                {option.label}
+              </button>
+            )
+          })}
+        </div>
+        <p className="mt-2 text-[11px] font-semibold text-gray-400">
+          선택하지 않아도 가입할 수 있어요
         </p>
       </div>
 

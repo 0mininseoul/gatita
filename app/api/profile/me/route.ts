@@ -24,7 +24,7 @@ async function getMyProfile() {
       .maybeSingle(),
     admin
       .from('user_private_profiles')
-      .select('user_id, email, name, phone, phone_verified_at, phone_mfa_factor_id, bank_name, account_number, account_holder, status, suspended_until, suspension_reason, moderation_updated_at, is_admin, onboarded_at, created_at, updated_at')
+      .select('user_id, email, name, phone, phone_verified_at, phone_mfa_factor_id, bank_name, account_number, account_holder, status, suspended_until, suspension_reason, moderation_updated_at, is_admin, is_dormitory_resident, onboarded_at, created_at, updated_at')
       .eq('user_id', authUser.id)
       .maybeSingle(),
   ])
@@ -78,6 +78,7 @@ async function getMyProfile() {
       suspension_reason: privateProfile.suspension_reason,
       moderation_updated_at: privateProfile.moderation_updated_at,
       is_admin: privateProfile.is_admin,
+      is_dormitory_resident: privateProfile.is_dormitory_resident,
       private_created_at: privateProfile.created_at,
       private_updated_at: privateProfile.updated_at,
     },

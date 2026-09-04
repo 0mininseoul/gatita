@@ -33,7 +33,7 @@ const ROUTE_SUBSCRIBED_CALL_SITES = [
 ]
 
 // 같은 경로·같은 출발일시 중복 방 생성을 막는 두 지점. 둘 다 findDuplicateActiveRoom(클라
-// 사전 검사)과 POSTGRES_UNIQUE_VIOLATION_CODE(23505, DB 유니크 인덱스 위반) 처리를 함께
+// 사전 검사)과 서버가 DB 23505를 변환한 duplicate_active_room 코드 처리를 함께
 // 가져야 경쟁 조건에서도 안내가 끊기지 않는다.
 const ROOM_CREATION_CALL_SITES = [
   ['components', 'HomeClient.tsx'],
@@ -73,7 +73,7 @@ test('route_subscribed 필수 payload 키가 두 지점 모두에 있다 (design
   }
 })
 
-test('두 방 생성 경로 모두 클라이언트 사전 검사와 23505(POSTGRES_UNIQUE_VIOLATION_CODE) 처리를 함께 갖는다', () => {
+test('두 방 생성 경로 모두 클라이언트 사전 검사와 서버 중복 코드 처리를 함께 갖는다', () => {
   for (const parts of ROOM_CREATION_CALL_SITES) {
     const source = readProjectFile(...parts)
 
@@ -84,8 +84,8 @@ test('두 방 생성 경로 모두 클라이언트 사전 검사와 23505(POSTGR
     )
     assert.match(
       source,
-      /error\.code === POSTGRES_UNIQUE_VIOLATION_CODE/,
-      `${parts.join('/')}가 DB 유니크 인덱스 위반(23505)을 별도로 처리해야 한다 — 사전 검사만으로는 경쟁 조건을 못 막는다`,
+      /result\?\.code === 'duplicate_active_room'/,
+      `${parts.join('/')}가 DB 유니크 인덱스 위반을 서버가 변환한 코드로 별도 처리해야 한다`,
     )
   }
 })

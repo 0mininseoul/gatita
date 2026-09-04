@@ -161,6 +161,8 @@ export default function SettingsPage() {
   const [pushSubscribed, setPushSubscribed] = useState(false)
   const [pushInstalled, setPushInstalled] = useState(false)
   const [pushBusy, setPushBusy] = useState(false)
+  const [dormitoryResident, setDormitoryResident] = useState<boolean | null>(null)
+  const [isSavingDormitory, setIsSavingDormitory] = useState(false)
   const photoInputRef = useRef<HTMLInputElement | null>(null)
   const persistedAvatarUrlRef = useRef<string | null>(null)
   const photoPreviewUrlRef = useRef<string | null>(null)
@@ -200,6 +202,7 @@ export default function SettingsPage() {
           department: userData.department,
         })
         setNewNickname(userData.nickname)
+        setDormitoryResident(userData.is_dormitory_resident ?? null)
 
         const payoutData = profileResult.payoutAccount
 
@@ -250,6 +253,51 @@ export default function SettingsPage() {
   useEffect(() => {
     void refreshPushStatus()
   }, [refreshPushStatus])
+
+  const handleDormitoryResidentChange = useCallback(async (nextValue: boolean | null) => {
+    if (isSavingDormitory) return
+
+    const previousValue = dormitoryResident
+    setDormitoryResident(nextValue)
+    setIsSavingDormitory(true)
+
+    try {
+      const response = await fetch('/api/profile/dormitory', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_dormitory_resident: nextValue }),
+      })
+      const result = await response.json().catch(() => null) as {
+        error?: string
+        is_dormitory_resident?: boolean | null
+      } | null
+
+      if (!response.ok) {
+        throw new Error(result?.error ?? '기숙사생 설정을 저장하지 못했습니다')
+      }
+
+      const savedValue = result?.is_dormitory_resident ?? null
+      setDormitoryResident(savedValue)
+      setUser((current) => current ? {
+        ...current,
+        is_dormitory_resident: savedValue,
+      } : current)
+
+      if (savedValue !== null) {
+        trackEvent('dormitory_profile_answered', {
+          is_dormitory_resident: savedValue,
+          source: 'settings',
+        })
+      }
+      toast.success('기숙사생 설정을 저장했어요.')
+    } catch (error) {
+      setDormitoryResident(previousValue)
+      console.error('Dormitory profile save error:', error)
+      toast.error(error instanceof Error ? error.message : '기숙사생 설정을 저장하지 못했습니다')
+    } finally {
+      setIsSavingDormitory(false)
+    }
+  }, [dormitoryResident, isSavingDormitory])
 
   const handleTogglePush = useCallback(async () => {
     setPushBusy(true)
@@ -835,6 +883,40 @@ export default function SettingsPage() {
               )}
             </button>
           </div>
+        </section>
+
+        <section className="settings-section" aria-labelledby="settings-dormitory-resident">
+          <div className="settings-section-heading">
+            <h3 id="settings-dormitory-resident">기숙사생이신가요?</h3>
+            <p>같이타에 가입한 다른 기숙사생들과 동행 요청을 주고 받을 수 있어요</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { label: '네', value: true },
+              { label: '아니요', value: false },
+            ] as const).map((option) => {
+              const isSelected = dormitoryResident === option.value
+              return (
+                <button
+                  key={option.label}
+                  type="button"
+                  aria-pressed={isSelected}
+                  disabled={isSavingDormitory}
+                  onClick={() => void handleDormitoryResidentChange(isSelected ? null : option.value)}
+                  className={`settings-save-button border text-sm font-extrabold transition disabled:opacity-60 ${
+                    isSelected
+                      ? 'border-primary-600 bg-primary-50 text-primary-700'
+                      : 'border-gray-200 bg-white text-gray-600'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              )
+            })}
+          </div>
+          <p className="mt-2 text-[0.72rem] font-semibold leading-4 text-gray-500">
+            ‘네’를 선택하면 기숙사 동행 요청 푸시 수신에도 동의하게 됩니다. 언제든 다시 변경할 수 있어요.
+          </p>
         </section>
 
         <section className="settings-section settings-section-tight" aria-labelledby="settings-notifications">

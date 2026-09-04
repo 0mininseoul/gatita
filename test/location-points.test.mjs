@@ -327,10 +327,9 @@ test('room joins go through a server route that verifies the session and uses th
   assert.match(routeSource, /isRoomJoinable\(room\.departure_date, room\.departure_time\)/)
   assert.match(routeSource, /currentParticipants\.length >= room\.max_participants/)
   assert.match(routeSource, /\.from\('room_participants'\)[\s\S]*\.insert\(/)
-  assert.match(schema, /grant select, insert on table public\.room_participants to authenticated;/)
+  assert.match(schema, /grant select on table public\.room_participants to authenticated;/)
   assert.doesNotMatch(schema, /grant select, insert, update, delete on table public\.room_participants to authenticated;/)
-  assert.match(schema, /Room creators can add themselves as participant/)
-  assert.match(schema, /chat_rooms\.created_by = \(select auth\.uid\(\)\)/)
+  assert.doesNotMatch(schema, /create policy "Room creators can add themselves as participant"/)
   assert.doesNotMatch(schema, /create policy "Active users can join rooms"[\s\S]*on public\.room_participants/)
   assert.doesNotMatch(schema, /create policy "Users can leave rooms" on public\.room_participants/)
   assert.doesNotMatch(schema, /create policy "Users can update their participation" on public\.room_participants/)
@@ -518,7 +517,7 @@ test('map shows a once-per-day PWA home screen onboarding modal', () => {
 test('service worker refreshes navigations before falling back to cached app shell', () => {
   const source = readProjectFile('public/sw.js')
 
-  assert.match(source, /gatita-v1\.0\.3/)
+  assert.match(source, /gatita-v1\.0\.4/)
   assert.match(source, /'\/map'/, 'PWA start URL should be cached as an app shell')
   assert.match(source, /event\.request\.mode !== 'navigate'/)
   assert.match(source, /fetch\(event\.request\)/)
@@ -527,6 +526,15 @@ test('service worker refreshes navigations before falling back to cached app she
   assert.match(source, /event\.respondWith\(fetch\(event\.request\)\)/)
   assert.match(source, /isCacheableAppShellRequest/)
   assert.doesNotMatch(source, /if \(response\) \{\s*return response\s*\}/)
+})
+
+test('service worker upgrades reload stale room-creation app shells before RPC cutover', () => {
+  const source = readProjectFile('public/sw.js')
+
+  assert.match(source, /hasPreviousAppCache/)
+  assert.match(source, /self\.clients\.claim\(\)/)
+  assert.match(source, /self\.clients\.matchAll\(\{ type: 'window', includeUncontrolled: true \}\)/)
+  assert.match(source, /client\.navigate\(client\.url\)/)
 })
 
 test('iOS PWA startup images are generated and registered for current iPhones', () => {

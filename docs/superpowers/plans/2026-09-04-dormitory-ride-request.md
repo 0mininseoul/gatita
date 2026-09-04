@@ -197,7 +197,7 @@ git commit -m "feat: define dormitory request eligibility"
 - Modify: `app/settings/page.tsx`
 - Modify: `test/dormitory-ride-request.test.mjs`
 
-- [ ] **Step 1: Write failing profile contract tests**
+- [x] **Step 1: Write failing profile contract tests**
 
 Assert that profile completion accepts `boolean | null`, sends the selected value, and does not include it in required-step validation. Assert the authenticated settings route validates `true`, `false`, or `null`, updates only `authUser.id`, and the owner-only profile response includes the value. Assert the exact approved copy appears in onboarding:
 
@@ -211,13 +211,13 @@ assert.match(settingsRoute, /is_dormitory_resident: payload\.is_dormitory_reside
 assert.match(settingsRoute, /\.eq\('user_id', authUser\.id\)/)
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run: `node --test test/dormitory-ride-request.test.mjs`
 
 Expected: FAIL because the preference is absent from the APIs and UI.
 
-- [ ] **Step 3: Extend profile completion and owner profile loading**
+- [x] **Step 3: Extend profile completion and owner profile loading**
 
 Parse the optional field with strict tri-state validation:
 
@@ -231,11 +231,11 @@ function parseDormitoryResident(value: unknown) {
 
 Store it in the existing private-profile upsert without changing any required-field rules. Include it only in the authenticated owner response from `/api/profile/me`.
 
-- [ ] **Step 4: Add the authenticated settings update route**
+- [x] **Step 4: Add the authenticated settings update route**
 
 Implement `PATCH /api/profile/dormitory` with `auth.getUser()`, strict tri-state validation, and a service-role update scoped to `.eq('user_id', authUser.id)`. Return `{ ok: true, is_dormitory_resident }` and never return other private-profile fields.
 
-- [ ] **Step 5: Add onboarding and settings controls**
+- [x] **Step 5: Add onboarding and settings controls**
 
 In the final review panel, render the exact main and supporting copy with `네` and `아니요` pressed buttons. Keep `null` as the initial value and make a selected answer reversible to `null`; render `선택하지 않아도 가입할 수 있어요`. Send the value during profile completion and, after success, emit:
 
@@ -248,13 +248,13 @@ trackEvent('dormitory_profile_answered', {
 
 In settings, initialize the control from `/api/profile/me`, persist changes through the new route, roll back on failure, and emit the same event with `source: 'settings'` only after a successful update. Do not call `Notification.requestPermission()` from either control.
 
-- [ ] **Step 6: Run the focused test and verify GREEN**
+- [x] **Step 6: Run the focused test and verify GREEN**
 
 Run: `node --test test/dormitory-ride-request.test.mjs`
 
 Expected: PASS for optional completion, copy, private response, authenticated update, and analytics contracts.
 
-- [ ] **Step 7: Commit the profile experience**
+- [x] **Step 7: Commit the profile experience**
 
 ```bash
 git add app/api/profile/complete/route.ts app/api/profile/me/route.ts app/api/profile/dormitory/route.ts components/auth/SignupForm.tsx app/settings/page.tsx test/dormitory-ride-request.test.mjs

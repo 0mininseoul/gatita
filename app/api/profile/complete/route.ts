@@ -13,10 +13,17 @@ type CompleteProfilePayload = {
   bank_name?: string
   account_number?: string
   account_holder?: string
+  is_dormitory_resident?: boolean | null
 }
 
 function cleanText(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function parseDormitoryResident(value: unknown) {
+  if (value === null || typeof value === 'undefined') return { value: null }
+  if (typeof value !== 'boolean') return { error: '기숙사생 여부 값이 올바르지 않습니다' }
+  return { value }
 }
 
 function validatePayload(payload: CompleteProfilePayload | null) {
@@ -26,6 +33,9 @@ function validatePayload(payload: CompleteProfilePayload | null) {
   const bankName = cleanText(payload?.bank_name)
   const accountNumber = cleanText(payload?.account_number)
   const accountHolder = cleanText(payload?.account_holder)
+  const dormitoryResident = parseDormitoryResident(payload?.is_dormitory_resident)
+
+  if ('error' in dormitoryResident) return { error: dormitoryResident.error }
 
   if (name.length < 2 || name.length > 100) return { error: '실명을 확인해주세요' }
   const phoneError = validatePhoneNumber(phone)
@@ -51,6 +61,7 @@ function validatePayload(payload: CompleteProfilePayload | null) {
       bankName,
       accountNumber,
       accountHolder,
+      isDormitoryResident: dormitoryResident.value,
     },
   }
 }
@@ -132,6 +143,7 @@ async function completeProfile(request: Request) {
       bank_name: validated.data.bankName || null,
       account_number: validated.data.accountNumber || null,
       account_holder: validated.data.accountHolder || null,
+      is_dormitory_resident: validated.data.isDormitoryResident,
       onboarded_at: new Date().toISOString(),
     }, { onConflict: 'user_id' })
 

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import ts from 'typescript'
@@ -172,4 +172,53 @@ test('recipient merge filters consent and global push, excludes creator, and ded
     ],
     'creator',
   ).sort(), ['resident', 'route-user', 'shared-user'])
+})
+
+test('profile completion keeps dormitory residency optional and persists every tri-state value', () => {
+  const signup = readProjectFile('components/auth/SignupForm.tsx')
+  const completeRoute = readProjectFile('app/api/profile/complete/route.ts')
+
+  assert.match(completeRoute, /is_dormitory_resident\?: boolean \| null/)
+  assert.match(completeRoute, /value === null \|\| typeof value === 'undefined'/)
+  assert.match(completeRoute, /typeof value !== 'boolean'/)
+  assert.match(completeRoute, /is_dormitory_resident: validated\.data\.isDormitoryResident/)
+  assert.match(signup, /is_dormitory_resident: dormitoryResident/)
+  assert.doesNotMatch(signup, /if \(isLastStep && dormitoryResident === null\)/)
+})
+
+test('onboarding uses the approved optional dormitory copy without requesting OS permission', () => {
+  const signup = readProjectFile('components/auth/SignupForm.tsx')
+
+  assert.match(signup, /기숙사생이신가요\?/)
+  assert.match(signup, /같이타에 가입한 다른 기숙사생들과 동행 요청을 주고 받을 수 있어요/)
+  assert.match(signup, /선택하지 않아도 가입할 수 있어요/)
+  assert.match(signup, /dormitory_profile_answered/)
+  assert.match(signup, /source: 'onboarding'/)
+  assert.doesNotMatch(signup, /Notification\.requestPermission/)
+})
+
+test('the owner profile response includes dormitory residency without adding it to public profile fields', () => {
+  const profileRoute = readProjectFile('app/api/profile/me/route.ts')
+  const publicProfileType = readProjectFile('lib/supabase.ts')
+    .match(/export type PublicProfile = \{[\s\S]*?\n\}/)?.[0] ?? ''
+
+  assert.match(profileRoute, /\.select\('[^']*is_dormitory_resident[^']*'\)/)
+  assert.match(profileRoute, /is_dormitory_resident: privateProfile\.is_dormitory_resident/)
+  assert.doesNotMatch(publicProfileType, /is_dormitory_resident/)
+})
+
+test('settings update is authenticated, tri-state, owner-scoped, and analytics-backed', () => {
+  const routePath = join(root, 'app/api/profile/dormitory/route.ts')
+  assert.equal(existsSync(routePath), true, 'the authenticated dormitory settings route should exist')
+
+  const settingsRoute = readFileSync(routePath, 'utf8')
+  const settingsPage = readProjectFile('app/settings/page.tsx')
+
+  assert.match(settingsRoute, /auth\.getUser\(\)/)
+  assert.match(settingsRoute, /value === null \|\| typeof value === 'boolean'/)
+  assert.match(settingsRoute, /is_dormitory_resident: payload\.is_dormitory_resident/)
+  assert.match(settingsRoute, /\.eq\('user_id', authUser\.id\)/)
+  assert.match(settingsPage, /fetch\('\/api\/profile\/dormitory'/)
+  assert.match(settingsPage, /dormitory_profile_answered/)
+  assert.match(settingsPage, /source: 'settings'/)
 })

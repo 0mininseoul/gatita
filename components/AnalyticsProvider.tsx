@@ -4,6 +4,7 @@ import { useEffect, useMemo } from 'react'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { initAnalytics, trackEvent } from '@/lib/analytics/client'
+import { resolveAuthFailureRecovery } from '@/lib/authRecovery'
 import { registerServiceWorker } from '@/lib/pwa'
 
 const VISIT_RETRY_DELAYS_MS = [0, 250, 750, 1500, 3000, 5000] as const
@@ -57,6 +58,10 @@ export default function AnalyticsProvider() {
           })
 
           if (response.ok) return
+          // 서버가 세션을 거부했다면 재시도해도 401만 반복된다. 그 재시도 하나하나가
+          // 인증 미들웨어를 다시 타면서 만료된 토큰으로 리프레시를 시도하므로,
+          // 세션 회전 경합을 키울 뿐이다.
+          if (resolveAuthFailureRecovery(response.status) === 'sign_out') return
         } catch {
           // 인증 쿠키 동기화나 일시적인 네트워크 문제일 수 있으므로 재시도한다.
         }

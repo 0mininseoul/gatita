@@ -27,6 +27,7 @@ import {
 } from '@/lib/duplicateRoom'
 import { usePresenceDisplayCount } from '@/lib/usePresenceDisplayCount'
 import { GACHON_ACCOUNT_HINT, NON_GACHON_ACCOUNT_MESSAGE, detectInAppBrowser, escapeInAppBrowser, extractGachonProfileFromMetadata, getGoogleOAuthOptions, isGachonEmail } from '@/lib/auth'
+import { PROFILE_CHECK_FAILED_MESSAGE, SESSION_REJECTED_MESSAGE, resolveAuthFailureRecovery } from '@/lib/authRecovery'
 import { isInstalled } from '@/lib/pwa'
 import { getNotificationPermission, isPushSupported, isSubscribedToPush, subscribeToPush } from '@/lib/push'
 import { PREVIEW_TEST_ACCOUNTS, isPreviewTestLoginEnabled } from '@/lib/previewTestAccounts'
@@ -438,6 +439,44 @@ export default function HomeClient() {
     }
   }, [showAuthError, supabase])
 
+  // 서버가 쿠키 속 세션을 거부했다(401/403). 클라이언트 getSession()은 액세스 토큰의
+  // exp만 보므로 이 쿠키를 그대로 두면 "로그인은 되어 있는데 아무것도 못 하는" 상태가
+  // 남아, 랜딩의 '바로 시작하기'를 눌러도 같은 401로 되돌아오는 루프가 된다.
+  // 로컬 세션을 비워 Google 로그인 버튼이 다시 나오게 하는 것이 유일한 탈출구다.
+  const recoverFromRejectedSession = useCallback(async () => {
+    trackEvent('auth_session_rejected', {
+      reason: 'profile_unauthorized',
+    })
+
+    setUser(null)
+    setHasAuthenticatedSession(false)
+    setPendingProfileEmail('')
+    setPendingProfileName('')
+    setShowProfileRequiredModal(false)
+    setModerationStatus(null)
+    setModerationModal(null)
+    setAuthMode(null)
+    setHasEnteredApp(false)
+    identifyAnalyticsUser(null)
+
+    if (supabase) {
+      // 서버 세션은 이미 죽어 있다. auth-js는 logout 401/403을 무시하고 로컬
+      // 저장소를 비우므로, 남은 쿠키를 지운다는 목적은 이걸로 달성된다.
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+    }
+
+    if (window.location.pathname === '/map') {
+      // /map → / 는 세그먼트가 바뀌어 HomeClient가 새로 마운트되고, 그 순간
+      // in-memory 안내는 사라진다. /auth/callback이 쓰는 것과 같은 auth_error
+      // 쿼리로 넘겨서 착지한 랜딩에서 안내가 뜨게 한다(마운트 이펙트가 이를
+      // 읽어 토스트를 띄우고 쿼리를 URL에서 지운다).
+      router.replace(`/?auth_error=${encodeURIComponent(SESSION_REJECTED_MESSAGE)}`)
+      return
+    }
+
+    showAuthError(SESSION_REJECTED_MESSAGE)
+  }, [router, showAuthError, supabase])
+
   const openProfileRequiredModal = useCallback((source: string) => {
     if (!profileRequiredModalOpenRef.current) {
       trackEvent('profile_required_modal_shown', {
@@ -668,6 +707,9 @@ export default function HomeClient() {
       return
     }
 
+    // catch에서 "세션은 읽혔는데 그 뒤가 실패한 것"인지 구분하기 위한 표시.
+    let sawAuthenticatedSession = false
+
     try {
       const enterMap = (profileCompleted: boolean) => {
         if (!enterApp) return
@@ -704,6 +746,7 @@ export default function HomeClient() {
         }
         const pendingLoginMethod = consumePendingLogin()
 
+        sawAuthenticatedSession = true
         setHasAuthenticatedSession(true)
         setPendingProfileEmail(email ?? '')
 
@@ -711,6 +754,11 @@ export default function HomeClient() {
         const profileResult = await profileResponse.json().catch(() => null) as MyProfilePayload | null
 
         if (!profileResponse.ok) {
+          if (resolveAuthFailureRecovery(profileResponse.status) === 'sign_out') {
+            await recoverFromRejectedSession()
+            return
+          }
+
           throw new Error(profileResult?.error ?? '프로필을 확인하지 못했습니다')
         }
 
@@ -787,10 +835,15 @@ export default function HomeClient() {
       }
     } catch (error) {
       console.error('Auth check error:', error)
+      // 일시적인 실패(5xx·네트워크 단절)다. 세션은 살아 있을 수 있으므로 지우지
+      // 않지만, 조용히 랜딩만 그리면 사용자는 왜 못 들어가는지 알 수 없다.
+      if (sawAuthenticatedSession) {
+        showAuthError(PROFILE_CHECK_FAILED_MESSAGE)
+      }
     } finally {
       setLoading(false)
     }
-  }, [loadModerationStatus, rejectNonGachonAccount, router, supabase])
+  }, [loadModerationStatus, recoverFromRejectedSession, rejectNonGachonAccount, router, showAuthError, supabase])
 
   useEffect(() => {
     if (!hasServiceShareIntent(window.location.search)) return

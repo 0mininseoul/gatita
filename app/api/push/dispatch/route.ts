@@ -64,7 +64,7 @@ async function dispatchPush(request: Request) {
 
   const { data: message } = await admin
     .from('messages')
-    .select('id, room_id, user_id, content')
+    .select('id, room_id, user_id, content, kind')
     .eq('id', messageId)
     .maybeSingle()
 
@@ -95,9 +95,18 @@ async function dispatchPush(request: Request) {
   const label = routeLabel(room?.from_location, room?.to_location)
   const preview = (message.content ?? '').replace(/\s+/g, ' ').trim().slice(0, 80)
 
+  // 출발 시각 변경은 방장이 "보낸" 메시지가 아니라 방에 생긴 사건이다. 보낸 이 이름
+  // 대신 경로를 제목으로 세워야 알림만 보고도 어느 방 이야기인지 안다.
+  // (입퇴장 기록은 on_message_created_push 트리거의 when 절에서 이미 걸러진다.)
+  const isDepartureChange = message.kind === 'departure_changed'
+
   const payload = JSON.stringify({
-    title: label ? `${senderName} · ${label}` : senderName,
-    body: preview || '새 메시지가 도착했어요',
+    title: isDepartureChange
+      ? (label || '출발 시간 변경')
+      : label ? `${senderName} · ${label}` : senderName,
+    body: isDepartureChange
+      ? (preview || '출발 시간이 바뀌었어요')
+      : preview || '새 메시지가 도착했어요',
     url: `/rooms/${message.room_id}`,
     roomId: message.room_id,
     tag: `room-${message.room_id}`,

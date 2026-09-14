@@ -23,7 +23,8 @@ test('chat room applies realtime messages incrementally, not by full refetch', (
 
   // 실시간 메시지는 증분 반영
   assert.match(source, /applyIncomingMessage/)
-  assert.match(source, /void applyIncomingMessage\(payload\.new as Message\)/)
+  assert.match(source, /const incoming = payload\.new as Message/)
+  assert.match(source, /void applyIncomingMessage\(incoming\)/)
 
   // 메시지 채널이 전체 재조회 핸들러를 다시 쓰면 안 된다
   assert.doesNotMatch(source, /handleRealtimeRefresh/)
@@ -31,7 +32,7 @@ test('chat room applies realtime messages incrementally, not by full refetch', (
   // 전송 후 전체 메시지 재조회 / 메시지 브로드캐스트가 없어야 한다
   assert.doesNotMatch(source, /broadcastRoomSync\('message'\)/)
   assert.doesNotMatch(source, /broadcastRoomSync\('host-guide'\)/)
-  assert.match(source, /\.select\('id, room_id, user_id, content, created_at'\)\s*\n\s*\.single\(\)/)
+  assert.match(source, /\.select\('id, room_id, user_id, content, kind, created_at'\)\s*\n\s*\.single\(\)/)
 
   // 작성자 캐시로 매 메시지마다 전체 작성자 재조회를 피한다
   assert.match(source, /authorsCacheRef/)

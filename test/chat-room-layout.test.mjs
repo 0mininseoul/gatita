@@ -130,7 +130,8 @@ test('chat history loads message rows even if embedded author loading is unavail
   assert.ok(loadStart > -1, 'loadMessages exists')
   assert.ok(loadEnd > loadStart, 'loadMessages block can be inspected')
   // 메시지는 본문만 조회하고 작성자는 별도 경로로 채운다 (embedded join 미사용)
-  assert.match(loadBlock, /\.select\('id, room_id, user_id, content, created_at'\)/)
+  // kind 는 시스템 기록(입퇴장/출발시각 변경)을 말풍선과 갈라 렌더하는 데 쓴다.
+  assert.match(loadBlock, /\.select\('id, room_id, user_id, content, kind, created_at'\)/)
   assert.match(loadBlock, /splitMessages/)
   assert.match(loadBlock, /ensureAuthors\(/)
   assert.match(loadBlock, /authorsCacheRef\.current\.get\(message\.user_id\)/)
@@ -147,7 +148,9 @@ test('chat message author labels are shown only at the start of consecutive user
   assert.match(source, /messages\.map\(\(message, index\) =>/)
   assert.match(source, /previousMessage = messages\[index - 1\]/)
   assert.match(source, /nextMessage = messages\[index \+ 1\]/)
-  assert.match(source, /startsMessageGroup = showDateDivider \|\| !previousMessage \|\| previousMessage\.user_id !== message\.user_id/)
+  // 시스템 기록은 작성자가 있어도 말풍선 묶음을 끊는다.
+  assert.match(source, /startsMessageGroup = showDateDivider \|\| !previousMessage \|\| previousIsSystem \|\| previousMessage\.user_id !== message\.user_id/)
+  assert.match(source, /endsMessageGroup = nextStartsNewDay \|\| !nextMessage \|\| nextIsSystem \|\| nextMessage\.user_id !== message\.user_id/)
   assert.match(source, /!isOwnMessage && startsMessageGroup &&/)
   assert.match(source, /chat-message-author/)
   assert.match(source, /is-same-author/)
@@ -244,9 +247,13 @@ test('chat room realtime subscriptions reload messages and participant membershi
   assert.match(source, /roomSyncChannelRef/)
   assert.match(source, /const broadcastRoomSync = useCallback/)
   assert.match(source, /\.channel\(`room-sync:\$\{roomId\}`\)/)
-  assert.match(source, /\.on\('broadcast', \{ event: 'room-sync' \}, handleParticipantsRefresh\)/)
+  assert.match(source, /\.on\('broadcast', \{ event: 'room-sync' \}, handleRoomSync\)/)
+  // room-sync 는 여전히 참여자를 갱신하고, reason 이 'room' 일 때만 방까지 다시 읽는다.
+  assert.match(source, /const handleRoomSync = useCallback[\s\S]*?await handleParticipantsRefresh\(\)/)
+  assert.match(source, /message\?\.payload\?\.reason === 'room'[\s\S]{0,80}await loadRoom\(\)/)
   // 메시지는 전체 재조회/브로드캐스트가 아니라 증분 반영한다
-  assert.match(source, /void applyIncomingMessage\(payload\.new as Message\)/)
+  assert.match(source, /const incoming = payload\.new as Message/)
+  assert.match(source, /void applyIncomingMessage\(incoming\)/)
   assert.doesNotMatch(source, /broadcastRoomSync\('message'\)/)
   assert.match(source, /broadcastRoomSync\('participants'\)/)
   assert.match(source, /postgres_changes/)

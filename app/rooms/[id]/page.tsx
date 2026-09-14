@@ -4,9 +4,23 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, Fra
 import Image from 'next/image'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { ChatRoom, User, Message, RoomParticipant, PayoutAccount, LOCATIONS, isRoomJoinable, getRoomDepartureDateTime } from '@/lib/supabase'
+import {
+  ChatRoom,
+  User,
+  Message,
+  RoomParticipant,
+  PayoutAccount,
+  LOCATIONS,
+  isRoomJoinable,
+  getRoomDepartureDateTime,
+  getDepartureTimeOptions,
+  getDepartureDateForTime,
+  getDepartureShiftMinutes,
+  shouldResetConfirmationsForShift,
+} from '@/lib/supabase'
 import {
   extractHostAppearanceFromMessage,
+  isSystemMessage,
   splitMessages,
   upsertMessage,
   prependOlderMessages,
@@ -18,7 +32,7 @@ import { formatAccountNumberForBank, isAccountNumberCompleteForBank } from '@/li
 import { AccountNumberSegmentField, BankSelectField } from '@/components/BankAccountFields'
 import { identifyAnalyticsUser, trackEvent } from '@/lib/analytics/client'
 import { buildRoomInviteSharePayload } from '@/lib/roomInvite'
-import { ArrowLeft, Users, Clock, Send, Flag, X, LogOut, Phone, CreditCard, Copy, Share2 } from 'lucide-react'
+import { ArrowLeft, Users, Clock, Send, Flag, X, LogOut, Phone, CreditCard, Copy, Share2, Pencil, ArrowRight } from 'lucide-react'
 import { format, isSameDay } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -67,6 +81,11 @@ export default function ChatRoomPage() {
   const [hostAppearance, setHostAppearance] = useState('')
   const [hostAppearanceLoaded, setHostAppearanceLoaded] = useState(false)
   const [hostAppearanceDraft, setHostAppearanceDraft] = useState('')
+  const [showDepartureSheet, setShowDepartureSheet] = useState(false)
+  const [departureHourDraft, setDepartureHourDraft] = useState('')
+  const [departureMinuteDraft, setDepartureMinuteDraft] = useState('')
+  const [isSavingDeparture, setIsSavingDeparture] = useState(false)
+  const [departureError, setDepartureError] = useState('')
   const [showRoomGuide, setShowRoomGuide] = useState(false)
   const [isSubmittingHostGuide, setIsSubmittingHostGuide] = useState(false)
   const [showHostLeaveModal, setShowHostLeaveModal] = useState(false)
@@ -433,7 +452,7 @@ export default function ChatRoomPage() {
         // 전체가 아니라 최근 MESSAGE_PAGE_SIZE개만 (내림차순으로 받아 오름차순으로 뒤집음)
         supabase
           .from('messages')
-          .select('id, room_id, user_id, content, created_at')
+          .select('id, room_id, user_id, content, kind, created_at')
           .eq('room_id', roomId)
           .order('created_at', { ascending: false })
           .limit(MESSAGE_PAGE_SIZE),
@@ -484,7 +503,7 @@ export default function ChatRoomPage() {
     try {
       const { data, error } = await supabase
         .from('messages')
-        .select('id, room_id, user_id, content, created_at')
+        .select('id, room_id, user_id, content, kind, created_at')
         .eq('room_id', roomId)
         .lt('created_at', cursor)
         .order('created_at', { ascending: false })
@@ -524,6 +543,12 @@ export default function ChatRoomPage() {
     const appearance = extractHostAppearanceFromMessage(incoming.content)
     if (appearance) {
       setHostAppearance(appearance)
+      return
+    }
+
+    // 시스템 기록은 작성자 말풍선이 아니라 가운데 한 줄로 보이므로 작성자를 붙이지 않는다.
+    if (isSystemMessage(incoming)) {
+      setMessages((prev) => upsertMessage(prev, incoming))
       return
     }
 
@@ -728,7 +753,16 @@ export default function ChatRoomPage() {
     ])
   }, [checkParticipation, loadParticipants, user])
 
-  const broadcastRoomSync = useCallback(async (reason: 'participants') => {
+  // 참여자 변동은 참여자만, 방 자체가 바뀐 경우(출발 시각 변경)는 방까지 다시 읽는다.
+  const handleRoomSync = useCallback(async (message: { payload?: { reason?: string } }) => {
+    if (message?.payload?.reason === 'room') {
+      await loadRoom()
+    }
+
+    await handleParticipantsRefresh()
+  }, [handleParticipantsRefresh, loadRoom])
+
+  const broadcastRoomSync = useCallback(async (reason: 'participants' | 'room') => {
     const channel = roomSyncChannelRef.current
     if (!channel) return
 
@@ -745,6 +779,156 @@ export default function ChatRoomPage() {
       console.error('Broadcast room sync error:', error)
     }
   }, [roomId])
+
+  // 방장만, 그리고 출발 시각이 지나기 전까지만 바꿀 수 있다. 이미 마감된 방을 미래로
+  // 되돌리면 지도 노출과 활성 방 유니크 인덱스가 꼬인다(서버도 같은 판정을 한다).
+  const canEditDeparture = Boolean(
+    room
+    && isRoomCreator
+    && room.status === 'active'
+    && isRoomJoinable(room.departure_date, room.departure_time)
+  )
+
+  // 방 생성 폼(CampusRouteMap)과 같은 선택지 — 지금부터 다가오는 새벽 1시까지.
+  const departureTimeOptions = useMemo(
+    () => (showDepartureSheet ? getDepartureTimeOptions(new Date(), 1) : []),
+    [showDepartureSheet]
+  )
+  const departureHourOptions = useMemo(
+    () => Array.from(new Set(departureTimeOptions.map((time) => time.slice(0, 2)))),
+    [departureTimeOptions]
+  )
+  const departureMinuteOptions = useMemo(
+    () => departureTimeOptions
+      .filter((time) => time.startsWith(`${departureHourDraft}:`))
+      .map((time) => time.slice(3, 5)),
+    [departureTimeOptions, departureHourDraft]
+  )
+  const departureDraftTime = departureHourDraft && departureMinuteDraft
+    ? `${departureHourDraft}:${departureMinuteDraft}`
+    : ''
+  const currentDepartureLabel = room ? room.departure_time.slice(0, 5) : ''
+  const departureShiftMinutes = useMemo(() => {
+    if (!room || !departureDraftTime) return 0
+
+    const draftDate = getDepartureDateForTime(new Date(), departureDraftTime)
+    if (!draftDate) return 0
+
+    return getDepartureShiftMinutes(
+      room.departure_date,
+      room.departure_time,
+      draftDate,
+      departureDraftTime,
+    )
+  }, [departureDraftTime, room])
+  // 화면 톤만 여기서 정하고, 실제 해제는 서버가 같은 규칙으로 판정한다.
+  const departureResetsConfirmations = shouldResetConfirmationsForShift(departureShiftMinutes)
+  const otherParticipantCount = Math.max(0, participants.length - 1)
+  // 확정이 풀린 참여자에게는 "참여 확정하기" 버튼 대신 무엇이 바뀌었는지 먼저 알린다.
+  const hasDepartureChangeRecord = useMemo(
+    () => messages.some((message) => message.kind === 'departure_changed'),
+    [messages]
+  )
+  const showDepartureRecheck = isParticipant
+    && !isConfirmed
+    && !isRoomCreator
+    && hasDepartureChangeRecord
+
+  // 시트가 열려 있는 동안 시간이 흘러 고른 시각이 창 밖으로 밀리면 첫 선택지로 당긴다
+  // (CampusRouteMap 의 생성 폼과 같은 처리).
+  useEffect(() => {
+    if (!showDepartureSheet || departureTimeOptions.length === 0) return
+
+    const current = departureDraftTime
+    if (current && departureTimeOptions.includes(current)) return
+
+    const first = departureTimeOptions[0]
+    setDepartureHourDraft(first.slice(0, 2))
+    setDepartureMinuteDraft(first.slice(3, 5))
+  }, [departureDraftTime, departureTimeOptions, showDepartureSheet])
+
+  const openDepartureSheet = useCallback(() => {
+    if (!room) return
+
+    const current = room.departure_time.slice(0, 5)
+    setDepartureHourDraft(current.slice(0, 2))
+    setDepartureMinuteDraft(current.slice(3, 5))
+    setDepartureError('')
+    setShowDepartureSheet(true)
+    trackEvent('room_departure_sheet_opened', {
+      room_id: roomId,
+      participant_count: participants.length,
+    })
+  }, [participants.length, room, roomId])
+
+  const handleChangeDeparture = useCallback(async () => {
+    if (!room || !departureDraftTime || isSavingDeparture) return
+
+    if (departureDraftTime === currentDepartureLabel) {
+      setShowDepartureSheet(false)
+      return
+    }
+
+    setIsSavingDeparture(true)
+    setDepartureError('')
+
+    const requestInit: RequestInit = {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      credentials: 'same-origin',
+      body: JSON.stringify({ departure_time: departureDraftTime }),
+    }
+
+    try {
+      let response = await fetch(`/api/rooms/${roomId}/departure`, requestInit)
+
+      if (response.status === 401 && await refreshServerSession()) {
+        response = await fetch(`/api/rooms/${roomId}/departure`, requestInit)
+      }
+
+      if (response.status === 401) {
+        handleExpiredRoomSession()
+        return
+      }
+
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        // 시트를 닫지 않는다 — 중복·창 밖 오류는 바로 다른 시각을 고르게 해야 한다.
+        setDepartureError(result?.error ?? '출발 시간을 바꾸지 못했습니다')
+        return
+      }
+
+      setShowDepartureSheet(false)
+      await Promise.all([loadRoom(), handleParticipantsRefresh()])
+      await broadcastRoomSync('room')
+      trackEvent('room_departure_changed', {
+        room_id: roomId,
+        shift_minutes: Number(result?.shiftMinutes ?? 0),
+        confirmations_reset: Boolean(result?.confirmationsReset),
+        participant_count: participants.length,
+      })
+      toast.success('출발 시간을 바꿨어요', { id: 'departure-changed' })
+    } catch (error) {
+      console.error('Change room departure error:', error)
+      setDepartureError('출발 시간을 바꾸지 못했습니다')
+    } finally {
+      setIsSavingDeparture(false)
+    }
+  }, [
+    broadcastRoomSync,
+    currentDepartureLabel,
+    departureDraftTime,
+    handleExpiredRoomSession,
+    handleParticipantsRefresh,
+    isSavingDeparture,
+    loadRoom,
+    participants.length,
+    refreshServerSession,
+    room,
+    roomId,
+  ])
 
   const handleShareRoomInvite = useCallback(async () => {
     if (!room || !isRoomInviteAvailable) return
@@ -879,7 +1063,7 @@ export default function ChatRoomPage() {
 
     const syncChannel = supabase
       .channel(`room-sync:${roomId}`)
-      .on('broadcast', { event: 'room-sync' }, handleParticipantsRefresh)
+      .on('broadcast', { event: 'room-sync' }, handleRoomSync)
       .subscribe()
 
     roomSyncChannelRef.current = syncChannel
@@ -895,7 +1079,14 @@ export default function ChatRoomPage() {
           filter: `room_id=eq.${roomId}`,
         },
         (payload) => {
-          void applyIncomingMessage(payload.new as Message)
+          const incoming = payload.new as Message
+          void applyIncomingMessage(incoming)
+
+          // 출발 시각이 바뀌면 헤더의 시각과 참여자 확정 상태가 함께 달라진다.
+          if (incoming.kind === 'departure_changed') {
+            void loadRoom()
+            void handleParticipantsRefresh()
+          }
         }
       )
       .subscribe()
@@ -931,7 +1122,7 @@ export default function ChatRoomPage() {
       supabase.removeChannel(messagesChannel)
       supabase.removeChannel(participantsChannel)
     }
-  }, [applyIncomingMessage, handleParticipantsRefresh, room, roomId, supabase])
+  }, [applyIncomingMessage, handleParticipantsRefresh, handleRoomSync, loadRoom, room, roomId, supabase])
 
   useEffect(() => {
     if (loading || !room || !user) return
@@ -997,6 +1188,7 @@ export default function ChatRoomPage() {
       content: newMessage.trim(),
       user_id: user.id,
       room_id: roomId,
+      kind: 'user',
       created_at: new Date().toISOString(),
       user: authorsCacheRef.current.get(user.id) as User,
     }
@@ -1012,8 +1204,9 @@ export default function ChatRoomPage() {
           room_id: roomId,
           user_id: user.id,
           content: tempMessage.content,
+          kind: 'user',
         })
-        .select('id, room_id, user_id, content, created_at')
+        .select('id, room_id, user_id, content, kind, created_at')
         .single()
 
       if (error) throw error
@@ -1411,6 +1604,9 @@ export default function ChatRoomPage() {
           room_id: roomId,
           user_id: user.id,
           content: `${HOST_APPEARANCE_MESSAGE_PREFIX}${hostAppearanceDraft.trim()}`,
+          // 인상착의는 대화에 보이지도, 푸시로 나가지도 않는다. kind 를 붙이지 않으면
+          // 참여자에게 접두사가 그대로 담긴 푸시가 간다.
+          kind: 'host_appearance',
         })
 
       if (error) throw error
@@ -1460,8 +1656,23 @@ export default function ChatRoomPage() {
                 {LOCATIONS[room.from_location]} → {LOCATIONS[room.to_location]}
               </h1>
               <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600">
-                <Clock className="w-4 h-4 mr-1" />
-                <span>{format(new Date(`${room.departure_date}T${room.departure_time}`), 'M월 d일 HH:mm', { locale: ko })}</span>
+                {canEditDeparture ? (
+                  <button
+                    type="button"
+                    onClick={openDepartureSheet}
+                    aria-label="출발 시간 변경"
+                    className="inline-flex items-center gap-1 rounded-full border border-primary-100 bg-primary-50 px-2 py-0.5 font-bold text-primary-700 transition hover:bg-primary-100"
+                  >
+                    <Clock className="h-3.5 w-3.5" />
+                    {format(new Date(`${room.departure_date}T${room.departure_time}`), 'M월 d일 HH:mm', { locale: ko })}
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center">
+                    <Clock className="mr-1 h-4 w-4" />
+                    {format(new Date(`${room.departure_date}T${room.departure_time}`), 'M월 d일 HH:mm', { locale: ko })}
+                  </span>
+                )}
                 <span className="inline-flex items-center">
                   <Users className="mr-1 h-4 w-4" />
                   {participants.length}/{room.max_participants}
@@ -1569,8 +1780,33 @@ export default function ChatRoomPage() {
           </div>
         )}
 
-        {/* 참여 확정 버튼 */}
-        {isParticipant && !isConfirmed && (
+        {/* 참여 확정 버튼 — 출발 시각이 바뀌어 확정이 풀린 경우엔 이유부터 알린다 */}
+        {showDepartureRecheck ? (
+          <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+            <p className="text-xs font-black text-amber-700">출발 시간이 바뀌었어요</p>
+            <p className="mt-0.5 text-[11px] font-semibold leading-4 text-amber-800">
+              지금은 {format(new Date(`${room.departure_date}T${room.departure_time}`), 'M월 d일 HH:mm', { locale: ko })} 출발이에요. 계속 함께 가시나요?
+            </p>
+            <div className="mt-2 flex gap-1.5">
+              <button
+                type="button"
+                onClick={handleConfirmParticipation}
+                disabled={isConfirmingParticipation}
+                className="h-8 flex-1 rounded-lg bg-gray-950 text-[11px] font-black text-white transition hover:bg-gray-800 disabled:bg-gray-300"
+              >
+                {isConfirmingParticipation ? '확정 중...' : '계속 함께해요'}
+              </button>
+              <button
+                type="button"
+                onClick={handleLeaveRoom}
+                disabled={isLeavingRoom}
+                className="h-8 flex-1 rounded-lg border border-gray-200 bg-white text-[11px] font-black text-gray-600 transition hover:bg-gray-50 disabled:opacity-50"
+              >
+                이번엔 빠질게요
+              </button>
+            </div>
+          </div>
+        ) : isParticipant && !isConfirmed ? (
           <div className="mt-2">
             <button
               onClick={handleConfirmParticipation}
@@ -1580,8 +1816,144 @@ export default function ChatRoomPage() {
               {isConfirmingParticipation ? '확정 중...' : '참여 확정하기'}
             </button>
           </div>
-        )}
+        ) : null}
       </header>
+
+      {showDepartureSheet && (
+        <div className="fixed inset-0 z-50">
+          <button
+            type="button"
+            aria-label="출발 시간 변경 닫기"
+            className="absolute inset-0 bg-black/30"
+            onClick={() => setShowDepartureSheet(false)}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="absolute inset-x-0 bottom-0 max-h-[88vh] overflow-y-auto rounded-t-2xl bg-white p-5"
+          >
+            <div className="mx-auto mb-4 h-1 w-11 rounded-full bg-gray-200" />
+            <h2 className="text-lg font-extrabold text-gray-950">출발 시간 변경</h2>
+            <p
+              className={`mt-1 text-sm ${
+                departureShiftMinutes < 0 ? 'font-bold text-amber-700' : 'text-gray-500'
+              }`}
+            >
+              {otherParticipantCount === 0
+                ? '아직 혼자예요. 바로 바꿔도 괜찮아요'
+                : departureShiftMinutes < 0
+                  ? '앞당기면 참여자가 못 맞출 수 있어요'
+                  : `참여자 ${otherParticipantCount}명이 ${currentDepartureLabel}에 맞춰 오고 있어요`}
+            </p>
+
+            <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+              <select
+                aria-label="출발 시"
+                value={departureHourDraft}
+                onChange={(event) => {
+                  const nextHour = event.target.value
+                  // 시를 바꾸면 그 시각대의 첫 선택 가능한 분으로 맞춘다.
+                  const nextMinute = departureTimeOptions
+                    .find((time) => time.startsWith(`${nextHour}:`))
+                    ?.slice(3, 5) ?? ''
+
+                  setDepartureHourDraft(nextHour)
+                  setDepartureMinuteDraft(nextMinute)
+                  setDepartureError('')
+                }}
+                disabled={isSavingDeparture}
+                className="input-field bg-white py-2.5 text-base font-bold"
+              >
+                {departureHourOptions.length > 0 ? (
+                  departureHourOptions.map((hour) => (
+                    <option key={hour} value={hour}>{hour}시</option>
+                  ))
+                ) : (
+                  <option value="">시</option>
+                )}
+              </select>
+              <span className="text-xs font-black text-gray-400">:</span>
+              <select
+                aria-label="출발 분"
+                value={departureMinuteDraft}
+                onChange={(event) => {
+                  setDepartureMinuteDraft(event.target.value)
+                  setDepartureError('')
+                }}
+                disabled={isSavingDeparture}
+                className="input-field bg-white py-2.5 text-base font-bold"
+              >
+                {departureMinuteOptions.length > 0 ? (
+                  departureMinuteOptions.map((minute) => (
+                    <option key={minute} value={minute}>{minute}분</option>
+                  ))
+                ) : (
+                  <option value="">분</option>
+                )}
+              </select>
+            </div>
+
+            {departureDraftTime && departureDraftTime !== currentDepartureLabel && (
+              <div className="mt-3 flex items-center gap-2 text-base font-black tabular-nums">
+                <span className="text-gray-400">{currentDepartureLabel}</span>
+                <ArrowRight className="h-4 w-4 text-gray-400" />
+                <span className={departureShiftMinutes < 0 ? 'text-amber-700' : 'text-primary-700'}>
+                  {departureDraftTime}
+                </span>
+              </div>
+            )}
+
+            {otherParticipantCount > 0 && (
+              <div
+                className={`mt-3 rounded-lg px-3 py-2 text-xs font-bold leading-5 ${
+                  departureResetsConfirmations
+                    ? 'bg-amber-50 text-amber-700'
+                    : 'bg-primary-50 text-primary-700'
+                }`}
+              >
+                {departureResetsConfirmations
+                  ? `참여자 ${otherParticipantCount}명의 확정이 풀리고 다시 확정을 받아요`
+                  : `참여자 ${otherParticipantCount}명에게 채팅과 푸시 알림으로 알려드려요`}
+              </div>
+            )}
+
+            {departureError && (
+              <p className="mt-3 text-xs font-bold text-red-600">{departureError}</p>
+            )}
+
+            <button
+              type="button"
+              onClick={handleChangeDeparture}
+              disabled={
+                isSavingDeparture
+                || !departureDraftTime
+                || departureDraftTime === currentDepartureLabel
+              }
+              className={`mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl text-sm font-black text-white transition disabled:bg-gray-300 ${
+                departureShiftMinutes < 0
+                  ? 'bg-amber-600 hover:bg-amber-700'
+                  : 'bg-primary-600 hover:bg-primary-700'
+              }`}
+            >
+              {isSavingDeparture
+                ? '바꾸는 중...'
+                : !departureDraftTime || departureDraftTime === currentDepartureLabel
+                  ? '다른 시간을 골라주세요'
+                  : departureShiftMinutes < 0
+                    ? `그래도 ${departureDraftTime} 출발로 바꾸기`
+                    : `${departureDraftTime} 출발로 바꾸기`}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowDepartureSheet(false)}
+              disabled={isSavingDeparture}
+              className="mt-1.5 inline-flex h-10 w-full items-center justify-center rounded-xl text-sm font-bold text-gray-500 transition hover:bg-gray-50 disabled:opacity-50"
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
 
       {showInlineAccountForm && (
         <div className="fixed inset-0 z-50">
@@ -1688,16 +2060,33 @@ export default function ChatRoomPage() {
               // 이전 메시지와 날짜가 다르면(또는 첫 메시지면) 카카오톡처럼 날짜 구분선을 먼저 그린다
               const showDateDivider = !previousMessage || !isSameDay(new Date(previousMessage.created_at), messageDate)
               const nextStartsNewDay = !!nextMessage && !isSameDay(messageDate, new Date(nextMessage.created_at))
-              const startsMessageGroup = showDateDivider || !previousMessage || previousMessage.user_id !== message.user_id
-              const endsMessageGroup = nextStartsNewDay || !nextMessage || nextMessage.user_id !== message.user_id
+              // 시스템 기록은 작성자가 있어도 말풍선 묶음을 끊는다. 그러지 않으면
+              // 기록을 사이에 두고 떨어진 말풍선이 한 덩어리로 붙어 보인다.
+              const previousIsSystem = !!previousMessage && isSystemMessage(previousMessage)
+              const nextIsSystem = !!nextMessage && isSystemMessage(nextMessage)
+              const startsMessageGroup = showDateDivider || !previousMessage || previousIsSystem || previousMessage.user_id !== message.user_id
+              const endsMessageGroup = nextStartsNewDay || !nextMessage || nextIsSystem || nextMessage.user_id !== message.user_id
+
+              const dateDivider = showDateDivider ? (
+                <div className="chat-date-divider" role="separator">
+                  <span>{format(messageDate, 'yyyy년 M월 d일 EEEE', { locale: ko })}</span>
+                </div>
+              ) : null
+
+              if (isSystemMessage(message)) {
+                return (
+                  <Fragment key={message.id}>
+                    {dateDivider}
+                    <div className="chat-system-message" role="status">
+                      <span>{message.content}</span>
+                    </div>
+                  </Fragment>
+                )
+              }
 
               return (
                 <Fragment key={message.id}>
-                  {showDateDivider && (
-                    <div className="chat-date-divider" role="separator">
-                      <span>{format(messageDate, 'yyyy년 M월 d일 EEEE', { locale: ko })}</span>
-                    </div>
-                  )}
+                  {dateDivider}
                   <div
                     className={`chat-message-row flex w-full min-w-0 ${startsMessageGroup ? 'is-new-author' : 'is-same-author'} ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
                   >

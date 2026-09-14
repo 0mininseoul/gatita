@@ -1,4 +1,4 @@
-import type { Message, User } from '@/lib/supabase'
+import type { Message, MessageKind, User } from '@/lib/supabase'
 
 export const HOST_APPEARANCE_MESSAGE_PREFIX = '__gatita_host_appearance__:'
 export const LEGACY_HOST_APPEARANCE_MESSAGE_PREFIX = '방장 인상착의:'
@@ -22,6 +22,23 @@ export function isHostAppearanceMessage(content: string): boolean {
   return extractHostAppearanceFromMessage(content) !== ''
 }
 
+// 대화에 남지만 말풍선이 아니라 가운데 한 줄로 보여줄 기록들.
+const SYSTEM_MESSAGE_KINDS: MessageKind[] = [
+  'participant_joined',
+  'participant_left',
+  'host_changed',
+  'departure_changed',
+]
+
+export function isSystemMessage(message: Pick<Message, 'kind'>): boolean {
+  return SYSTEM_MESSAGE_KINDS.includes(message.kind)
+}
+
+// kind 가 붙기 전에 쌓인 행은 kind 가 'user' 라, 인상착의 판정은 접두사도 함께 본다.
+function isHiddenMessage(message: Message): boolean {
+  return message.kind === 'host_appearance' || isHostAppearanceMessage(message.content)
+}
+
 // 낙관적 업데이트로 만든 임시 메시지 여부 (transition 식별용).
 export function isOptimisticMessageId(id: string): boolean {
   return id.startsWith('temp-')
@@ -33,12 +50,15 @@ export function splitMessages(rows: Message[]): { visible: Message[]; latestHost
   const visible: Message[] = []
 
   for (const row of rows) {
-    const appearance = extractHostAppearanceFromMessage(row.content)
-    if (appearance) {
-      latestHostAppearance = appearance
-    } else {
-      visible.push(row)
+    if (isHiddenMessage(row)) {
+      const appearance = extractHostAppearanceFromMessage(row.content)
+      if (appearance) {
+        latestHostAppearance = appearance
+      }
+      continue
     }
+
+    visible.push(row)
   }
 
   return { visible, latestHostAppearance }

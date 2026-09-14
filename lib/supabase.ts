@@ -86,6 +86,7 @@ export type ChatRoom = {
   created_by: string
   status: 'active' | 'closed'
   creation_source: 'standard' | 'dormitory_request'
+  departure_changed_at?: string | null
   created_at: string
   participants?: RoomParticipant[]
   creator?: User
@@ -101,11 +102,23 @@ export type RoomParticipant = {
   user?: User
 }
 
+// 시스템 기록을 접두사 문자열로 구분하면 푸시 발송·안읽음 집계·렌더 세 곳에서 같은
+// 파싱을 반복해야 해서 messages.kind 로 나눈다. 브라우저가 직접 넣을 수 있는 값은
+// RLS 정책이 'user' 와 'host_appearance' 로 제한한다.
+export type MessageKind =
+  | 'user'
+  | 'host_appearance'
+  | 'participant_joined'
+  | 'participant_left'
+  | 'host_changed'
+  | 'departure_changed'
+
 export type Message = {
   id: string
   room_id: string
   user_id: string
   content: string
+  kind: MessageKind
   created_at: string
   user?: User
 }
@@ -308,6 +321,44 @@ export function getRoomDepartureDateTime(departureDate: string, departureTime: s
 
 export function isRoomJoinable(departureDate: string, departureTime: string, now = new Date()) {
   return getRoomDepartureDateTime(departureDate, departureTime).getTime() >= now.getTime()
+}
+
+// 방장이 출발 시각을 연속으로 바꿔 참여자에게 푸시가 연달아 가는 것만 막는다.
+// 횟수 자체는 제한하지 않는다 — 출발 직전에 두세 번 조정되는 건 자연스럽다.
+export const DEPARTURE_CHANGE_COOLDOWN_MS = 30_000
+
+// 이 분을 넘겨 미루거나, 조금이라도 앞당기면 참여자 확정을 풀고 다시 받는다.
+// 소폭 지연까지 풀면 5분 조정마다 방이 흔들린다.
+export const CONFIRMATION_RESET_THRESHOLD_MINUTES = 10
+
+// 옮긴 폭(분). 미루면 양수, 앞당기면 음수. 자정을 넘겨 날짜가 바뀌는 이동도 담는다.
+export function getDepartureShiftMinutes(
+  fromDate: string,
+  fromTime: string,
+  toDate: string,
+  toTime: string,
+) {
+  const from = getRoomDepartureDateTime(fromDate, fromTime).getTime()
+  const to = getRoomDepartureDateTime(toDate, toTime).getTime()
+  return Math.round((to - from) / 60_000)
+}
+
+// supabase/migrations/20260914060000 의 change_room_departure_time 과 같은 규칙.
+// 화면은 이 값으로 시트 톤과 안내 문구를 바꾸고, 실제 해제는 서버가 판정한다.
+export function shouldResetConfirmationsForShift(shiftMinutes: number) {
+  return shiftMinutes < 0 || shiftMinutes > CONFIRMATION_RESET_THRESHOLD_MINUTES
+}
+
+export function getDepartureChangeCooldownRemainingMs(
+  lastChangedAt: string | null | undefined,
+  now = new Date(),
+) {
+  if (!lastChangedAt) return 0
+
+  const changedAt = new Date(lastChangedAt).getTime()
+  if (!Number.isFinite(changedAt)) return 0
+
+  return Math.max(0, changedAt + DEPARTURE_CHANGE_COOLDOWN_MS - now.getTime())
 }
 
 export function isRoomVisibleOnMap(departureDate: string, departureTime: string, now = new Date()) {

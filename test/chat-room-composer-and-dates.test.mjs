@@ -54,12 +54,14 @@ test('chat messages render a KakaoTalk-style date divider when the day changes',
   assert.match(source, /import \{ format, isSameDay \} from 'date-fns'/)
   // 이전 메시지와 날짜가 다르거나 첫 메시지면 날짜 구분선을 표시
   assert.match(source, /const showDateDivider = !previousMessage \|\| !isSameDay\(new Date\(previousMessage\.created_at\), messageDate\)/)
-  assert.match(source, /\{showDateDivider && \(/)
+  // 구분선은 시스템 기록 위에도 그대로 그려야 해서 한 번 만들어 두고 재사용한다.
+  assert.match(source, /const dateDivider = showDateDivider \? \(/)
+  assert.match(source, /\{dateDivider\}/)
   assert.match(source, /className="chat-date-divider"/)
   assert.match(source, /format\(messageDate, 'yyyy년 M월 d일 EEEE', \{ locale: ko \}\)/)
   // 날짜가 바뀌면 같은 작성자라도 새 그룹으로 시작/종료되어야 한다
-  assert.match(source, /const startsMessageGroup = showDateDivider \|\| !previousMessage \|\| previousMessage\.user_id !== message\.user_id/)
-  assert.match(source, /const endsMessageGroup = nextStartsNewDay \|\| !nextMessage \|\| nextMessage\.user_id !== message\.user_id/)
+  assert.match(source, /const startsMessageGroup = showDateDivider \|\| !previousMessage \|\| previousIsSystem \|\| previousMessage\.user_id !== message\.user_id/)
+  assert.match(source, /const endsMessageGroup = nextStartsNewDay \|\| !nextMessage \|\| nextIsSystem \|\| nextMessage\.user_id !== message\.user_id/)
 })
 
 test('date divider CSS centers a subtle pill label', () => {

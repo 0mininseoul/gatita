@@ -342,6 +342,27 @@
     letter-spacing: -0.01em;
   }
 
+  /* 입장·이탈·방장 위임·출발 시각 변경 기록. 말풍선이 아니라 가운데 한 줄로 흘려
+     사람이 나눈 대화와 섞이지 않게 한다. */
+  .chat-system-message {
+    display: flex;
+    justify-content: center;
+    margin: 0.55rem 0;
+  }
+
+  .chat-system-message span {
+    max-width: min(88%, 20rem);
+    padding: 0.3125rem 0.75rem;
+    border-radius: 9999px;
+    background: rgba(31, 41, 55, 0.06);
+    color: #4b5563;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    line-height: 1.35;
+    text-align: center;
+    text-wrap: balance;
+  }
+
   .chat-message-row {
     position: relative;
   }

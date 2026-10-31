@@ -15,11 +15,12 @@ export const OG_IMAGE = {
 
 // Definition-first one-liner (<80 chars body) — the pattern AI retrieval favors.
 export const SITE_TAGLINE = '가천대 택시 동승 플랫폼'
+export const SITE_TITLE = `${SITE_NAME} - ${SITE_TAGLINE}`
 export const SITE_DEFINITION =
   '같이타는 가천대학교 재학생이 가천대역·정문·기숙사 등 캠퍼스 고정 지점 사이를 함께 이동할 택시 동승자를 찾고, 실시간 채팅으로 출발 시간과 정산을 조율하는 학생 전용 택시 동승(합승) 매칭 플랫폼입니다.'
 
 export const SITE_DESCRIPTION =
-  '가천대학교 학생들을 위한 택시 동승자 찾기 서비스입니다. 가천대역에서 기숙사까지 안전하고 편리하게 함께 이동하세요. 가천대 이메일 인증으로 같은 학교 학생끼리만 매칭됩니다.'
+  '같이타는 가천대학교 학생을 위한 택시 동승 매칭 서비스입니다. 가천대역·정문·기숙사 사이를 함께 이동할 동승자를 찾고, 채팅으로 출발 시간과 택시비 정산을 조율하세요.'
 
 // Fixed campus points the service connects.
 export const SERVICE_LOCATIONS = [

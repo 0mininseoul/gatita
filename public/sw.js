@@ -83,7 +83,9 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  if (requestUrl.pathname.startsWith('/api/')) {
+  // An OAuth callback must reach the server to exchange its code. A cached
+  // homepage would mask a failed exchange as a successful navigation.
+  if (requestUrl.pathname.startsWith('/api/') || requestUrl.pathname.startsWith('/auth/')) {
     event.respondWith(fetch(event.request))
     return
   }

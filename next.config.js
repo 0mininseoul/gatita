@@ -4,10 +4,11 @@ const nextConfig = {
   
   // PWA 설정을 위한 준비
   async redirects() {
-    // Consolidate public search pages only. Legacy tabs/PWAs must still reach
-    // same-origin APIs, OAuth callbacks, service workers and app screens.
+    // The root is also the OAuth return and an older PWA start URL. Keep it
+    // same-origin so legacy auth cookies survive; its canonical points to the
+    // current site. Consolidate only the remaining public information pages.
     // Preview deployment hosts are deliberately not matched.
-    return ['/', '/about', '/faq', '/privacy', '/terms'].map((path) => ({
+    return ['/about', '/faq', '/privacy', '/terms'].map((path) => ({
       source: path,
       has: [{ type: 'host', value: 'gatitagachon.vercel.app' }],
       destination: `https://gatita.kro.kr${path}`,

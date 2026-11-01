@@ -15,11 +15,15 @@ function localHostRequest(path, host) {
   assert.equal(url.protocol, 'http:', 'local alias checks require an HTTP base URL')
   return new Promise((resolve, reject) => {
     const req = request(url, { headers: { Host: host } }, response => {
-      response.resume()
-      resolve({
+      let body = ''
+      response.setEncoding('utf8')
+      response.on('data', chunk => { body += chunk })
+      response.on('error', reject)
+      response.on('end', () => resolve({
         status: response.statusCode,
         headers: { get: name => response.headers[name.toLowerCase()] },
-      })
+        text: async () => body,
+      }))
     })
     req.setTimeout(30_000, () => req.destroy(new Error('HTTP request timed out')))
     req.on('error', reject)
@@ -103,7 +107,15 @@ if (process.env.SEO_CHECK_ALIAS) {
   const aliasFetch = (path) => localCheck ? localHostRequest(path, 'gatitagachon.vercel.app') : fetch(`https://gatitagachon.vercel.app${path}`, {
     redirect: 'manual', signal: AbortSignal.timeout(30_000),
   })
-  for (const path of ['/', '/about?utm_source=seo-check', '/faq', '/privacy', '/terms']) {
+  for (const path of ['/', '/?auth=complete', '/?auth_error=synthetic-error', '/?redirect=%2Frooms%2Fsynthetic-room']) {
+    await check(`legacy app entry preserves its origin and canonical: ${path}`, async () => {
+      const response = await aliasFetch(path)
+      assert.equal(response.status, 200, 'PWA entry and OAuth return must stay on the legacy origin')
+      assert.ok(!response.headers.get('location'), 'legacy app entry must not redirect')
+      assert.deepEqual(canonical(await response.text()).map(value => new URL(value).href), [`${siteUrl}/`])
+    })
+  }
+  for (const path of ['/about?utm_source=seo-check', '/faq', '/privacy', '/terms']) {
     await check(`old production hostname redirects: ${path}`, async () => {
       const response = await aliasFetch(path)
       assert.ok([301, 308].includes(response.status), `got ${response.status}`)
